@@ -370,6 +370,7 @@ enum Topology {
         }
 
         attachDisplays(sample, host: &host)
+        summariseTunnels(&host)
         root.children = [host]
         return root
     }
@@ -381,6 +382,37 @@ enum Topology {
             return true
         }
         return node.children.contains { subtreeMentions($0, brand: brand) }
+    }
+
+    /// Labels each Thunderbolt node with the tunnels riding its link.
+    ///
+    /// Marking individual edges is not enough on its own: USB 2.0 is carried
+    /// natively rather than tunneled, so once that is drawn honestly most of the
+    /// tree is undashed and it stops being obvious that the whole subtree
+    /// depends on one Thunderbolt link. This says so directly.
+    private static func summariseTunnels(_ node: inout TopoNode) {
+        for index in node.children.indices { summariseTunnels(&node.children[index]) }
+        guard node.kind == .thunderbolt else { return }
+
+        var usb3 = false, usb2 = false, displays = 0
+        func scan(_ current: TopoNode) {
+            for child in current.children {
+                switch child.linkProtocol {
+                case .usb3: usb3 = true
+                case .usb2, .usbLow: usb2 = true
+                default: break
+                }
+                if child.kind == .display || child.carriesDisplay { displays += 1 }
+                scan(child)
+            }
+        }
+        scan(node)
+
+        var carried: [String] = []
+        if displays > 0 { carried.append(displays == 1 ? "DP" : "DP ×\(displays)") }
+        if usb3 { carried.append("USB3") }
+        if !carried.isEmpty { node.badges.append("tunnels: " + carried.joined(separator: " + ")) }
+        if usb2 { node.badges.append("USB2 native") }
     }
 
     // MARK: - Displays
@@ -401,6 +433,9 @@ enum Topology {
             if let hz = display.refreshHz { node.badges.append(String(format: "%.0f Hz", hz)) }
             node.linkProtocol = .displayPort
             node.carriesDisplay = true
+            // Marked here rather than by the tunnel pass, which has already run
+            // by the time displays are attached.
+            node.isTunneled = !display.isBuiltIn
             node.details = displayDetails(display)
             return node
         }
