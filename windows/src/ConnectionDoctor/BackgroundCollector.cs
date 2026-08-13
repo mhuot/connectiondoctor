@@ -90,20 +90,62 @@ internal static class BackgroundCollector
 
     public static IReadOnlyList<RecorderEntry> ReadEntries()
     {
-        if (!File.Exists(EventsPath))
+        var cursor = new EventLogCursor();
+        return ReadEntriesIncremental(EventsPath, cursor).Entries;
+    }
+
+    public static IncrementalEventRead ReadEntriesIncremental(string path, EventLogCursor cursor)
+    {
+        if (!File.Exists(path))
         {
-            return [];
+            var resetMissing = cursor.Offset != 0 || cursor.PendingText.Length != 0;
+            cursor.Reset();
+            return new IncrementalEventRead([], resetMissing);
         }
 
-        var entries = new List<RecorderEntry>();
-        foreach (var line in File.ReadLines(EventsPath))
+        var file = new FileInfo(path);
+        var reset = file.Length < cursor.Offset;
+        if (reset)
         {
+            cursor.Reset();
+        }
+
+        if (file.Length == cursor.Offset)
+        {
+            return new IncrementalEventRead([], reset);
+        }
+
+        using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.ReadWrite | FileShare.Delete);
+        stream.Seek(cursor.Offset, SeekOrigin.Begin);
+        using var reader = new StreamReader(stream, leaveOpen: true);
+        var appended = reader.ReadToEnd();
+        cursor.Offset = stream.Position;
+
+        var combined = cursor.PendingText + appended;
+        var lines = combined.Split('\n');
+        var hasCompleteFinalLine = combined.EndsWith('\n');
+        cursor.PendingText = hasCompleteFinalLine ? string.Empty : lines[^1];
+        var completeLineCount = hasCompleteFinalLine ? lines.Length : lines.Length - 1;
+        var entries = new List<RecorderEntry>();
+        for (var index = 0; index < completeLineCount; index++)
+        {
+            var line = lines[index].TrimEnd('\r');
+            if (line.Length == 0)
+            {
+                continue;
+            }
+
             try
             {
                 var entry = JsonSerializer.Deserialize<RecorderEntry>(line, JsonOptions);
                 if (entry is not null)
                 {
                     entries.Add(entry);
+                    cursor.ParsedLineCount++;
                 }
             }
             catch (JsonException exception)
@@ -112,12 +154,13 @@ internal static class BackgroundCollector
             }
         }
 
-        return entries;
+        return new IncrementalEventRead(entries, reset);
     }
 
-    public static ConnectionSnapshot? ReadCurrentSnapshot()
+    public static ConnectionSnapshot? ReadCurrentSnapshot(string? path = null)
     {
-        if (!File.Exists(CurrentSnapshotPath))
+        var source = path ?? CurrentSnapshotPath;
+        if (!File.Exists(source))
         {
             return null;
         }
@@ -125,7 +168,7 @@ internal static class BackgroundCollector
         try
         {
             return JsonSerializer.Deserialize<ConnectionSnapshot>(
-                File.ReadAllText(CurrentSnapshotPath),
+                File.ReadAllText(source),
                 JsonOptions);
         }
         catch (JsonException)
@@ -269,3 +312,20 @@ internal sealed record CollectorHeartbeat(
     string EventsPath);
 
 internal sealed record CollectorStatus(bool IsRunning, string Message);
+
+internal sealed class EventLogCursor
+{
+    public long Offset { get; set; }
+    public string PendingText { get; set; } = string.Empty;
+    public long ParsedLineCount { get; set; }
+
+    public void Reset()
+    {
+        Offset = 0;
+        PendingText = string.Empty;
+    }
+}
+
+internal sealed record IncrementalEventRead(
+    IReadOnlyList<RecorderEntry> Entries,
+    bool Reset);
