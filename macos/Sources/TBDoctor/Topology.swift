@@ -73,10 +73,12 @@ struct TopoNode: Identifiable {
     /// tunnel from its USB one. A monitor with a built-in hub has both, and
     /// showing only the USB side hides half of what the cable is doing.
     var carriesDisplay: Bool = false
-    /// True when this node is reached *through* a Thunderbolt device, i.e. its
-    /// USB traffic is tunneled over the Thunderbolt link rather than running on
-    /// a native USB connection. Without this you cannot tell from the tree
-    /// whether Thunderbolt is carrying anything.
+    /// True when this link is genuinely *tunneled* over Thunderbolt/USB4.
+    ///
+    /// USB4 multiplexes independent tunnels — DisplayPort, USB 3.x and PCIe —
+    /// onto one link. USB 2.0 is NOT among them: it is carried on the Type-C
+    /// cable's dedicated D+/D- pair and passed through each hub, so marking it
+    /// tunneled would be wrong.
     var isTunneled: Bool = false
     var children: [TopoNode] = []
 }
@@ -338,10 +340,13 @@ enum Topology {
             let unclaimed = usbRoots.filter { !claimed.contains($0.id) }
             nodes[0].children.append(contentsOf: unclaimed)
 
-            // Everything hanging off a Thunderbolt device is tunneled.
+            // Only the protocols USB4 actually tunnels get marked.
             func markTunneled(_ node: inout TopoNode) {
                 for index in node.children.indices {
-                    node.children[index].isTunneled = true
+                    switch node.children[index].linkProtocol {
+                    case .usb3, .displayPort: node.children[index].isTunneled = true
+                    default:                  node.children[index].isTunneled = false
+                    }
                     markTunneled(&node.children[index])
                 }
             }

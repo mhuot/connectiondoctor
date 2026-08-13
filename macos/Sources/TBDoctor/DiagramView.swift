@@ -183,7 +183,7 @@ struct DiagramView: View {
             HStack(spacing: 5) {
                 Rectangle().fill(Color.secondary).frame(width: 14, height: 2.5)
                     .mask(HStack(spacing: 3) { ForEach(0..<3, id: \.self) { _ in Rectangle().frame(width: 3) } })
-                Text("tunneled over Thunderbolt").font(.caption2).foregroundStyle(.secondary)
+                Text("tunneled (USB4 carries USB 2.0 natively, not tunneled)").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }
