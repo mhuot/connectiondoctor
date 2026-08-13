@@ -200,8 +200,8 @@ enum Probes {
             // Native pixels, not the scaled backing size: CGDisplayPixelsWide
             // reports points, so a HiDPI 1920x1080 panel reads as 960x540 and
             // looks like a broken low-resolution display.
-            let nativeWidth = mode.map { CGDisplayModeGetPixelWidth($0) } ?? CGDisplayPixelsWide(id)
-            let nativeHeight = mode.map { CGDisplayModeGetPixelHeight($0) } ?? CGDisplayPixelsHigh(id)
+            let nativeWidth = mode?.pixelWidth ?? CGDisplayPixelsWide(id)
+            let nativeHeight = mode?.pixelHeight ?? CGDisplayPixelsHigh(id)
             return DisplayInfo(
                 name: namesByID[id] ?? (CGDisplayIsBuiltin(id) != 0 ? "Built-in Display" : "Display"),
                 width: Int(nativeWidth),
