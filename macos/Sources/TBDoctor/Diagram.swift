@@ -82,11 +82,53 @@ enum DiagramMetrics {
 enum Diagram {
 
     static func layout(root: TopoNode, style: DiagramStyle) -> DiagramLayout {
+        var result: DiagramLayout
         switch style {
-        case .cascade: return cascade(root)
-        case .topDown: return topDown(root)
-        case .flow:    return flow(root)
+        case .cascade: result = cascade(root)
+        case .topDown: result = topDown(root)
+        case .flow:    result = flow(root)
         }
+        addDisplayLinks(&result, root: root)
+        return result
+    }
+
+    /// A monitor with a USB hub has two connections: the USB one that puts it in
+    /// the tree, and a DisplayPort tunnel carrying its video. The tree can only
+    /// express one, so the second is drawn as an extra edge routed clear of the
+    /// layout — otherwise half of what that cable does is invisible.
+    private static func addDisplayLinks(_ layout: inout DiagramLayout, root: TopoNode) {
+        var nearestDock: [String: String] = [:]
+        func walk(_ node: TopoNode, dock: String?) {
+            if let dock { nearestDock[node.id] = dock }
+            let next = node.kind == .thunderbolt ? node.id : dock
+            node.children.forEach { walk($0, dock: next) }
+        }
+        walk(root, dock: nil)
+
+        let frames = Dictionary(layout.nodes.map { ($0.id, $0.frame) }, uniquingKeysWith: { first, _ in first })
+        var extra: [DiagramEdge] = []
+        var rightmost = layout.size.width
+
+        for placed in layout.nodes
+        where placed.node.carriesDisplay && placed.node.linkProtocol != .displayPort {
+            guard let dockID = nearestDock[placed.id], let source = frames[dockID] else { continue }
+            let target = placed.frame
+            let lane = max(source.maxX, target.maxX) + 26
+            rightmost = max(rightmost, lane + 12)
+            extra.append(DiagramEdge(
+                id: "dp-\(placed.id)",
+                points: [
+                    CGPoint(x: source.maxX, y: source.midY),
+                    CGPoint(x: lane, y: source.midY),
+                    CGPoint(x: lane, y: target.midY),
+                    CGPoint(x: target.maxX, y: target.midY)
+                ],
+                linkProtocol: .displayPort,
+                tunneled: true))
+        }
+
+        layout.edges.append(contentsOf: extra)
+        layout.size.width = rightmost
     }
 
     /// Power edges are the ones feeding the host — drawn distinctly so the
@@ -293,6 +335,7 @@ enum TopoStyle {
         case .thunderbolt: return .purple
         case .hub:         return .orange
         case .device:      return .teal
+        case .display:     return .pink
         }
     }
 
@@ -303,12 +346,13 @@ enum TopoStyle {
         case .thunderbolt: return "cable.connector.horizontal"
         case .hub:         return "point.3.filled.connected.trianglepath.dotted"
         case .device:      return "circle.hexagongrid.fill"
+        case .display:     return "display"
         }
     }
 
     static let legendItems: [(label: String, color: Color)] = [
         ("power source", .yellow), ("Mac", .blue), ("Thunderbolt", .purple),
-        ("hub (consumer)", .orange), ("device", .teal)
+        ("hub (consumer)", .orange), ("device", .teal), ("display", .pink)
     ]
 
     static let rail = Color.secondary.opacity(0.45)
@@ -318,6 +362,7 @@ enum TopoStyle {
         switch p {
         case .power:       return .yellow
         case .thunderbolt: return .purple
+        case .displayPort: return .pink
         case .usb3:        return .blue
         case .usb2:        return .teal
         case .usbLow:      return .gray
@@ -327,7 +372,7 @@ enum TopoStyle {
 
     static func width(_ p: LinkProtocol) -> CGFloat {
         switch p {
-        case .power, .thunderbolt: return 2.4
+        case .power, .thunderbolt, .displayPort: return 2.4
         case .usb3:                return 2.0
         default:                   return 1.4
         }

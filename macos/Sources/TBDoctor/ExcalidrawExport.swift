@@ -25,6 +25,7 @@ enum ExcalidrawExport {
         case .thunderbolt: return Palette(stroke: "#6741d9", fill: "#d0bfff")
         case .hub:         return Palette(stroke: "#e8590c", fill: "#ffd8a8")
         case .device:      return Palette(stroke: "#2f9e44", fill: "#b2f2bb")
+        case .display:     return Palette(stroke: "#c2255c", fill: "#ffdeeb")
         }
     }
 
@@ -33,6 +34,7 @@ enum ExcalidrawExport {
         switch p {
         case .power:       return "#f08c00"
         case .thunderbolt: return "#6741d9"
+        case .displayPort: return "#c2255c"
         case .usb3:        return "#1971c2"
         case .usb2:        return "#0c8599"
         case .usbLow:      return "#868e96"
@@ -59,7 +61,7 @@ enum ExcalidrawExport {
                                height: Double((ys.max() ?? 0) - (ys.min() ?? 0)),
                                stroke: linkStroke(edge.linkProtocol),
                                fill: "transparent")
-            element["strokeWidth"] = (edge.linkProtocol == .power || edge.linkProtocol == .thunderbolt) ? 2 : 1
+            element["strokeWidth"] = [.power, .thunderbolt, .displayPort].contains(edge.linkProtocol) ? 2 : 1
             // Dashed carries the same meaning as in the app: tunneled traffic.
             if edge.tunneled { element["strokeStyle"] = "dashed" }
             element["points"] = relative

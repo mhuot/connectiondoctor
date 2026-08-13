@@ -4,12 +4,13 @@ import Foundation
 /// important fact about a topology visible at a glance — that everything is
 /// stuck on USB 2.0, for instance, which took a lot of squinting to notice.
 enum LinkProtocol: String, Codable, CaseIterable {
-    case power, thunderbolt, usb3, usb2, usbLow, unknown
+    case power, thunderbolt, displayPort, usb3, usb2, usbLow, unknown
 
     var label: String {
         switch self {
         case .power:       return "power"
         case .thunderbolt: return "Thunderbolt / USB4"
+        case .displayPort: return "DisplayPort"
         case .usb3:        return "USB 3.x"
         case .usb2:        return "USB 2.0"
         case .usbLow:      return "USB 1.x"
@@ -47,6 +48,7 @@ struct TopoNode: Identifiable {
         case thunderbolt   // a Thunderbolt device (dock)
         case hub           // a USB hub — has children
         case device        // a leaf peripheral
+        case display       // a monitor
     }
 
     var id: String
@@ -67,6 +69,10 @@ struct TopoNode: Identifiable {
     var vendorID: Int?
     /// How many enumerated nodes folded into this one in physical mode.
     var internalCount: Int = 0
+    /// Set when this box also has a DisplayPort connection, which is a separate
+    /// tunnel from its USB one. A monitor with a built-in hub has both, and
+    /// showing only the USB side hides half of what the cable is doing.
+    var carriesDisplay: Bool = false
     /// True when this node is reached *through* a Thunderbolt device, i.e. its
     /// USB traffic is tunneled over the Thunderbolt link rather than running on
     /// a native USB connection. Without this you cannot tell from the tree
@@ -358,6 +364,7 @@ enum Topology {
             host.children = usbRoots
         }
 
+        attachDisplays(sample, host: &host)
         root.children = [host]
         return root
     }
@@ -369,6 +376,81 @@ enum Topology {
             return true
         }
         return node.children.contains { subtreeMentions($0, brand: brand) }
+    }
+
+    // MARK: - Displays
+
+    /// Merges each display into the box it belongs to.
+    ///
+    /// A monitor with a USB hub is already in the tree as that hub; adding a
+    /// separate node for its panel would draw one physical monitor twice. So
+    /// where the brand matches, the hub node *becomes* the monitor and gains a
+    /// DisplayPort connection alongside its USB one.
+    private static func attachDisplays(_ sample: Sample, host: inout TopoNode) {
+        guard sample.displaysKnown else { return }
+
+        func displayNode(_ display: DisplayInfo) -> TopoNode {
+            var node = TopoNode(id: "display-\(display.id)", kind: .display,
+                                title: display.name, subtitle: nil,
+                                badges: [display.resolution])
+            if let hz = display.refreshHz { node.badges.append(String(format: "%.0f Hz", hz)) }
+            node.linkProtocol = .displayPort
+            node.carriesDisplay = true
+            node.details = displayDetails(display)
+            return node
+        }
+
+        for display in sample.displays where !display.isBuiltIn {
+            let brand = display.name.split(separator: " ").first.map(String.init) ?? display.name
+            var merged = false
+
+            func mergeInto(_ node: inout TopoNode) {
+                if !merged, brand.count >= 2, subtreeMentions(node, brand: brand) || node.title.localizedCaseInsensitiveContains(brand) {
+                    // Only merge into the box itself, not an ancestor that
+                    // merely contains it.
+                    if node.title.localizedCaseInsensitiveContains(brand)
+                        || node.details.contains(where: { $0.label == "Vendor" && $0.value.localizedCaseInsensitiveContains(brand) }) {
+                        node.title = display.name
+                        node.kind = .display
+                        node.carriesDisplay = true
+                        node.badges.insert(display.resolution, at: 0)
+                        node.details.append(contentsOf: displayDetails(display))
+                        merged = true
+                        return
+                    }
+                }
+                for index in node.children.indices { mergeInto(&node.children[index]) }
+            }
+            mergeInto(&host)
+
+            // No USB presence — a display-only monitor. Hang it off the nearest
+            // Thunderbolt device, which is what carries its video.
+            if !merged {
+                func attachToDock(_ node: inout TopoNode) -> Bool {
+                    if node.kind == .thunderbolt {
+                        node.children.append(displayNode(display))
+                        return true
+                    }
+                    for index in node.children.indices where attachToDock(&node.children[index]) { return true }
+                    return false
+                }
+                if !attachToDock(&host) { host.children.append(displayNode(display)) }
+            }
+        }
+
+        for display in sample.displays where display.isBuiltIn {
+            host.children.insert(displayNode(display), at: 0)
+        }
+    }
+
+    private static func displayDetails(_ display: DisplayInfo) -> [NodeDetail] {
+        var rows = [NodeDetail(label: "Display", value: display.name),
+                    NodeDetail(label: "Resolution", value: display.resolution)]
+        if let hz = display.refreshHz { rows.append(NodeDetail(label: "Refresh", value: String(format: "%.2f Hz", hz))) }
+        rows.append(NodeDetail(label: "Connection", value: display.isBuiltIn ? "built-in" : "DisplayPort"))
+        if let v = display.vendorNumber { rows.append(NodeDetail(label: "EDID vendor", value: String(format: "0x%04X", v))) }
+        if let m = display.modelNumber { rows.append(NodeDetail(label: "EDID model", value: String(format: "0x%04X", m))) }
+        return rows
     }
 
     // MARK: - Details

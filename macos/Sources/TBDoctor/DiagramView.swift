@@ -174,7 +174,7 @@ struct DiagramView: View {
                 }
             }
             Divider().frame(height: 12)
-            ForEach([LinkProtocol.power, .thunderbolt, .usb3, .usb2, .usbLow], id: \.self) { p in
+            ForEach([LinkProtocol.power, .thunderbolt, .displayPort, .usb3, .usb2, .usbLow], id: \.self) { p in
                 HStack(spacing: 5) {
                     Rectangle().fill(TopoStyle.color(p)).frame(width: 14, height: 2.5)
                     Text(p.label).font(.caption2).foregroundStyle(.secondary)

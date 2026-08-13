@@ -126,6 +126,23 @@ struct USBDevice: Codable, Hashable, Identifiable {
     }
 }
 
+/// An attached display. DisplayPort is tunneled over Thunderbolt as its own
+/// protocol, entirely separate from USB — which is why a monitor is invisible in
+/// a USB tree unless it happens to carry a hub.
+struct DisplayInfo: Codable, Hashable, Identifiable {
+    var name: String
+    var width: Int
+    var height: Int
+    var refreshHz: Double?
+    var isBuiltIn: Bool
+    var vendorNumber: Int?
+    var modelNumber: Int?
+    var serialNumber: Int?
+
+    var id: String { "\(name)-\(width)x\(height)-\(vendorNumber ?? 0)-\(modelNumber ?? 0)" }
+    var resolution: String { "\(width) × \(height)" }
+}
+
 struct Sample: Codable {
     var t: Date
     var tb: [TBDevice]
@@ -135,6 +152,10 @@ struct Sample: Codable {
     var voltage: Double
     var percent: Int
     var usb: [USBDevice]
+    /// Empty when the process has no window-server session (e.g. over SSH),
+    /// which is not the same as "no displays attached".
+    var displays: [DisplayInfo] = []
+    var displaysKnown: Bool = true
 
     var tbConnected: Bool { !tb.isEmpty }
 

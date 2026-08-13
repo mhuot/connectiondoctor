@@ -1,6 +1,8 @@
 import Foundation
 import IOKit
 import IOKit.ps
+import AppKit
+import CoreGraphics
 
 /// Direct IOKit reads. Everything here is on the order of a millisecond, which
 /// is what makes a short sampling interval affordable — shelling out to
@@ -167,6 +169,46 @@ enum Probes {
         return devices.sorted { $0.locationID < $1.locationID }
     }
 
+    // MARK: - Displays
+
+    /// CoreGraphics needs a window-server session, so this returns nothing over
+    /// SSH. The caller distinguishes "none attached" from "cannot tell".
+    static func displaysAvailable() -> Bool {
+        CGSessionCopyCurrentDictionary() != nil
+    }
+
+    static func displays() -> [DisplayInfo] {
+        guard displaysAvailable() else { return [] }
+
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
+        var ids = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetOnlineDisplayList(count, &ids, &count) == .success else { return [] }
+
+        // NSScreen carries the human-readable name; CoreGraphics carries the
+        // identity numbers. Neither has both.
+        var namesByID: [CGDirectDisplayID: String] = [:]
+        for screen in NSScreen.screens {
+            if let number = screen.deviceDescription[
+                NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber {
+                namesByID[CGDirectDisplayID(number.uint32Value)] = screen.localizedName
+            }
+        }
+
+        return ids.map { id in
+            let mode = CGDisplayCopyDisplayMode(id)
+            return DisplayInfo(
+                name: namesByID[id] ?? (CGDisplayIsBuiltin(id) != 0 ? "Built-in Display" : "Display"),
+                width: Int(CGDisplayPixelsWide(id)),
+                height: Int(CGDisplayPixelsHigh(id)),
+                refreshHz: mode.map(\.refreshRate).flatMap { $0 > 0 ? $0 : nil },
+                isBuiltIn: CGDisplayIsBuiltin(id) != 0,
+                vendorNumber: Int(CGDisplayVendorNumber(id)),
+                modelNumber: Int(CGDisplayModelNumber(id)),
+                serialNumber: Int(CGDisplaySerialNumber(id)))
+        }
+    }
+
     // MARK: - Composite
 
     static func sample() -> Sample {
@@ -179,6 +221,8 @@ enum Probes {
             amperageMilliAmps: power.amperageMilliAmps,
             voltage: power.voltage,
             percent: power.percent,
-            usb: usb())
+            usb: usb(),
+            displays: displays(),
+            displaysKnown: displaysAvailable())
     }
 }
