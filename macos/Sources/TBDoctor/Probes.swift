@@ -145,12 +145,23 @@ enum Probes {
         var devices: [USBDevice] = []
         forEachService("IOUSBHostDevice") { props in
             guard let name = props["USB Product Name"] as? String else { return }
+            func int(_ key: String) -> Int? { (props[key] as? NSNumber)?.intValue }
+
             devices.append(USBDevice(
                 name: name,
-                speed: (props["Device Speed"] as? NSNumber)?.intValue ?? -1,
+                speed: int("Device Speed") ?? -1,
                 locationID: (props["locationID"] as? NSNumber)?.uint32Value ?? 0,
-                vendorID: (props["idVendor"] as? NSNumber)?.intValue,
-                vendorName: props["USB Vendor Name"] as? String))
+                vendorID: int("idVendor"),
+                vendorName: props["USB Vendor Name"] as? String,
+                productID: int("idProduct"),
+                serial: props["USB Serial Number"] as? String,
+                deviceClass: int("bDeviceClass"),
+                deviceSubClass: int("bDeviceSubClass"),
+                deviceProtocol: int("bDeviceProtocol"),
+                releaseBCD: int("bcdDevice"),
+                usbVersionBCD: int("bcdUSB"),
+                linkSpeedBitsPerSecond: int("UsbLinkSpeed"),
+                usbAddress: int("USB Address")))
         }
         return devices.sorted { $0.locationID < $1.locationID }
     }

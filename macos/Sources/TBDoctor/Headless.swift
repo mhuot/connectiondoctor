@@ -61,9 +61,12 @@ enum Headless {
 
         print("\nUSB (\(sample.usb.count) devices)")
         for device in sample.usb {
-            print(String(format: "  0x%08X  %-44@ %@",
-                         device.locationID, device.name as NSString, device.speedLabel))
+            print(String(format: "  0x%08X  %-44@ %-10@ %@",
+                         device.locationID, device.name as NSString,
+                         device.speedLabel as NSString,
+                         (device.vidPid ?? "-") as NSString))
         }
+        print("  (last column is VID:PID — the identifier to search when a name is useless)")
     }
 
     // MARK: - Connection tree

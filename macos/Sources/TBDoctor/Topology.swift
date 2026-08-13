@@ -1,5 +1,14 @@
 import Foundation
 
+/// One labelled fact about a node, shown in the inspector.
+struct NodeDetail: Identifiable, Hashable {
+    var label: String
+    var value: String
+    /// Marks the values worth searching the web for — in practice, VID:PID.
+    var searchable: Bool = false
+    var id: String { label }
+}
+
 /// A node in the physical connection tree.
 struct TopoNode: Identifiable {
     enum Kind {
@@ -18,6 +27,10 @@ struct TopoNode: Identifiable {
     var badges: [String] = []
     /// The thing this node explains — why it matters, in one line.
     var note: String?
+    /// Everything known about this node, for the inspector.
+    var details: [NodeDetail] = []
+    /// VID:PID when the node is a USB device, for the lookup action.
+    var vidPid: String?
     var children: [TopoNode] = []
 }
 
@@ -37,6 +50,13 @@ enum Topology {
             title: "This Mac",
             subtitle: nil,
             badges: sample.externalConnected ? ["on AC"] : ["on battery"])
+        host.details = [
+            NodeDetail(label: "External power", value: sample.externalConnected ? "connected" : "not connected"),
+            NodeDetail(label: "Battery", value: "\(sample.percent)%"),
+            NodeDetail(label: "Battery current", value: String(format: "%d mA  (%.1f W)", sample.amperageMilliAmps, sample.batteryWatts)),
+            NodeDetail(label: "Battery voltage", value: String(format: "%.2f V", sample.voltage)),
+            NodeDetail(label: "USB devices", value: String(sample.usb.count))
+        ]
 
         // USB devices, indexed so children can find parents by location prefix.
         let byLocation = Dictionary(sample.usb.map { ($0.locationID, $0) }, uniquingKeysWith: { a, _ in a })
@@ -67,6 +87,8 @@ enum Topology {
                 title: displayName(for: device, children: kids),
                 subtitle: String(format: "0x%08X", device.locationID),
                 badges: [device.speedLabel])
+            node.details = details(for: device)
+            node.vidPid = device.vidPid
 
             if !kids.isEmpty {
                 // Every USB hub downstream of the host is a power *consumer*.
@@ -88,6 +110,14 @@ enum Topology {
                 title: dock.label,
                 subtitle: "Thunderbolt · route \(dock.route)",
                 badges: dock.linkGbps.map { [String(format: "%.0f Gb/s", $0)] } ?? [])
+            dockNode.details = [
+                NodeDetail(label: "Vendor", value: dock.vendor),
+                NodeDetail(label: "Model", value: dock.model),
+                NodeDetail(label: "Link", value: dock.linkGbps.map { String(format: "%.0f Gb/s", $0) } ?? "unknown"),
+                NodeDetail(label: "Route string", value: String(dock.route)),
+                NodeDetail(label: "Depth", value: String(dock.depth)),
+                NodeDetail(label: "UID", value: dock.uid)
+            ]
             if sample.adapter.looksLikeDock {
                 dockNode.badges.append("supplying host power")
                 dockNode.note = "Carrying power *and* data on one cable — a power shortfall here takes the data link down with it."
@@ -102,6 +132,38 @@ enum Topology {
 
         root.children = [host]
         return root
+    }
+
+    // MARK: - Details
+
+    /// Everything IOKit publishes about a USB device. The point is research:
+    /// when a hub calls itself "USB2.0 Hub", the vendor and product IDs are the
+    /// only things that actually identify it.
+    static func details(for device: USBDevice) -> [NodeDetail] {
+        var rows: [NodeDetail] = []
+        func add(_ label: String, _ value: String?, searchable: Bool = false) {
+            guard let value, !value.isEmpty else { return }
+            rows.append(NodeDetail(label: label, value: value, searchable: searchable))
+        }
+
+        add("Product", device.name)
+        add("Vendor", device.vendorName)
+        if let vidPid = device.vidPid { add("VID:PID", vidPid, searchable: true) }
+        if let vendorID = device.vendorID { add("Vendor ID", String(format: "0x%04X  (%d)", vendorID, vendorID)) }
+        if let productID = device.productID { add("Product ID", String(format: "0x%04X  (%d)", productID, productID)) }
+        add("Serial", device.serial, searchable: false)
+        add("Class", USBDevice.className(device.deviceClass))
+        if let sub = device.deviceSubClass { add("Subclass", String(format: "0x%02X", sub)) }
+        if let proto = device.deviceProtocol { add("Protocol", String(format: "0x%02X", proto)) }
+        add("USB version", USBDevice.bcdString(device.usbVersionBCD))
+        add("Device release", USBDevice.bcdString(device.releaseBCD))
+        add("Negotiated speed", device.speedLabel)
+        if let bits = device.linkSpeedBitsPerSecond {
+            add("Link rate", String(format: "%.0f Mb/s", Double(bits) / 1_000_000))
+        }
+        add("Location ID", String(format: "0x%08X", device.locationID))
+        if let address = device.usbAddress { add("USB address", String(address)) }
+        return rows
     }
 
     // MARK: - Naming

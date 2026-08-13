@@ -53,8 +53,51 @@ struct USBDevice: Codable, Hashable, Identifiable {
     /// one of these trees.
     var vendorID: Int?
     var vendorName: String?
+    /// Everything below exists to identify hardware that names itself
+    /// uselessly. A hub calling itself "USB2.0 Hub" is anonymous; its
+    /// VID:PID is not.
+    var productID: Int?
+    var serial: String?
+    var deviceClass: Int?
+    var deviceSubClass: Int?
+    var deviceProtocol: Int?
+    var releaseBCD: Int?
+    var usbVersionBCD: Int?
+    var linkSpeedBitsPerSecond: Int?
+    var usbAddress: Int?
 
     var id: UInt32 { locationID }
+
+    /// The pair you actually search for. Uppercase hex, no prefix — the form
+    /// every USB ID database expects.
+    var vidPid: String? {
+        guard let vendorID, let productID else { return nil }
+        return String(format: "%04X:%04X", vendorID, productID)
+    }
+
+    /// BCD-encoded: 0x0201 means USB 2.01.
+    static func bcdString(_ value: Int?) -> String? {
+        guard let value else { return nil }
+        return String(format: "%d.%02d", (value >> 8) & 0xFF, value & 0xFF)
+    }
+
+    /// USB device class codes. Worth decoding: class 9 tells you a thing is a
+    /// hub even when its name does not.
+    static func className(_ code: Int?) -> String? {
+        guard let code else { return nil }
+        let names: [Int: String] = [
+            0x00: "per-interface", 0x01: "audio", 0x02: "communications",
+            0x03: "human interface", 0x05: "physical", 0x06: "image",
+            0x07: "printer", 0x08: "mass storage", 0x09: "hub",
+            0x0A: "CDC data", 0x0B: "smart card", 0x0D: "content security",
+            0x0E: "video", 0x0F: "personal healthcare", 0x10: "audio/video",
+            0x11: "billboard", 0x12: "USB-C bridge", 0xDC: "diagnostic",
+            0xE0: "wireless controller", 0xEF: "miscellaneous",
+            0xFE: "application specific", 0xFF: "vendor specific"
+        ]
+        let name = names[code] ?? "unknown"
+        return String(format: "0x%02X (%@)", code, name)
+    }
 
     /// USB location IDs are hierarchical nibbles: 0x02144300 sits under
     /// 0x02144000, which sits under 0x02140000. Clearing the lowest non-zero

@@ -9,6 +9,7 @@ struct DiagramView: View {
 
     @AppStorage("diagramStyle") private var storedStyle = DiagramStyle.cascade.rawValue
     @State private var scale: CGFloat = 1
+    @State private var selectedID: String?
 
     private var style: DiagramStyle {
         DiagramStyle(rawValue: storedStyle) ?? .cascade
@@ -19,13 +20,28 @@ struct DiagramView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            toolbar
-            Divider()
-            canvas
-            Divider()
-            legend
+        HStack(spacing: 0) {
+            VStack(spacing: 0) {
+                toolbar
+                Divider()
+                canvas
+                Divider()
+                legend
+            }
+            if let selected {
+                Divider()
+                InspectorPanel(node: selected) { selectedID = nil }
+                    .transition(.move(edge: .trailing))
+            }
         }
+    }
+
+    /// Resolved fresh from the current layout each time, so the inspector keeps
+    /// showing live values as samples arrive rather than freezing at whatever
+    /// was true when the node was clicked.
+    private var selected: TopoNode? {
+        guard let selectedID else { return nil }
+        return layout.nodes.first { $0.id == selectedID }?.node
     }
 
     // MARK: - Toolbar
@@ -115,9 +131,12 @@ struct DiagramView: View {
                                                    lineJoin: .round))
                 }
                 ForEach(placed.nodes) { placedNode in
-                    NodeBox(node: placedNode.node)
+                    NodeBox(node: placedNode.node, isSelected: placedNode.id == selectedID)
                         .frame(width: placedNode.frame.width, height: placedNode.frame.height)
                         .offset(x: placedNode.frame.minX, y: placedNode.frame.minY)
+                        .onTapGesture {
+                            selectedID = (selectedID == placedNode.id) ? nil : placedNode.id
+                        }
                 }
             }
             .frame(width: placed.size.width, height: placed.size.height, alignment: .topLeading)
@@ -170,6 +189,7 @@ private struct EdgeShape: Shape {
 
 private struct NodeBox: View {
     let node: TopoNode
+    var isSelected: Bool = false
 
     private var tint: Color { TopoStyle.tint(node.kind) }
 
@@ -199,8 +219,11 @@ private struct NodeBox: View {
             RoundedRectangle(cornerRadius: 9).fill(tint.opacity(node.kind == .device ? 0.07 : 0.13))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 9).strokeBorder(tint.opacity(0.45), lineWidth: 1.2)
+            RoundedRectangle(cornerRadius: 9)
+                .strokeBorder(isSelected ? tint : tint.opacity(0.45),
+                              lineWidth: isSelected ? 2.5 : 1.2)
         )
+        .contentShape(RoundedRectangle(cornerRadius: 9))
         // The explanatory note does not fit in a box this size, so it lives in
         // the tooltip rather than being dropped.
         .help(helpText)
