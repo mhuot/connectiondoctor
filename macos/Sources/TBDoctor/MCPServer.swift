@@ -90,6 +90,26 @@ enum MCPServer {
                 ]
             ],
             [
+                "name": "tb_diagram",
+                "description": """
+                The current connection topology as an Excalidraw document (JSON). Boxes for the power \
+                source, the Mac, any Thunderbolt device and the whole USB hub tree, joined by \
+                orthogonal connectors, with the power path drawn distinctly. Use this when someone \
+                wants to see or share how their devices are wired together, or to reason about which \
+                devices sit behind which hub. Write the returned JSON to a .excalidraw file.
+                """,
+                "inputSchema": [
+                    "type": "object",
+                    "properties": [
+                        "style": [
+                            "type": "string",
+                            "enum": ["cascade", "topDown", "flow"],
+                            "description": "Layout. cascade steps down-right (default); topDown fans children below; flow reads left to right."
+                        ]
+                    ]
+                ]
+            ],
+            [
                 "name": "tb_incidents",
                 "description": """
                 Discrete fault incidents reconstructed from kernel events and power samples, newest \
@@ -128,6 +148,18 @@ enum MCPServer {
                     ? "Little or no history recorded — run the collector (menu bar app) for coverage over time."
                     : "Analysis based on recorded history."
             ])
+
+        case "tb_diagram":
+            let style = DiagramStyle(rawValue: arguments["style"] as? String ?? "") ?? .cascade
+            let sample = Probes.sample()
+            let layout = Diagram.layout(root: Topology.build(from: sample), style: style)
+            if let data = ExcalidrawExport.document(
+                layout: layout, caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))"),
+               let json = String(data: data, encoding: .utf8) {
+                respond(id: id, result: ["content": [["type": "text", "text": json]]])
+            } else {
+                respondError(id: id, code: -32603, message: "Could not build diagram")
+            }
 
         case "tb_incidents":
             let hours = arguments["hours"] as? Double ?? 24

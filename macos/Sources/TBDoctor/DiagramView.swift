@@ -57,6 +57,15 @@ struct DiagramView: View {
                 .buttonStyle(.borderless)
                 .font(.caption)
 
+            Button {
+                exportToExcalidraw()
+            } label: {
+                Label("Export…", systemImage: "square.and.arrow.up")
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .help("Save as an .excalidraw document")
+
             Spacer()
 
             // A recording is not stale live data, so it gets a label rather than
@@ -78,6 +87,19 @@ struct DiagramView: View {
 
     private func zoom(_ delta: CGFloat) {
         scale = min(2.0, max(0.4, scale + delta))
+    }
+
+    private func exportToExcalidraw() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "connections.excalidraw"
+        panel.allowedContentTypes = []
+        panel.message = "Export the connection diagram for Excalidraw"
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard let data = ExcalidrawExport.document(
+            layout: layout,
+            caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))") else { return }
+        try? data.write(to: url)
     }
 
     // MARK: - Canvas

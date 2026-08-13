@@ -9,6 +9,9 @@ enum Headless {
         if arguments.contains("--mcp") { MCPServer.serve(); return true }
         if arguments.contains("--probe") { probe(); return true }
         if arguments.contains("--tree") { tree(); return true }
+        if let i = arguments.firstIndex(of: "--excalidraw"), i + 1 < arguments.count {
+            excalidraw(to: arguments[i + 1], style: styleArgument(arguments)); return true
+        }
         if arguments.contains("--report") { report(); return true }
         if arguments.contains("--watch") { watch(); return true }
         if arguments.contains("--help") || arguments.contains("-h") { usage(); return true }
@@ -89,6 +92,32 @@ enum Headless {
 
         for (index, child) in node.children.enumerated() {
             render(child, ancestorsLast: ancestorsLast + [isLast], isLast: index == node.children.count - 1)
+        }
+    }
+
+    // MARK: - Excalidraw
+
+    static func styleArgument(_ arguments: [String]) -> DiagramStyle {
+        guard let i = arguments.firstIndex(of: "--style"), i + 1 < arguments.count,
+              let style = DiagramStyle(rawValue: arguments[i + 1]) else { return .cascade }
+        return style
+    }
+
+    static func excalidraw(to path: String, style: DiagramStyle) {
+        let sample = Probes.sample()
+        let layout = Diagram.layout(root: Topology.build(from: sample), style: style)
+        guard let data = ExcalidrawExport.document(
+            layout: layout,
+            caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))") else {
+            FileHandle.standardError.write("TBDoctor: could not build document\n".data(using: .utf8)!)
+            exit(1)
+        }
+        do {
+            try data.write(to: URL(fileURLWithPath: path))
+            print("Wrote \(path) — \(layout.nodes.count) nodes, \(layout.edges.count) edges, style \(style.label)")
+        } catch {
+            FileHandle.standardError.write("TBDoctor: \(error)\n".data(using: .utf8)!)
+            exit(1)
         }
     }
 
