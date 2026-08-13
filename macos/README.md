@@ -62,6 +62,7 @@ TBDoctor.app/Contents/MacOS/TBDoctor --tree      # connection tree + where power
 TBDoctor.app/Contents/MacOS/TBDoctor --report    # analyse history, print findings
 TBDoctor.app/Contents/MacOS/TBDoctor --watch     # live one-line-per-sample table
 TBDoctor.app/Contents/MacOS/TBDoctor --inspect samples.jsonl   # draw a recorded tree
+TBDoctor.app/Contents/MacOS/TBDoctor --excalidraw out.excalidraw --style flow
 ```
 
 `--inspect` opens the connection tree for a *recorded* sample instead of live
@@ -95,6 +96,23 @@ which is how that anonymous hub becomes identifiably the LG monitor's.
 
 `--tree` prints the same topology as text.
 
+### Excalidraw export
+
+**Export…** in the toolbar (or `--excalidraw out.excalidraw [--style ...]`) writes
+the diagram as an Excalidraw document, reusing the same layout engine so the file
+matches what was on screen. Boxes, orthogonal connectors and the amber power path
+come across as native Excalidraw elements — editable, annotatable and shareable,
+which is what you usually want when handing a topology to someone else.
+
+Colours are remapped to Excalidraw's own palette, since the app's dark-background
+tints are illegible on its white canvas. Text is free-floating rather than
+container-bound: bound text gets centred and re-wrapped, which would undo the
+left-aligned title/detail stacking. Element seeds are deterministic, so
+re-exporting the same topology produces a diffable file instead of churning
+every element.
+
+Agents can request one directly via the `tb_diagram` MCP tool.
+
 Note that IOKit exposes no per-device power draw on current hardware, so the
 diagram shows where power *enters* and which nodes are consumers — it does not
 invent per-device wattages.
@@ -109,7 +127,8 @@ claude mcp add tbdoctor -- /full/path/to/TBDoctor.app/Contents/MacOS/TBDoctor --
 ```
 
 Tools: `tb_probe` (current state), `tb_diagnose` (ranked findings with evidence),
-`tb_incidents` (reconstructed fault history).
+`tb_incidents` (reconstructed fault history), `tb_diagram` (the topology as an
+Excalidraw document).
 
 ## How it works
 
