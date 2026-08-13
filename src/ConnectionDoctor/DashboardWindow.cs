@@ -6,6 +6,7 @@ using System.Windows.Threading;
 using Brush = System.Windows.Media.Brush;
 using Brushes = System.Windows.Media.Brushes;
 using Button = System.Windows.Controls.Button;
+using CheckBox = System.Windows.Controls.CheckBox;
 using Color = System.Windows.Media.Color;
 using FontFamily = System.Windows.Media.FontFamily;
 using TextBox = System.Windows.Controls.TextBox;
@@ -27,6 +28,14 @@ internal sealed class DashboardWindow : Window
     private readonly TextBlock deviceStatus = Text();
     private readonly TextBlock baselineStatus = Text();
     private readonly TextBlock refreshedStatus = Text(SecondaryTextBrush, 12);
+    private readonly CheckBox includeBuiltIn = new()
+    {
+        Content = "Include built-in devices",
+        IsChecked = false,
+        Foreground = PrimaryTextBrush,
+        VerticalAlignment = VerticalAlignment.Center,
+        Margin = new Thickness(0, 0, 16, 0)
+    };
     private readonly TextBox topology = ReadOnlyText();
     private readonly StackPanel findings = new();
     private readonly StackPanel incidents = new();
@@ -62,7 +71,8 @@ internal sealed class DashboardWindow : Window
 
         try
         {
-            var data = await Task.Run(dataLoader.Load).ConfigureAwait(false);
+            var showBuiltIn = includeBuiltIn.IsChecked == true;
+            var data = await Task.Run(() => dataLoader.Load(showBuiltIn)).ConfigureAwait(false);
             if (!Dispatcher.HasShutdownStarted)
             {
                 await Dispatcher.InvokeAsync(() => Render(data));
@@ -176,6 +186,11 @@ internal sealed class DashboardWindow : Window
         DockPanel.SetDock(refresh, Dock.Right);
         header.Children.Add(refresh);
 
+        includeBuiltIn.Checked += (_, _) => RefreshNow();
+        includeBuiltIn.Unchecked += (_, _) => RefreshNow();
+        DockPanel.SetDock(includeBuiltIn, Dock.Right);
+        header.Children.Add(includeBuiltIn);
+
         refreshedStatus.VerticalAlignment = VerticalAlignment.Center;
         refreshedStatus.Margin = new Thickness(0, 0, 14, 0);
         DockPanel.SetDock(refreshedStatus, Dock.Right);
@@ -206,7 +221,7 @@ internal sealed class DashboardWindow : Window
                 : $"{Math.Abs(power.BatteryRateMilliwatts.Value) / 1000.0:F1} W";
             powerStatus.Text = $"{(power.LineOnline ? "AC" : "Battery")} · {power.BatteryPercent}%\n{watts}";
             powerStatus.Foreground = power.IsDeficit ? WarningBrush : PrimaryTextBrush;
-            deviceStatus.Text = $"{DeviceFilters.ConnectionDevices(data.Snapshot).Count} present";
+            deviceStatus.Text = $"{data.VisibleConnectionCount} shown";
         }
 
         var comparison = data.BaselineComparison;

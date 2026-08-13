@@ -14,6 +14,7 @@ The first supported case came from a Surface Laptop 7 connected to an LG UltraWi
 - Detects the initial high-value signature: an LG display remains active while its expected USB hub branch is missing.
 - Continuously records connection changes to bounded JSONL, with hourly full snapshots as sync points.
 - Registers itself per-user to start collecting at login.
+- Hides built-in laptop devices in the dashboard by default, with an **Include built-in devices** toggle.
 - Runs natively on Windows ARM64 and x64 with .NET 8.
 
 ## Build and run

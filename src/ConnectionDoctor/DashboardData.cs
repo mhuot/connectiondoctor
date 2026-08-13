@@ -6,6 +6,7 @@ internal sealed record DashboardData(
     IReadOnlyList<ConnectionIncident> Incidents,
     ComparisonReport? BaselineComparison,
     string Topology,
+    int VisibleConnectionCount,
     DateTimeOffset LoadedAt);
 
 internal sealed class DashboardDataLoader
@@ -33,7 +34,7 @@ internal sealed class DashboardDataLoader
     internal long ParsedEventLineCount => eventCursor.ParsedLineCount;
     internal int BaselineLoadCount { get; private set; }
 
-    public DashboardData Load()
+    public DashboardData Load(bool includeBuiltIn = false)
     {
         var newEvents = BackgroundCollector.ReadEntriesIncremental(eventsPath, eventCursor);
         if (newEvents.Reset)
@@ -61,9 +62,13 @@ internal sealed class DashboardDataLoader
         if (snapshot is not null)
         {
             using var writer = new StringWriter();
-            TopologyRenderer.Write(snapshot, writer);
+            TopologyRenderer.Write(snapshot, writer, includeBuiltIn);
             topology = writer.ToString();
         }
+
+        var visibleConnectionCount = snapshot is null
+            ? 0
+            : DeviceFilters.VisibleConnectionDevices(snapshot, includeBuiltIn).Count;
 
         return new DashboardData(
             BackgroundCollector.ReadStatus(),
@@ -71,6 +76,7 @@ internal sealed class DashboardDataLoader
             cachedIncidents,
             comparison,
             topology,
+            visibleConnectionCount,
             DateTimeOffset.Now);
     }
 
