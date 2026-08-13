@@ -168,6 +168,14 @@ final class Collector: ObservableObject {
         logTail?.stop()
     }
 
+    /// Force an immediate sample. The view refreshes on its own each tick, but
+    /// after physically re-plugging something you want the answer now, not in
+    /// up to five seconds.
+    func refreshNow() {
+        guard running, !storeConflict else { return }
+        tick()
+    }
+
     private func scheduleTimer(interval: TimeInterval) {
         guard interval != currentInterval else { return }
         currentInterval = interval
