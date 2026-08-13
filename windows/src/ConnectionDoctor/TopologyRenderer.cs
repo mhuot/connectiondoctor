@@ -4,13 +4,16 @@ namespace ConnectionDoctor;
 
 internal static class TopologyRenderer
 {
-    public static void Write(ConnectionSnapshot snapshot, TextWriter writer)
+    public static void Write(
+        ConnectionSnapshot snapshot,
+        TextWriter writer,
+        bool includeBuiltIn = true)
     {
         writer.WriteLine($"ConnectionDoctor tree - {snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}");
         writer.WriteLine($"{snapshot.HostName} [{(snapshot.Power.LineOnline ? "AC" : "battery")}, {snapshot.Power.BatteryPercent}%]");
 
         var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
-        var interesting = snapshot.Devices.Where(device => DeviceFilters.IsConnectionDevice(device, byId)).ToList();
+        var interesting = DeviceFilters.VisibleConnectionDevices(snapshot, includeBuiltIn).ToList();
         var includedIds = new HashSet<string>(interesting.Select(device => device.InstanceId), StringComparer.OrdinalIgnoreCase);
 
         foreach (var device in interesting)
@@ -18,7 +21,8 @@ internal static class TopologyRenderer
             var parentId = device.ParentInstanceId;
             while (parentId is not null && byId.TryGetValue(parentId, out var parent))
             {
-                if (DeviceFilters.IsConnectionDevice(parent, byId))
+                if (DeviceFilters.IsConnectionDevice(parent, byId) &&
+                    (includeBuiltIn || DeviceFilters.IsExternalDevice(parent, byId)))
                 {
                     includedIds.Add(parent.InstanceId);
                 }

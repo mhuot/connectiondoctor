@@ -69,6 +69,18 @@ internal static class DeviceFilters
         return snapshot.Devices.Where(device => IsConnectionDevice(device, byId)).ToList();
     }
 
+    public static IReadOnlyList<DeviceNode> VisibleConnectionDevices(
+        ConnectionSnapshot snapshot,
+        bool includeBuiltIn)
+    {
+        var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
+        return snapshot.Devices
+            .Where(device =>
+                IsConnectionDevice(device, byId) &&
+                (includeBuiltIn || IsExternalDevice(device, byId)))
+            .ToList();
+    }
+
     public static bool IsConnectionDevice(
         DeviceNode device,
         IReadOnlyDictionary<string, DeviceNode> devicesById)
@@ -82,6 +94,34 @@ internal static class DeviceFilters
         return (device.ClassName.Equals("Net", StringComparison.OrdinalIgnoreCase) ||
                 device.ClassName.Equals("MEDIA", StringComparison.OrdinalIgnoreCase)) &&
                HasUsbAncestor(device, devicesById);
+    }
+
+    public static bool IsExternalDevice(
+        DeviceNode device,
+        IReadOnlyDictionary<string, DeviceNode> devicesById)
+    {
+        if (device.ClassName.Equals("Monitor", StringComparison.OrdinalIgnoreCase))
+        {
+            return !LooksLikeBuiltInDisplay(device);
+        }
+
+        var current = device;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (visited.Add(current.InstanceId))
+        {
+            if (IsExternalBusNode(current.InstanceId))
+            {
+                return true;
+            }
+
+            if (current.ParentInstanceId is null ||
+                !devicesById.TryGetValue(current.ParentInstanceId, out current!))
+            {
+                return false;
+            }
+        }
+
+        return false;
     }
 
     private static bool HasUsbAncestor(
@@ -114,4 +154,15 @@ internal static class DeviceFilters
         device.FriendlyName.Contains("USB4", StringComparison.OrdinalIgnoreCase) ||
         device.FriendlyName.Contains("Thunderbolt", StringComparison.OrdinalIgnoreCase) ||
         device.FriendlyName.Contains("Type-C", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsExternalBusNode(string instanceId) =>
+        instanceId.StartsWith(@"USB\VID_", StringComparison.OrdinalIgnoreCase) ||
+        instanceId.StartsWith(@"USB4\VID_", StringComparison.OrdinalIgnoreCase);
+
+    private static bool LooksLikeBuiltInDisplay(DeviceNode device)
+    {
+        string[] markers = ["Surface", "Internal", "Integrated", "Built-in"];
+        return markers.Any(marker =>
+            device.FriendlyName.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    }
 }
