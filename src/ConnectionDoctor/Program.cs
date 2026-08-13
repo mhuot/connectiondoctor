@@ -19,7 +19,9 @@ internal static class Program
                 "tree" => Tree(),
                 "snapshot" => Snapshot(args.Skip(1).FirstOrDefault()),
                 "baseline" => Baseline(args.Skip(1).ToArray()),
-                "diff" or "report" => Diff(args.Skip(1).FirstOrDefault()),
+                "diff" => Diff(args.Skip(1).FirstOrDefault()),
+                "report" => Report(args.Skip(1).ToArray()),
+                "watch" or "record" => Watch(args.Skip(1).ToArray()),
                 "collect" => Collect(),
                 "status" => Status(),
                 "install" => Install(),
@@ -125,6 +127,72 @@ internal static class Program
         return BackgroundCollector.Run();
     }
 
+    private static int Watch(string[] args)
+    {
+        var interval = 5;
+        for (var i = 0; i < args.Length - 1; i++)
+        {
+            if ((args[i] == "--interval" || args[i] == "-i") &&
+                int.TryParse(args[i + 1], out var parsed) && parsed >= 1)
+            {
+                interval = parsed;
+            }
+        }
+        return Recorder.Run(interval);
+    }
+
+    private static int Report(string[] args)
+    {
+        // If a path argument was supplied, behave exactly like the old diff/report alias.
+        var pathArg = args.FirstOrDefault(a => !a.StartsWith('-'));
+        if (pathArg is not null)
+        {
+            return Diff(pathArg);
+        }
+
+        // No path — summarize the JSONL event log.
+        var events = Recorder.ReadEvents();
+        if (events.Count == 0)
+        {
+            Console.WriteLine($"No events recorded yet.  Start recording with:  connectiondoctor watch");
+            Console.WriteLine($"Event log: {Recorder.EventLogPath}");
+            return 0;
+        }
+
+        var incidents = IncidentStitcher.Stitch(events);
+        if (incidents.Count == 0)
+        {
+            Console.WriteLine("No connection-change incidents found in the event log.");
+            return 0;
+        }
+
+        Console.WriteLine($"ConnectionDoctor — recorded incidents ({incidents.Count} total, newest first)");
+        Console.WriteLine();
+
+        foreach (var incident in incidents)
+        {
+            Console.WriteLine($"  {incident.StartedAt:yyyy-MM-dd HH:mm:ss zzz}  [{(incident.PowerAtStart.LineOnline ? "AC" : "battery")} {incident.PowerAtStart.BatteryPercent}%]");
+            if (incident.Duration.TotalSeconds > 1)
+            {
+                Console.WriteLine($"  Duration: {incident.Duration.TotalSeconds:F0}s");
+            }
+
+            foreach (var device in incident.Lost.Where(DeviceFilters.IsConnectionDevice))
+            {
+                var id = device.VidPid is null ? string.Empty : $" [{device.VidPid}]";
+                Console.WriteLine($"    - {device.ClassName,-12} {device.FriendlyName}{id}");
+            }
+            foreach (var device in incident.Gained.Where(DeviceFilters.IsConnectionDevice))
+            {
+                var id = device.VidPid is null ? string.Empty : $" [{device.VidPid}]";
+                Console.WriteLine($"    + {device.ClassName,-12} {device.FriendlyName}{id}");
+            }
+            Console.WriteLine();
+        }
+
+        return incidents.Any(i => i.Lost.Count > 0) ? 2 : 0;
+    }
+
     private static int Status()
     {
         var status = BackgroundCollector.ReadStatus();
@@ -172,11 +240,14 @@ internal static class Program
               snapshot [path]          Save the current state as JSON
               baseline save [path]     Save a known-good state
               diff [baseline-path]     Compare current state with known-good
-              report [baseline-path]   Alias for diff
-              collect                  Continuously record connection state
+              report [baseline-path]   Summarize recorded incidents; or diff if path given
+              watch [--interval N]     Record changes continuously to events.jsonl (default: 5s)
+              collect                  Continuously record full snapshots
               status                   Show background collector health
               install                  Start collecting now and at user login
               uninstall                Remove login startup registration
+
+            Tip: run 'watch' via Task Scheduler at logon for always-on recording.
             """);
         return 0;
     }

@@ -52,6 +52,23 @@ internal sealed record ComparisonReport(
     IReadOnlyList<DeviceNode> Added,
     IReadOnlyList<Finding> Findings);
 
+internal sealed record WatchEvent(
+    DateTimeOffset Timestamp,
+    string Kind,
+    IReadOnlyList<DeviceNode> DevicesAdded,
+    IReadOnlyList<DeviceNode> DevicesRemoved,
+    PowerState Power);
+
+internal sealed record Incident(
+    DateTimeOffset StartedAt,
+    DateTimeOffset EndedAt,
+    IReadOnlyList<DeviceNode> Lost,
+    IReadOnlyList<DeviceNode> Gained,
+    PowerState PowerAtStart)
+{
+    public TimeSpan Duration => EndedAt - StartedAt;
+}
+
 internal static class DeviceFilters
 {
     private static readonly HashSet<string> ConnectionClasses = new(StringComparer.OrdinalIgnoreCase)
