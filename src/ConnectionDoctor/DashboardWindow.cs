@@ -31,6 +31,8 @@ internal sealed class DashboardWindow : Window
     private readonly StackPanel findings = new();
     private readonly StackPanel incidents = new();
     private readonly DispatcherTimer timer;
+    private readonly DashboardDataLoader dataLoader = new();
+    private int refreshInProgress;
     private bool closePermanently;
 
     public DashboardWindow()
@@ -51,10 +53,45 @@ internal sealed class DashboardWindow : Window
         RefreshNow();
     }
 
-    public void RefreshNow()
+    public async void RefreshNow()
     {
-        var data = DashboardData.Load();
-        Render(data);
+        if (Interlocked.Exchange(ref refreshInProgress, 1) == 1)
+        {
+            return;
+        }
+
+        try
+        {
+            var data = await Task.Run(dataLoader.Load).ConfigureAwait(false);
+            if (!Dispatcher.HasShutdownStarted)
+            {
+                await Dispatcher.InvokeAsync(() => Render(data));
+            }
+        }
+        catch (IOException exception)
+        {
+            await RenderLoadErrorAsync(exception.Message);
+        }
+        catch (UnauthorizedAccessException exception)
+        {
+            await RenderLoadErrorAsync(exception.Message);
+        }
+        catch (JsonException exception)
+        {
+            await RenderLoadErrorAsync(exception.Message);
+        }
+        finally
+        {
+            Interlocked.Exchange(ref refreshInProgress, 0);
+        }
+    }
+
+    private async Task RenderLoadErrorAsync(string message)
+    {
+        if (!Dispatcher.HasShutdownStarted)
+        {
+            await Dispatcher.InvokeAsync(() => RenderLoadError(message));
+        }
     }
 
     public void ClosePermanently()
@@ -195,6 +232,15 @@ internal sealed class DashboardWindow : Window
         refreshedStatus.Text = $"Updated {data.LoadedAt:HH:mm:ss}";
         RenderFindings(data);
         RenderIncidents(data.Incidents);
+    }
+
+    private void RenderLoadError(string message)
+    {
+        collectorStatus.Text = "Refresh failed";
+        collectorStatus.Foreground = CriticalBrush;
+        refreshedStatus.Text = $"Error at {DateTimeOffset.Now:HH:mm:ss}";
+        findings.Children.Clear();
+        findings.Children.Add(Message(message, CriticalBrush));
     }
 
     private void RenderFindings(DashboardData data)
