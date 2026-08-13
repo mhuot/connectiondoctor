@@ -94,6 +94,16 @@ throws away the one word identifying the hardware. Hubs that self-describe as
 "Generic" are resolved by matching their vendor ID against their own children,
 which is how that anonymous hub becomes identifiably the LG monitor's.
 
+Clicking any box opens an inspector with everything IOKit publishes about it —
+vendor and product IDs, serial, USB class/subclass/protocol, USB version, device
+release, negotiated speed and link rate, location ID, USB address — each row
+copyable, plus a one-click lookup on a public USB ID database.
+
+That matters because hubs routinely name themselves uselessly. Three different
+boxes here call themselves "USB2.0 Hub"; their VID:PIDs identify them as CalDigit,
+Genesys Logic and Intel silicon respectively. `--probe` prints the same VID:PID
+column for research over SSH.
+
 `--tree` prints the same topology as text.
 
 ### Excalidraw export
