@@ -2,6 +2,7 @@
 
 internal static class Program
 {
+    [STAThread]
     private static int Main(string[] args)
     {
         if (!OperatingSystem.IsWindows())
@@ -25,6 +26,8 @@ internal static class Program
                 "status" => Status(),
                 "install" => Install(),
                 "uninstall" => Uninstall(),
+                "ui" or "dashboard" => Dashboard(showImmediately: true),
+                "tray" => Dashboard(showImmediately: false),
                 "help" or "--help" or "-h" => Help(),
                 _ => Unknown(command)
             };
@@ -183,6 +186,12 @@ internal static class Program
         return 0;
     }
 
+    private static int Dashboard(bool showImmediately)
+    {
+        DashboardApplication.Run(showImmediately);
+        return 0;
+    }
+
     private static void WriteChanges(string title, IReadOnlyList<DeviceNode> devices)
     {
         if (devices.Count == 0)
@@ -215,6 +224,8 @@ internal static class Program
               status                   Show background collector health
               install                  Start collecting now and at user login
               uninstall                Remove login startup registration
+              ui                       Open the live dashboard
+              tray                     Run the notification-area UI
             """);
         return 0;
     }
