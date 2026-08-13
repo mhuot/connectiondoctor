@@ -1,4 +1,6 @@
 import Foundation
+import AppKit
+import CoreGraphics
 
 /// Writes the connection diagram as an `.excalidraw` document.
 ///
@@ -80,8 +82,7 @@ enum ExcalidrawExport {
                                  content: placed.node.title, size: 16))
             index += 1
 
-            let detail = (placed.node.badges + [placed.node.subtitle].compactMap { $0 })
-                .joined(separator: "  ·  ")
+            let detail = detailLine(for: placed.node, boxWidth: frame.width)
             if !detail.isEmpty {
                 elements.append(text(id: "detail-\(index)", index: index,
                                      x: Double(frame.minX) + 12, y: Double(frame.minY) + 31,
@@ -107,6 +108,34 @@ enum ExcalidrawExport {
         ]
 
         return try? JSONSerialization.data(withJSONObject: document, options: [.prettyPrinted])
+    }
+
+    // MARK: - Detail line
+
+    /// Exported text is free-floating, so anything too long simply runs past the
+    /// box edge. Boxes are sized for the on-screen badges, so the location ID is
+    /// only appended when it actually fits.
+    private static func detailLine(for node: TopoNode, boxWidth: CGFloat) -> String {
+        // "60W" and "60W over Thunderbolt" side by side reads as a mistake.
+        let badges = node.badges.filter { badge in
+            guard let subtitle = node.subtitle else { return true }
+            return !subtitle.contains(badge)
+        }
+
+        var parts = badges
+        if let subtitle = node.subtitle { parts.append(subtitle) }
+        let full = parts.joined(separator: "  ·  ")
+
+        let available = Double(boxWidth) - 24
+        if measure(full) <= available { return full }
+
+        let withoutSubtitle = badges.joined(separator: "  ·  ")
+        return measure(withoutSubtitle) <= available ? withoutSubtitle : node.subtitle ?? withoutSubtitle
+    }
+
+    private static func measure(_ string: String) -> Double {
+        (string as NSString)
+            .size(withAttributes: [.font: NSFont.systemFont(ofSize: 12)]).width
     }
 
     // MARK: - Elements
