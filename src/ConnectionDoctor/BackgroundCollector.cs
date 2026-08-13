@@ -7,7 +7,8 @@ namespace ConnectionDoctor;
 internal static class BackgroundCollector
 {
     private const int SampleIntervalSeconds = 5;
-    private const long MaximumSampleBytes = 24 * 1024 * 1024;
+    private const long MaximumEventBytes = 24 * 1024 * 1024;
+    private static readonly TimeSpan FullSnapshotInterval = TimeSpan.FromHours(1);
     private const string MutexName = @"Local\ConnectionDoctor.Collector";
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -18,7 +19,8 @@ internal static class BackgroundCollector
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "ConnectionDoctor");
 
-    public static string SamplesPath => Path.Combine(DataDirectory, "samples.jsonl");
+    public static string EventsPath => Path.Combine(DataDirectory, "events.jsonl");
+    public static string CurrentSnapshotPath => Path.Combine(DataDirectory, "current.json");
     public static string HeartbeatPath => Path.Combine(DataDirectory, "heartbeat.json");
     public static string ErrorPath => Path.Combine(DataDirectory, "collector-errors.log");
 
@@ -40,15 +42,32 @@ internal static class BackgroundCollector
         };
 
         var startedAt = DateTimeOffset.Now;
-        Console.WriteLine($"ConnectionDoctor collector started. Samples: {SamplesPath}");
+        var lastFullSnapshotAt = DateTimeOffset.MinValue;
+        ConnectionSnapshot? previous = null;
+        Console.WriteLine($"ConnectionDoctor collector started. Events: {EventsPath}");
 
         while (!stopped.IsSet)
         {
             try
             {
                 var snapshot = DeviceProbe.Capture();
-                AppendSnapshot(snapshot);
+                var entries = new List<RecorderEntry>();
+                if (previous is not null)
+                {
+                    entries.AddRange(Recorder.DetectChanges(previous, snapshot));
+                }
+
+                if (snapshot.CapturedAt - lastFullSnapshotAt >= FullSnapshotInterval)
+                {
+                    entries.Add(RecorderEntry.FullSnapshot(snapshot));
+                    lastFullSnapshotAt = snapshot.CapturedAt;
+                }
+
+                AppendEntries(entries);
+                SaveCurrent(snapshot);
                 WriteHeartbeat(startedAt, snapshot.CapturedAt);
+                PrintChanges(entries);
+                previous = snapshot;
             }
             catch (Win32Exception exception)
             {
@@ -67,6 +86,33 @@ internal static class BackgroundCollector
         }
 
         return 0;
+    }
+
+    public static IReadOnlyList<RecorderEntry> ReadEntries()
+    {
+        if (!File.Exists(EventsPath))
+        {
+            return [];
+        }
+
+        var entries = new List<RecorderEntry>();
+        foreach (var line in File.ReadLines(EventsPath))
+        {
+            try
+            {
+                var entry = JsonSerializer.Deserialize<RecorderEntry>(line, JsonOptions);
+                if (entry is not null)
+                {
+                    entries.Add(entry);
+                }
+            }
+            catch (JsonException exception)
+            {
+                RecordError(exception);
+            }
+        }
+
+        return entries;
     }
 
     public static CollectorStatus ReadStatus()
@@ -102,11 +148,29 @@ internal static class BackgroundCollector
         return new CollectorStatus(healthy, message);
     }
 
-    private static void AppendSnapshot(ConnectionSnapshot snapshot)
+    private static void AppendEntries(IReadOnlyList<RecorderEntry> entries)
     {
-        var line = JsonSerializer.Serialize(snapshot, JsonOptions);
-        File.AppendAllText(SamplesPath, line + Environment.NewLine);
-        TrimSamplesIfNeeded();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        using (var writer = File.AppendText(EventsPath))
+        {
+            foreach (var entry in entries)
+            {
+                writer.WriteLine(JsonSerializer.Serialize(entry, JsonOptions));
+            }
+        }
+
+        TrimEventsIfNeeded();
+    }
+
+    private static void SaveCurrent(ConnectionSnapshot snapshot)
+    {
+        var temporaryPath = CurrentSnapshotPath + ".tmp";
+        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(snapshot, JsonOptions));
+        File.Move(temporaryPath, CurrentSnapshotPath, true);
     }
 
     private static void WriteHeartbeat(DateTimeOffset startedAt, DateTimeOffset lastSampleAt)
@@ -115,21 +179,21 @@ internal static class BackgroundCollector
             Environment.ProcessId,
             startedAt,
             lastSampleAt,
-            SamplesPath);
+            EventsPath);
         var temporaryPath = HeartbeatPath + ".tmp";
         File.WriteAllText(temporaryPath, JsonSerializer.Serialize(heartbeat, JsonOptions));
         File.Move(temporaryPath, HeartbeatPath, true);
     }
 
-    private static void TrimSamplesIfNeeded()
+    private static void TrimEventsIfNeeded()
     {
-        var file = new FileInfo(SamplesPath);
-        if (file.Length <= MaximumSampleBytes)
+        var file = new FileInfo(EventsPath);
+        if (file.Length <= MaximumEventBytes)
         {
             return;
         }
 
-        var bytes = File.ReadAllBytes(SamplesPath);
+        var bytes = File.ReadAllBytes(EventsPath);
         var start = bytes.Length / 2;
         while (start < bytes.Length && bytes[start] != (byte)'\n')
         {
@@ -141,11 +205,21 @@ internal static class BackgroundCollector
             start++;
         }
 
-        File.WriteAllBytes(SamplesPath, bytes[start..]);
+        File.WriteAllBytes(EventsPath, bytes[start..]);
+    }
+
+    private static void PrintChanges(IEnumerable<RecorderEntry> entries)
+    {
+        foreach (var entry in entries.Where(item => item.Kind != RecorderEntryKinds.Snapshot))
+        {
+            var detail = entry.Device?.FriendlyName ?? entry.Power?.ToString() ?? string.Empty;
+            Console.WriteLine($"{entry.At:HH:mm:ss} {entry.Kind} {detail}".TrimEnd());
+        }
     }
 
     private static void RecordError(Exception exception)
     {
+        Directory.CreateDirectory(DataDirectory);
         var entry = $"{DateTimeOffset.Now:O} {exception.GetType().Name}: {exception.Message}{Environment.NewLine}";
         File.AppendAllText(ErrorPath, entry);
         Console.Error.Write(entry);
@@ -169,6 +243,6 @@ internal sealed record CollectorHeartbeat(
     int ProcessId,
     DateTimeOffset StartedAt,
     DateTimeOffset LastSampleAt,
-    string SamplesPath);
+    string EventsPath);
 
 internal sealed record CollectorStatus(bool IsRunning, string Message);

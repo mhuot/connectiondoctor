@@ -19,8 +19,9 @@ internal static class Program
                 "tree" => Tree(),
                 "snapshot" => Snapshot(args.Skip(1).FirstOrDefault()),
                 "baseline" => Baseline(args.Skip(1).ToArray()),
-                "diff" or "report" => Diff(args.Skip(1).FirstOrDefault()),
-                "collect" => Collect(),
+                "diff" => Diff(args.Skip(1).FirstOrDefault()),
+                "report" => Report(),
+                "collect" or "watch" => Collect(),
                 "status" => Status(),
                 "install" => Install(),
                 "uninstall" => Uninstall(),
@@ -40,16 +41,25 @@ internal static class Program
         var snapshot = DeviceProbe.Capture();
         Console.WriteLine($"ConnectionDoctor probe - {snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}");
         Console.WriteLine($"Host: {snapshot.HostName} ({snapshot.OperatingSystemArchitecture})");
-        Console.WriteLine($"Power: {(snapshot.Power.LineOnline ? "AC" : "battery")}, {snapshot.Power.BatteryPercent}%");
+        Console.WriteLine(
+            $"Power: {(snapshot.Power.LineOnline ? "AC" : "battery")}, " +
+            $"{snapshot.Power.BatteryPercent}%, {FormatRate(snapshot.Power.BatteryRateMilliwatts)}");
         Console.WriteLine($"Present devices: {snapshot.Devices.Count}");
         Console.WriteLine();
 
-        foreach (var device in snapshot.Devices.Where(DeviceFilters.IsConnectionDevice)
+        foreach (var device in DeviceFilters.ConnectionDevices(snapshot)
                      .OrderBy(device => device.ClassName)
                      .ThenBy(device => device.FriendlyName))
         {
             var id = device.VidPid is null ? string.Empty : $" [{device.VidPid}]";
             Console.WriteLine($"{device.ClassName,-12} {device.FriendlyName}{id}");
+        }
+
+        foreach (var finding in PowerDiagnosis.Analyze(snapshot.Power))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"{finding.Severity.ToUpperInvariant()}: {finding.Title}");
+            Console.WriteLine($"  {finding.Explanation}");
         }
 
         return 0;
@@ -125,6 +135,33 @@ internal static class Program
         return BackgroundCollector.Run();
     }
 
+    private static int Report()
+    {
+        var incidents = IncidentStitcher.Stitch(BackgroundCollector.ReadEntries());
+        if (incidents.Count == 0)
+        {
+            Console.WriteLine("No recorded connection incidents.");
+            return 0;
+        }
+
+        Console.WriteLine($"ConnectionDoctor incidents ({incidents.Count})");
+        foreach (var incident in incidents.OrderByDescending(item => item.Start))
+        {
+            var disappeared = incident.Events.Count(entry => entry.Kind == RecorderEntryKinds.DeviceDisappeared);
+            var appeared = incident.Events.Count(entry => entry.Kind == RecorderEntryKinds.DeviceAppeared);
+            Console.WriteLine(
+                $"{incident.Start:yyyy-MM-dd HH:mm:ss}  " +
+                $"{incident.Duration.TotalSeconds:F0}s  " +
+                $"{disappeared} disappeared, {appeared} appeared");
+            foreach (var entry in incident.Events.Where(entry => entry.Device is not null).Take(8))
+            {
+                Console.WriteLine($"  {entry.Kind}: {entry.Device!.FriendlyName} [{entry.Device.VidPid ?? entry.Device.ClassName}]");
+            }
+        }
+
+        return 0;
+    }
+
     private static int Status()
     {
         var status = BackgroundCollector.ReadStatus();
@@ -154,7 +191,7 @@ internal static class Program
         }
 
         Console.WriteLine($"{title} ({devices.Count})");
-        foreach (var device in devices.Where(DeviceFilters.IsConnectionDevice).Take(30))
+        foreach (var device in devices.Take(30))
         {
             var id = device.VidPid is null ? string.Empty : $" [{device.VidPid}]";
             Console.WriteLine($"  {device.ClassName,-12} {device.FriendlyName}{id}");
@@ -172,8 +209,9 @@ internal static class Program
               snapshot [path]          Save the current state as JSON
               baseline save [path]     Save a known-good state
               diff [baseline-path]     Compare current state with known-good
-              report [baseline-path]   Alias for diff
+              report                   Summarize recorded incidents newest-first
               collect                  Continuously record connection state
+              watch                    Alias for collect
               status                   Show background collector health
               install                  Start collecting now and at user login
               uninstall                Remove login startup registration
@@ -185,5 +223,16 @@ internal static class Program
     {
         Console.Error.WriteLine($"Unknown command: {command}");
         return Help() == 0 ? 1 : 1;
+    }
+
+    private static string FormatRate(int? rateMilliwatts)
+    {
+        if (rateMilliwatts is null)
+        {
+            return "rate unavailable";
+        }
+
+        var direction = rateMilliwatts < 0 ? "discharging" : rateMilliwatts > 0 ? "charging" : "idle";
+        return $"{direction} {Math.Abs(rateMilliwatts.Value) / 1000.0:F1} W";
     }
 }

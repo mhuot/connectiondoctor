@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -123,10 +124,53 @@ internal static class DeviceProbe
 
     private static PowerState ReadPowerState()
     {
-        return GetSystemPowerStatus(out var status)
-            ? new PowerState(status.AcLineStatus == 1, status.BatteryLifePercent == 255 ? -1 : status.BatteryLifePercent)
-            : new PowerState(false, -1);
+        var fallback = GetSystemPowerStatus(out var status)
+            ? new PowerState(
+                status.AcLineStatus == 1,
+                status.BatteryLifePercent == 255 ? -1 : status.BatteryLifePercent,
+                null)
+            : new PowerState(false, -1, null);
+
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                @"root\wmi",
+                "SELECT Active, PowerOnline, Charging, Discharging, ChargeRate, DischargeRate FROM BatteryStatus");
+            using var results = searcher.Get();
+            foreach (ManagementObject battery in results)
+            {
+                if (battery["Active"] is bool active && !active)
+                {
+                    continue;
+                }
+
+                var online = battery["PowerOnline"] is bool powerOnline
+                    ? powerOnline
+                    : fallback.LineOnline;
+                var charging = battery["Charging"] is bool isCharging && isCharging;
+                var discharging = battery["Discharging"] is bool isDischarging && isDischarging;
+                var rate = charging
+                    ? ReadRate(battery["ChargeRate"])
+                    : discharging
+                        ? -ReadRate(battery["DischargeRate"])
+                        : 0;
+                return fallback with { LineOnline = online, BatteryRateMilliwatts = rate };
+            }
+        }
+        catch (ManagementException)
+        {
+            return fallback;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return fallback;
+        }
+
+        return fallback;
     }
+
+    private static int ReadRate(object? value) =>
+        value is null ? 0 : Convert.ToInt32(value, System.Globalization.CultureInfo.InvariantCulture);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct SpDevInfoData

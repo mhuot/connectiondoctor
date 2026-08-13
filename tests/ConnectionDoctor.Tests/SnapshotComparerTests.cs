@@ -5,34 +5,58 @@ public sealed class SnapshotComparerTests
     [Fact]
     public void CompareDetectsDisplayAliveWithMissingLgUsbBranch()
     {
-        var monitor = Device(
-            @"DISPLAY\GSM77B3\1",
-            "Monitor",
-            "Generic Monitor (LG ULTRAWIDE)");
-        var hub = Device(
-            @"USB\VID_043E&PID_9C04\HUB",
-            "USB",
-            "Generic USB Hub");
-        var keyboard = Device(
-            @"HID\VID_046D&PID_C08A&MI_01\KEYBOARD",
-            "Keyboard",
-            "HID Keyboard Device");
-        var mouse = Device(
-            @"HID\VID_046D&PID_C08A&MI_00\MOUSE",
-            "Mouse",
-            "HID-compliant mouse");
-
-        var baseline = Snapshot(monitor, hub, keyboard, mouse);
-        var current = Snapshot(monitor);
+        var baseline = MonitorHubSnapshot("LG ULTRAWIDE", "043E", "9C04");
+        var current = Snapshot(baseline.Devices.Single(device => device.ClassName == "Monitor"));
 
         var report = SnapshotComparer.Compare(baseline, current);
 
         Assert.Contains(report.Findings, finding =>
             finding.Severity == "critical" &&
-            finding.Title.Contains("LG display", StringComparison.Ordinal));
+            finding.Title.Contains("Display is active", StringComparison.Ordinal));
         Assert.Contains(report.Findings, finding =>
             finding.Title.Contains("Keyboard and mouse", StringComparison.Ordinal));
-        Assert.Equal(3, report.Missing.Count);
+    }
+
+    [Fact]
+    public void CompareGeneralizesMonitorHubFindingToDell()
+    {
+        var baseline = MonitorHubSnapshot("DELL U4025QW", "413C", "BEEF");
+        var current = Snapshot(baseline.Devices.Single(device => device.ClassName == "Monitor"));
+
+        var report = SnapshotComparer.Compare(baseline, current);
+
+        var finding = Assert.Single(report.Findings.Where(item => item.Severity == "critical"));
+        Assert.Contains("413C:BEEF", finding.Explanation, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void MissingInputHubWithoutSurvivingMonitorIsOnlyWarning()
+    {
+        var baselineWithMonitor = MonitorHubSnapshot("DELL U4025QW", "413C", "BEEF");
+        var baseline = baselineWithMonitor with
+        {
+            Devices = baselineWithMonitor.Devices.Where(device => device.ClassName != "Monitor").ToList()
+        };
+
+        var report = SnapshotComparer.Compare(baseline, Snapshot());
+
+        Assert.DoesNotContain(report.Findings, finding => finding.Severity == "critical");
+        Assert.Contains(report.Findings, finding => finding.Severity == "warning");
+    }
+
+    [Fact]
+    public void CompareIgnoresSoftwareDeviceChurn()
+    {
+        var softwareDevice = Device(
+            @"SWD\PRINTENUM\PRINTER",
+            "PrintQueue",
+            "Office Printer");
+
+        var report = SnapshotComparer.Compare(Snapshot(softwareDevice), Snapshot());
+
+        Assert.Empty(report.Missing);
+        Assert.Empty(report.Added);
+        Assert.Empty(report.Findings);
     }
 
     [Fact]
@@ -51,14 +75,33 @@ public sealed class SnapshotComparerTests
         Assert.Empty(report.Findings);
     }
 
-    private static ConnectionSnapshot Snapshot(params DeviceNode[] devices) =>
+    private static ConnectionSnapshot MonitorHubSnapshot(
+        string monitorName,
+        string hubVendor,
+        string hubProduct)
+    {
+        const string compositeId = @"USB\VID_046D&PID_C08A\COMPOSITE";
+        var hubId = $@"USB\VID_{hubVendor}&PID_{hubProduct}\HUB";
+        return Snapshot(
+            Device(@"DISPLAY\MONITOR\1", "Monitor", $"Generic Monitor ({monitorName})"),
+            Device(hubId, "USB", "Generic USB Hub"),
+            Device(compositeId, "USB", "USB Composite Device", hubId),
+            Device(@"HID\VID_046D&PID_C08A&MI_01\KEYBOARD", "Keyboard", "HID Keyboard Device", compositeId),
+            Device(@"HID\VID_046D&PID_C08A&MI_00\MOUSE", "Mouse", "HID-compliant mouse", compositeId));
+    }
+
+    internal static ConnectionSnapshot Snapshot(params DeviceNode[] devices) =>
         new(
             DateTimeOffset.Parse("2026-08-13T16:00:00-05:00"),
             "SURFACE",
             "Arm64",
-            new PowerState(true, 100),
+            new PowerState(true, 100, 0),
             devices);
 
-    private static DeviceNode Device(string id, string className, string name) =>
-        new(id, className, name, null, null);
+    internal static DeviceNode Device(
+        string id,
+        string className,
+        string name,
+        string? parentId = null) =>
+        new(id, className, name, null, parentId);
 }
