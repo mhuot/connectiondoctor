@@ -4,26 +4,36 @@ struct TopologyView: View {
     let sample: Sample
 
     var body: some View {
-        ScrollView([.vertical, .horizontal]) {
-            VStack(alignment: .leading, spacing: 0) {
-                NodeView(node: Topology.build(from: sample), isLast: true, ancestorsLast: [])
-                legend.padding(.top, 20)
+        VStack(alignment: .leading, spacing: 0) {
+            // A ScrollView sizes its content to that content's ideal height and
+            // then centres it, so `maxHeight: .infinity` does not pin a short
+            // tree to the top. Forcing the content to be at least as tall as the
+            // viewport, aligned top-leading, does.
+            GeometryReader { geometry in
+                ScrollView([.vertical, .horizontal]) {
+                    NodeView(node: Topology.build(from: sample), isLast: true, ancestorsLast: [])
+                        .padding(18)
+                        .frame(minWidth: geometry.size.width,
+                               minHeight: geometry.size.height,
+                               alignment: .topLeading)
+                }
             }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Divider()
+            legend
         }
     }
 
+    /// Deliberately outside the ScrollView: inside a horizontally scrolling
+    /// container, text does not wrap — it just extends past the pane edge and
+    /// gets clipped by the divider.
     private var legend: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Divider().padding(.bottom, 6)
-            Text("Power flows down this tree, never up. Anything below the Mac is a consumer — "
-                 + "a monitor's built-in hub looks like infrastructure but supplies the Mac nothing.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 620, alignment: .leading)
-        }
+        Text("Power flows down this tree, never up. Anything below the Mac is a consumer — "
+             + "a monitor's built-in hub looks like infrastructure but supplies the Mac nothing.")
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
     }
 }
 

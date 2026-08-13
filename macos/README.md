@@ -58,9 +58,42 @@ root events marked, alongside the full findings list.
 
 ```sh
 TBDoctor.app/Contents/MacOS/TBDoctor --probe     # current state, once
+TBDoctor.app/Contents/MacOS/TBDoctor --tree      # connection tree + where power enters
 TBDoctor.app/Contents/MacOS/TBDoctor --report    # analyse history, print findings
 TBDoctor.app/Contents/MacOS/TBDoctor --watch     # live one-line-per-sample table
 ```
+
+## Connections
+
+The window's **Connections** pane (and `--tree`) draws the physical tree: power
+source, host, Thunderbolt device, then the USB hierarchy rebuilt from location-ID
+nibbles. It exists because this is the part people misread — a monitor with a
+built-in hub looks like infrastructure, and the devices behind it look directly
+attached.
+
+```
+61W USB-C Power Adapter  [60W]
+      Power enters here, on its own cable — independent of the data link.
+└── This Mac  [on AC]
+    └── CalDigit, Inc. Element Hub  [40 Gb/s]
+          Data only — the Mac is powered separately, so a power dip
+          cannot reset this link.
+        ├── Element USB 2.0 Hub  [480 Mb/s · hub · 3]
+        │   └── USB2.0 Hub  [480 Mb/s · hub · 1]
+        │       └── 4-Port USB 2.0 Hub — LG Electronics Inc.  [hub · 3]
+        │             Downstream — draws power, supplies none to the Mac.
+        │           ├── MX Vertical Advanced Ergonomic Mouse
+        │           ├── Magic Keyboard with Touch ID and Numeric Keypad
+        │           └── LG Monitor Controls
+```
+
+Hubs that self-describe as "Generic" are resolved by matching their vendor ID
+against their own children, which is how an anonymous "4-Port USB 2.0 Hub"
+becomes identifiably the LG monitor's.
+
+Note that IOKit exposes no per-device power draw on current hardware, so the tree
+shows where power *enters* and which nodes are consumers — it does not invent
+per-device wattages.
 
 ## Use from a coding agent
 
