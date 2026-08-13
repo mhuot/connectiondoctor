@@ -111,7 +111,29 @@ final class Collector: ObservableObject {
     private let sampleStore = Store(filename: "samples.jsonl")
     private let eventStore = Store(filename: "events.jsonl")
 
+    /// Set when another collector already owns the store. Two collectors
+    /// appending to one JSONL interleave their samples and produce duplicate
+    /// timestamps, which quietly corrupts every downstream analysis — so the
+    /// second one refuses to collect rather than competing.
+    @Published private(set) var storeConflict = false
+
+    private var lockDescriptor: Int32 = -1
+
     var storeDirectory: URL { Store.directory }
+
+    /// Exclusive advisory lock over the store directory. Held for the process
+    /// lifetime; the kernel releases it automatically if we are killed.
+    private func acquireStoreLock() -> Bool {
+        let path = Store.directory.appendingPathComponent(".collector.lock").path
+        let descriptor = open(path, O_CREAT | O_RDWR, 0o644)
+        guard descriptor >= 0 else { return true } // can't lock: don't block collection
+        if flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
+            close(descriptor)
+            return false
+        }
+        lockDescriptor = descriptor
+        return true
+    }
 
     // MARK: - Lifecycle
 
@@ -122,6 +144,15 @@ final class Collector: ObservableObject {
         let cutoff = Date().addingTimeInterval(-retention)
         samples = sampleStore.load(Sample.self, since: cutoff) { $0.t }
         events = eventStore.load(KernelEvent.self, since: cutoff) { $0.t }
+
+        // Read history either way so the UI still shows past incidents, but
+        // stop before writing anything if another collector owns the store.
+        guard acquireStoreLock() else {
+            storeConflict = true
+            NSLog("TBDoctor: another collector owns \(Store.directory.path); running read-only")
+            recompute()
+            return
+        }
 
         logTail = LogTail { [weak self] fresh in
             Task { @MainActor in self?.absorb(fresh) }

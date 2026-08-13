@@ -6,6 +6,12 @@ struct MenuBarView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             header
+            if collector.storeConflict {
+                Text("Another TBDoctor is already collecting — this one is read-only. Quit the other copy.")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             Divider()
             statusRows
             if let finding = collector.findings.first {
