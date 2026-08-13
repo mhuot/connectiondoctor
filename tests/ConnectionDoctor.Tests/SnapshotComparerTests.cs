@@ -51,6 +51,22 @@ public sealed class SnapshotComparerTests
         Assert.Empty(report.Findings);
     }
 
+    [Fact]
+    public void CompareIgnoresSoftwareDevicesNotInConnectionClasses()
+    {
+        var hub = Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub");
+        var printEnum = Device(@"SWD\PRINTENUM\{11111111}", "PrintQueue", "Microsoft Print to PDF");
+
+        var baseline = Snapshot(hub, printEnum);
+        var current = Snapshot(hub);   // printEnum absent from current
+
+        var report = SnapshotComparer.Compare(baseline, current);
+
+        Assert.Empty(report.Missing);
+        Assert.Empty(report.Added);
+        Assert.Empty(report.Findings);
+    }
+
     private static ConnectionSnapshot Snapshot(params DeviceNode[] devices) =>
         new(
             DateTimeOffset.Parse("2026-08-13T16:00:00-05:00"),

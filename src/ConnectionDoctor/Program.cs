@@ -153,8 +153,9 @@ internal static class Program
             return;
         }
 
-        Console.WriteLine($"{title} ({devices.Count})");
-        foreach (var device in devices.Where(DeviceFilters.IsConnectionDevice).Take(30))
+        var rows = devices.Take(30).ToList();
+        Console.WriteLine($"{title} ({rows.Count})");
+        foreach (var device in rows)
         {
             var id = device.VidPid is null ? string.Empty : $" [{device.VidPid}]";
             Console.WriteLine($"  {device.ClassName,-12} {device.FriendlyName}{id}");

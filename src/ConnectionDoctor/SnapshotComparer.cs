@@ -4,11 +4,13 @@ internal static class SnapshotComparer
 {
     public static ComparisonReport Compare(ConnectionSnapshot baseline, ConnectionSnapshot current)
     {
-        var missing = Difference(baseline.Devices, current.Devices);
-        var added = Difference(current.Devices, baseline.Devices);
+        var baselineDevices = baseline.Devices.Where(DeviceFilters.IsConnectionDevice).ToList();
+        var currentDevices = current.Devices.Where(DeviceFilters.IsConnectionDevice).ToList();
+        var missing = Difference(baselineDevices, currentDevices);
+        var added = Difference(currentDevices, baselineDevices);
         var findings = new List<Finding>();
 
-        var lgDisplayPresent = current.Devices.Any(device =>
+        var lgDisplayPresent = currentDevices.Any(device =>
             device.ClassName.Equals("Monitor", StringComparison.OrdinalIgnoreCase) &&
             device.FriendlyName.Contains("LG", StringComparison.OrdinalIgnoreCase));
         var missingLgHub = missing.Any(device =>
