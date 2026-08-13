@@ -1,0 +1,5 @@
+.build/
+.swiftpm/
+TBDoctor.app/
+*.tgz
+.DS_Store
