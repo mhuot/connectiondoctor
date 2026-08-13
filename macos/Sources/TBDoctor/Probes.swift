@@ -197,10 +197,15 @@ enum Probes {
 
         return ids.map { id in
             let mode = CGDisplayCopyDisplayMode(id)
+            // Native pixels, not the scaled backing size: CGDisplayPixelsWide
+            // reports points, so a HiDPI 1920x1080 panel reads as 960x540 and
+            // looks like a broken low-resolution display.
+            let nativeWidth = mode.map { CGDisplayModeGetPixelWidth($0) } ?? CGDisplayPixelsWide(id)
+            let nativeHeight = mode.map { CGDisplayModeGetPixelHeight($0) } ?? CGDisplayPixelsHigh(id)
             return DisplayInfo(
                 name: namesByID[id] ?? (CGDisplayIsBuiltin(id) != 0 ? "Built-in Display" : "Display"),
-                width: Int(CGDisplayPixelsWide(id)),
-                height: Int(CGDisplayPixelsHigh(id)),
+                width: Int(nativeWidth),
+                height: Int(nativeHeight),
                 refreshHz: mode.map(\.refreshRate).flatMap { $0 > 0 ? $0 : nil },
                 isBuiltIn: CGDisplayIsBuiltin(id) != 0,
                 vendorNumber: Int(CGDisplayVendorNumber(id)),

@@ -88,7 +88,7 @@ enum Diagram {
         case .topDown: result = topDown(root)
         case .flow:    result = flow(root)
         }
-        addDisplayLinks(&result, root: root)
+        addDisplayLinks(&result, root: root, style: style)
         return result
     }
 
@@ -96,7 +96,7 @@ enum Diagram {
     /// the tree, and a DisplayPort tunnel carrying its video. The tree can only
     /// express one, so the second is drawn as an extra edge routed clear of the
     /// layout — otherwise half of what that cable does is invisible.
-    private static func addDisplayLinks(_ layout: inout DiagramLayout, root: TopoNode) {
+    private static func addDisplayLinks(_ layout: inout DiagramLayout, root: TopoNode, style: DiagramStyle) {
         var nearestDock: [String: String] = [:]
         func walk(_ node: TopoNode, dock: String?) {
             if let dock { nearestDock[node.id] = dock }
@@ -108,27 +108,60 @@ enum Diagram {
         let frames = Dictionary(layout.nodes.map { ($0.id, $0.frame) }, uniquingKeysWith: { first, _ in first })
         var extra: [DiagramEdge] = []
         var rightmost = layout.size.width
+        var lowest = layout.size.height
 
         for placed in layout.nodes
         where placed.node.carriesDisplay && placed.node.linkProtocol != .displayPort {
             guard let dockID = nearestDock[placed.id], let source = frames[dockID] else { continue }
             let target = placed.frame
-            let lane = max(source.maxX, target.maxX) + 26
-            rightmost = max(rightmost, lane + 12)
-            extra.append(DiagramEdge(
-                id: "dp-\(placed.id)",
-                points: [
+
+            // The guiding rule: leave the tree's footprint before travelling,
+            // then come back in. Cutting across the interior is what made the
+            // earlier routes unreadable.
+            let minX = layout.nodes.map(\.frame.minX).min() ?? 0
+            let maxX = layout.nodes.map(\.frame.maxX).max() ?? 0
+            let minY = layout.nodes.map(\.frame.minY).min() ?? 0
+
+            switch style {
+            case .cascade:
+                // Narrow and grows downward, so a right-hand lane is already clear.
+                let lane = max(source.maxX, target.maxX) + 24
+                rightmost = max(rightmost, lane + 14)
+                extra.append(DiagramEdge(id: "dp-\(placed.id)", points: [
                     CGPoint(x: source.maxX, y: source.midY),
                     CGPoint(x: lane, y: source.midY),
                     CGPoint(x: lane, y: target.midY),
                     CGPoint(x: target.maxX, y: target.midY)
-                ],
-                linkProtocol: .displayPort,
-                tunneled: true))
+                ], linkProtocol: .displayPort, tunneled: true))
+
+            case .topDown:
+                // Exit sideways towards whichever margin the target is nearer,
+                // run down the outside, then come back in.
+                let goLeft = target.midX < source.midX
+                let lane = goLeft ? max(6, minX - 18) : maxX + 18
+                if !goLeft { rightmost = max(rightmost, lane + 14) }
+                extra.append(DiagramEdge(id: "dp-\(placed.id)", points: [
+                    CGPoint(x: goLeft ? source.minX : source.maxX, y: source.midY),
+                    CGPoint(x: lane, y: source.midY),
+                    CGPoint(x: lane, y: target.midY),
+                    CGPoint(x: goLeft ? target.minX : target.maxX, y: target.midY)
+                ], linkProtocol: .displayPort, tunneled: true))
+
+            case .flow:
+                // Flow spreads rightwards, so the clear margin is above it.
+                let lane = max(6, minY - 18)
+                extra.append(DiagramEdge(id: "dp-\(placed.id)", points: [
+                    CGPoint(x: source.midX, y: source.minY),
+                    CGPoint(x: source.midX, y: lane),
+                    CGPoint(x: target.midX, y: lane),
+                    CGPoint(x: target.midX, y: target.minY)
+                ], linkProtocol: .displayPort, tunneled: true))
+            }
         }
 
         layout.edges.append(contentsOf: extra)
         layout.size.width = rightmost
+        layout.size.height = lowest
     }
 
     /// Power edges are the ones feeding the host — drawn distinctly so the
