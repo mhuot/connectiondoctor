@@ -8,21 +8,35 @@ internal static class SnapshotComparer
         var added = Difference(current.Devices, baseline.Devices);
         var findings = new List<Finding>();
 
-        var lgDisplayPresent = current.Devices.Any(device =>
-            device.ClassName.Equals("Monitor", StringComparison.OrdinalIgnoreCase) &&
-            device.FriendlyName.Contains("LG", StringComparison.OrdinalIgnoreCase));
-        var missingLgHub = missing.Any(device =>
-            device.VidPid == "043E:9C04" ||
-            device.FriendlyName.Contains("LG", StringComparison.OrdinalIgnoreCase) &&
-            device.ClassName.Equals("USB", StringComparison.OrdinalIgnoreCase));
+        // Build a parent→children index from the baseline snapshot.
+        var baselineChildrenByParent = baseline.Devices
+            .Where(device => device.ParentInstanceId != null)
+            .GroupBy(device => device.ParentInstanceId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(group => group.Key, group => group.ToList(), StringComparer.OrdinalIgnoreCase);
 
-        if (lgDisplayPresent && missingLgHub)
+        // Identify missing hubs whose baseline children include ≥ 2 input-class devices.
+        var inputClasses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Keyboard", "Mouse", "HIDClass" };
+        var missingHubsWithInputChildren = missing
+            .Where(device => device.ClassName.Equals("USB", StringComparison.OrdinalIgnoreCase) ||
+                             device.ClassName.Equals("USBDevice", StringComparison.OrdinalIgnoreCase))
+            .Where(device =>
+                baselineChildrenByParent.TryGetValue(device.InstanceId, out var children) &&
+                children.Count(child => inputClasses.Contains(child.ClassName)) >= 2)
+            .ToList();
+
+        var monitorStillPresent = baseline.Devices.Any(device =>
+            device.ClassName.Equals("Monitor", StringComparison.OrdinalIgnoreCase)) &&
+            current.Devices.Any(device =>
+            device.ClassName.Equals("Monitor", StringComparison.OrdinalIgnoreCase));
+
+        if (missingHubsWithInputChildren.Count > 0 && monitorStillPresent)
         {
+            var hubDesc = missingHubsWithInputChildren[0].VidPid ?? missingHubsWithInputChildren[0].FriendlyName;
             findings.Add(new Finding(
                 "critical",
-                "LG display is active but its USB hub branch is missing",
-                "The video path survived while the monitor's USB hub did not enumerate. Devices behind that hub are fallout, not separate failures.",
-                "Cold power-cycle the LG monitor for at least 30 seconds, then reconnect USB-C."));
+                "Display is active but its USB hub branch is missing",
+                $"The video path survived while the monitor's USB hub ({hubDesc}) did not enumerate. Devices behind that hub are fallout, not separate failures.",
+                "Cold power-cycle the monitor for at least 30 seconds, then reconnect USB-C."));
         }
 
         var missingInputDevices = missing.Where(device =>
