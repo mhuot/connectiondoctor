@@ -38,14 +38,14 @@ enum Inspect {
     @MainActor
     static func present(_ sample: Sample) {
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 640),
+            contentRect: NSRect(x: 0, y: 0, width: 1120, height: 760),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false)
         window.title = "Connections — recorded \(Diagnosis.stamp(sample.t))"
         window.center()
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: TopologyView(sample: sample))
+        window.contentView = NSHostingView(rootView: DiagramView(sample: sample))
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)

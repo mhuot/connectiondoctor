@@ -4,8 +4,6 @@ import Charts
 struct TimelineView: View {
     @EnvironmentObject var collector: Collector
 
-    private enum Pane: String { case timeline, connections }
-    @State private var pane: Pane = .timeline
     @State private var window: TimeInterval = 3600
 
     private var windowed: [Sample] {
@@ -33,71 +31,33 @@ struct TimelineView: View {
     private var leftPane: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Picker("", selection: $pane) {
-                    Text("Timeline").tag(Pane.timeline)
-                    Text("Connections").tag(Pane.connections)
+                Picker("", selection: $window) {
+                    Text("15m").tag(TimeInterval(900))
+                    Text("1h").tag(TimeInterval(3600))
+                    Text("6h").tag(TimeInterval(21600))
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 210)
+                .frame(width: 170)
 
                 Spacer()
 
-                if pane == .timeline {
-                    Picker("", selection: $window) {
-                        Text("15m").tag(TimeInterval(900))
-                        Text("1h").tag(TimeInterval(3600))
-                        Text("6h").tag(TimeInterval(21600))
-                    }
-                    .pickerStyle(.segmented)
-                    .labelsHidden()
-                    .frame(width: 170)
-                } else {
-                    freshness
+                Button {
+                    ConnectionsWindow.shared.show()
+                } label: {
+                    Label("Connections…", systemImage: "cable.connector")
                 }
+                .buttonStyle(.borderless)
+                .font(.caption)
             }
             .padding(.horizontal, 16)
             .padding(.top, 12)
 
-            switch pane {
-            case .timeline:    charts
-            case .connections: connections
-            }
+            charts
         }
         // Top-aligned and free to fill: without this the content floated in the
         // middle of the pane and left a large dead band under the title bar.
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    }
-
-    // MARK: - Freshness
-
-    /// The tree already refreshes every sample tick. This exists so that is
-    /// *visible* — a live view with no evidence of being live reads as stale —
-    /// and to force a sample immediately after re-plugging something.
-    private var freshness: some View {
-        HStack(spacing: 8) {
-            if let updated = collector.current?.t {
-                FreshnessDot(updated: updated)
-            }
-            Button {
-                collector.refreshNow()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .help("Sample now")
-        }
-    }
-
-    // MARK: - Connections
-
-    @ViewBuilder
-    private var connections: some View {
-        if let sample = collector.current {
-            TopologyView(sample: sample)
-        } else {
-            ContentUnavailableView("Nothing enumerated yet", systemImage: "cable.connector")
-        }
     }
 
     // MARK: - Charts
@@ -253,26 +213,3 @@ struct TimelineView: View {
     }
 }
 
-/// Shows how old the current sample is, ticking once a second.
-///
-/// Named to avoid colliding with SwiftUI's own `TimelineView`, which this file's
-/// top-level type already shadows.
-private struct FreshnessDot: View {
-    let updated: Date
-    @State private var now = Date()
-    private let tick = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
-
-    var body: some View {
-        let age = Int(max(0, now.timeIntervalSince(updated)))
-        HStack(spacing: 5) {
-            Circle()
-                .fill(age <= 8 ? Color.green : Color.orange)
-                .frame(width: 6, height: 6)
-            Text(age < 2 ? "live" : "\(age)s ago")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .monospacedDigit()
-        }
-        .onReceive(tick) { now = $0 }
-    }
-}

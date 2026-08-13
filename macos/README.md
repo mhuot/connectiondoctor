@@ -71,35 +71,33 @@ two trees side by side are the fastest way to see why.
 
 ## Connections
 
-The window's **Connections** pane (and `--tree`) draws the physical tree: power
-source, host, Thunderbolt device, then the USB hierarchy rebuilt from location-ID
-nibbles. It exists because this is the part people misread — a monitor with a
-built-in hub looks like infrastructure, and the devices behind it look directly
-attached.
+A resizable window (menu bar → Connections…, or the button in the timeline)
+drawing the physical topology as boxes joined by right-angle connectors: power
+source, host, Thunderbolt device, then the USB hierarchy rebuilt from
+location-ID nibbles. It exists because this is the part people misread — a
+monitor with a built-in hub looks like infrastructure, and the devices behind it
+look directly attached.
 
-```
-61W USB-C Power Adapter  [60W]
-      Power enters here, on its own cable — independent of the data link.
-└── This Mac  [on AC]
-    └── CalDigit, Inc. Element Hub  [40 Gb/s]
-          Data only — the Mac is powered separately, so a power dip
-          cannot reset this link.
-        ├── Element USB 2.0 Hub  [480 Mb/s · hub · 3]
-        │   └── USB2.0 Hub  [480 Mb/s · hub · 1]
-        │       └── 4-Port USB 2.0 Hub — LG Electronics Inc.  [hub · 3]
-        │             Downstream — draws power, supplies none to the Mac.
-        │           ├── MX Vertical Advanced Ergonomic Mouse
-        │           ├── Magic Keyboard with Touch ID and Numeric Keypad
-        │           └── LG Monitor Controls
-```
+Three layouts, switchable and remembered between launches:
 
-Hubs that self-describe as "Generic" are resolved by matching their vendor ID
-against their own children, which is how an anonymous "4-Port USB 2.0 Hub"
-becomes identifiably the LG monitor's.
+| Layout | Shape | Good for |
+|---|---|---|
+| **Cascade** | Each child steps down and right | Narrow; grows downward. The default. |
+| **Top-down** | Children fan out below, power enters from the left | Reads as a schematic |
+| **Flow** | Left to right: power, Mac, dock, hubs, devices | Matches how you'd describe a dock chain |
 
-Note that IOKit exposes no per-device power draw on current hardware, so the tree
-shows where power *enters* and which nodes are consumers — it does not invent
-per-device wattages.
+The power path is drawn in amber and separately from the data tree, so where
+power enters is never confused with what carries data. Boxes are sized to their
+text rather than fixed — truncating "4-Port USB 2.0 Hub — LG Electronics Inc."
+throws away the one word identifying the hardware. Hubs that self-describe as
+"Generic" are resolved by matching their vendor ID against their own children,
+which is how that anonymous hub becomes identifiably the LG monitor's.
+
+`--tree` prints the same topology as text.
+
+Note that IOKit exposes no per-device power draw on current hardware, so the
+diagram shows where power *enters* and which nodes are consumers — it does not
+invent per-device wattages.
 
 ## Use from a coding agent
 

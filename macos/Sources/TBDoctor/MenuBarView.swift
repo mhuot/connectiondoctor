@@ -100,6 +100,7 @@ struct MenuBarView: View {
     private var footer: some View {
         HStack {
             Button("Open timeline…") { TimelineWindow.shared.show() }
+            Button("Connections…") { ConnectionsWindow.shared.show() }
             Spacer()
             Button("Quit") { NSApplication.shared.terminate(nil) }
                 .foregroundStyle(.secondary)
