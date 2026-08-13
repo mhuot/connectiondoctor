@@ -92,8 +92,12 @@ struct TopoNode: Identifiable {
 enum Topology {
 
     static func build(from sample: Sample, mode: TopoMode = .full) -> TopoNode {
-        let tree = buildFull(from: sample)
-        return mode == .full ? tree : collapse(tree)
+        var tree = mode == .full ? buildFull(from: sample) : collapse(buildFull(from: sample))
+        // Must run on the *final* tree: in physical mode a daisy-chained dock
+        // only receives its USB subtree during the collapse, so summarising
+        // earlier would credit every tunnel to the upstream dock.
+        summariseTunnels(&tree)
+        return tree
     }
 
     /// VIDs belonging to hub-controller silicon rather than to a product you
@@ -370,7 +374,6 @@ enum Topology {
         }
 
         attachDisplays(sample, host: &host)
-        summariseTunnels(&host)
         root.children = [host]
         return root
     }
