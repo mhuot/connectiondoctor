@@ -8,6 +8,7 @@ enum Headless {
     static func run(_ arguments: [String]) -> Bool {
         if arguments.contains("--mcp") { MCPServer.serve(); return true }
         if arguments.contains("--probe") { probe(); return true }
+        if arguments.contains("--tree") { tree(); return true }
         if arguments.contains("--report") { report(); return true }
         if arguments.contains("--watch") { watch(); return true }
         if arguments.contains("--help") || arguments.contains("-h") { usage(); return true }
@@ -59,6 +60,35 @@ enum Headless {
         for device in sample.usb {
             print(String(format: "  0x%08X  %-44@ %@",
                          device.locationID, device.name as NSString, device.speedLabel))
+        }
+    }
+
+    // MARK: - Connection tree
+
+    static func tree() {
+        render(Topology.build(from: Probes.sample()), ancestorsLast: [], isLast: true)
+        print("\nPower flows down this tree, never up. Anything below the Mac is a consumer.")
+    }
+
+    private static func render(_ node: TopoNode, ancestorsLast: [Bool], isLast: Bool) {
+        var prefix = ""
+        if !ancestorsLast.isEmpty {
+            for last in ancestorsLast.dropFirst() { prefix += last ? "    " : "│   " }
+            prefix += isLast ? "└── " : "├── "
+        }
+
+        let badges = node.badges.isEmpty ? "" : "  [" + node.badges.joined(separator: " · ") + "]"
+        print("\(prefix)\(node.title)\(badges)")
+
+        if let note = node.note {
+            var indent = ""
+            for last in ancestorsLast.dropFirst() { indent += last ? "    " : "│   " }
+            indent += isLast ? "    " : "│   "
+            print("\(indent)  \(note.replacingOccurrences(of: "*", with: ""))")
+        }
+
+        for (index, child) in node.children.enumerated() {
+            render(child, ancestorsLast: ancestorsLast + [isLast], isLast: index == node.children.count - 1)
         }
     }
 

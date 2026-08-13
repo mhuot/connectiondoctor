@@ -148,7 +148,9 @@ enum Probes {
             devices.append(USBDevice(
                 name: name,
                 speed: (props["Device Speed"] as? NSNumber)?.intValue ?? -1,
-                locationID: (props["locationID"] as? NSNumber)?.uint32Value ?? 0))
+                locationID: (props["locationID"] as? NSNumber)?.uint32Value ?? 0,
+                vendorID: (props["idVendor"] as? NSNumber)?.intValue,
+                vendorName: props["USB Vendor Name"] as? String))
         }
         return devices.sorted { $0.locationID < $1.locationID }
     }

@@ -3,6 +3,9 @@ import Charts
 
 struct TimelineView: View {
     @EnvironmentObject var collector: Collector
+
+    private enum Pane: String { case timeline, connections }
+    @State private var pane: Pane = .timeline
     @State private var window: TimeInterval = 3600
 
     private var windowed: [Sample] {
@@ -19,31 +22,74 @@ struct TimelineView: View {
 
     var body: some View {
         HSplitView {
-            charts.frame(minWidth: 520)
-            findings.frame(minWidth: 320, maxWidth: 460)
+            leftPane.frame(minWidth: 540, maxHeight: .infinity)
+            findings.frame(minWidth: 320, maxWidth: 480, maxHeight: .infinity)
         }
-        .frame(minWidth: 900, minHeight: 560)
+        .frame(minWidth: 940, minHeight: 560)
+    }
+
+    // MARK: - Left pane
+
+    private var leftPane: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Picker("", selection: $pane) {
+                    Text("Timeline").tag(Pane.timeline)
+                    Text("Connections").tag(Pane.connections)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(width: 210)
+
+                Spacer()
+
+                if pane == .timeline {
+                    Picker("", selection: $window) {
+                        Text("15m").tag(TimeInterval(900))
+                        Text("1h").tag(TimeInterval(3600))
+                        Text("6h").tag(TimeInterval(21600))
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .frame(width: 170)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 12)
+
+            switch pane {
+            case .timeline:    charts
+            case .connections: connections
+            }
+        }
+        // Top-aligned and free to fill: without this the content floated in the
+        // middle of the pane and left a large dead band under the title bar.
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - Connections
+
+    @ViewBuilder
+    private var connections: some View {
+        if let sample = collector.current {
+            TopologyView(sample: sample)
+        } else {
+            ContentUnavailableView("Nothing enumerated yet", systemImage: "cable.connector")
+        }
     }
 
     // MARK: - Charts
 
+    @ViewBuilder
     private var charts: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Picker("Window", selection: $window) {
-                Text("15m").tag(TimeInterval(900))
-                Text("1h").tag(TimeInterval(3600))
-                Text("6h").tag(TimeInterval(21600))
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 220)
-
-            if windowed.isEmpty {
-                ContentUnavailableView("No samples yet", systemImage: "clock",
-                                       description: Text("Data appears within a few seconds of launch."))
-            } else {
+        if windowed.isEmpty {
+            ContentUnavailableView("No samples yet", systemImage: "clock",
+                                   description: Text("Data appears within a few seconds of launch."))
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
                 // Step interpolation, not linear: the link is up or down, and a
                 // sloped line between the two would imply states that never existed.
-                chart("Thunderbolt link", unit: "") {
+                chart("Thunderbolt link") {
                     ForEach(windowed, id: \.t) { sample in
                         AreaMark(x: .value("Time", sample.t),
                                  y: .value("Link", sample.tbConnected ? 1 : 0))
@@ -55,14 +101,14 @@ struct TimelineView: View {
                 .chartYScale(domain: 0...1)
                 .chartYAxis(.hidden)
 
-                chart("Power", unit: "W") {
+                chart("Power (W) — blue: adapter rating · orange: battery") {
                     ForEach(windowed, id: \.t) { sample in
                         LineMark(x: .value("Time", sample.t),
                                  y: .value("Adapter", Double(sample.adapter.watts ?? 0)),
                                  series: .value("s", "adapter"))
                         .foregroundStyle(.blue)
-                        // Battery contribution is negative while discharging, so
-                        // anything below the axis is demand the adapter did not cover.
+                        // Negative while discharging, so anything below the axis
+                        // is demand the adapter did not cover.
                         LineMark(x: .value("Time", sample.t),
                                  y: .value("Battery", sample.batteryWatts),
                                  series: .value("s", "battery"))
@@ -72,17 +118,19 @@ struct TimelineView: View {
                     eventMarks
                 }
 
-                chart("USB devices", unit: "") {
+                chart("USB devices") {
                     ForEach(windowed, id: \.t) { sample in
                         LineMark(x: .value("Time", sample.t),
                                  y: .value("Devices", sample.usb.count))
+                        .interpolationMethod(.stepEnd)
                         .foregroundStyle(.purple)
                     }
                     eventMarks
                 }
             }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
         }
-        .padding(16)
     }
 
     @ChartContentBuilder
@@ -94,13 +142,15 @@ struct TimelineView: View {
         }
     }
 
-    private func chart<C: ChartContent>(_ title: String, unit: String,
+    /// Charts flex to share whatever height the window has, rather than being
+    /// pinned to a fixed height that leaves the pane half empty.
+    private func chart<C: ChartContent>(_ title: String,
                                         @ChartContentBuilder content: () -> C) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(unit.isEmpty ? title : "\(title) (\(unit))")
-                .font(.caption).foregroundStyle(.secondary)
-            Chart(content: content).frame(height: 120)
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.caption).foregroundStyle(.secondary)
+            Chart(content: content).frame(minHeight: 80, maxHeight: .infinity)
         }
+        .frame(maxHeight: .infinity)
     }
 
     // MARK: - Findings panel
@@ -153,6 +203,7 @@ struct TimelineView: View {
                 incidentList
             }
             .padding(16)
+            .frame(maxHeight: .infinity, alignment: .top)
         }
     }
 

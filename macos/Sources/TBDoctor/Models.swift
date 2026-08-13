@@ -47,8 +47,26 @@ struct USBDevice: Codable, Hashable, Identifiable {
     var name: String
     var speed: Int
     var locationID: UInt32
+    /// Captured because hubs routinely self-describe as "Generic". The vendor ID
+    /// is what reveals that a nondescript "4-Port USB 2.0 Hub" is actually the
+    /// hub built into a monitor — the single most confusing thing about reading
+    /// one of these trees.
+    var vendorID: Int?
+    var vendorName: String?
 
     var id: UInt32 { locationID }
+
+    /// USB location IDs are hierarchical nibbles: 0x02144300 sits under
+    /// 0x02144000, which sits under 0x02140000. Clearing the lowest non-zero
+    /// nibble walks one level up the physical topology.
+    var parentLocationID: UInt32? {
+        for shift in stride(from: 0, through: 28, by: 4) {
+            if (locationID >> UInt32(shift)) & 0xF != 0 {
+                return locationID & ~(UInt32(0xF) << UInt32(shift))
+            }
+        }
+        return nil
+    }
 
     /// IOKit "Device Speed" enum. 4 is SuperSpeed+ on current hardware.
     var speedLabel: String {
