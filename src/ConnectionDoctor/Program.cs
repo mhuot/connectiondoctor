@@ -20,6 +20,10 @@ internal static class Program
                 "snapshot" => Snapshot(args.Skip(1).FirstOrDefault()),
                 "baseline" => Baseline(args.Skip(1).ToArray()),
                 "diff" or "report" => Diff(args.Skip(1).FirstOrDefault()),
+                "collect" => Collect(),
+                "status" => Status(),
+                "install" => Install(),
+                "uninstall" => Uninstall(),
                 "help" or "--help" or "-h" => Help(),
                 _ => Unknown(command)
             };
@@ -116,6 +120,32 @@ internal static class Program
         return report.Findings.Any(finding => finding.Severity == "critical") ? 2 : 0;
     }
 
+    private static int Collect()
+    {
+        return BackgroundCollector.Run();
+    }
+
+    private static int Status()
+    {
+        var status = BackgroundCollector.ReadStatus();
+        Console.WriteLine(status.Message);
+        return status.IsRunning ? 0 : 1;
+    }
+
+    private static int Install()
+    {
+        var result = StartupRegistration.Install();
+        Console.WriteLine(result);
+        return 0;
+    }
+
+    private static int Uninstall()
+    {
+        var result = StartupRegistration.Uninstall();
+        Console.WriteLine(result);
+        return 0;
+    }
+
     private static void WriteChanges(string title, IReadOnlyList<DeviceNode> devices)
     {
         if (devices.Count == 0)
@@ -143,6 +173,10 @@ internal static class Program
               baseline save [path]     Save a known-good state
               diff [baseline-path]     Compare current state with known-good
               report [baseline-path]   Alias for diff
+              collect                  Continuously record connection state
+              status                   Show background collector health
+              install                  Start collecting now and at user login
+              uninstall                Remove login startup registration
             """);
         return 0;
     }
