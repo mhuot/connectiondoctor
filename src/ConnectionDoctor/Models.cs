@@ -59,9 +59,41 @@ internal static class DeviceFilters
         "USB", "USBDevice", "HIDClass", "Keyboard", "Mouse", "Monitor", "Firmware"
     };
 
-    public static bool IsConnectionDevice(DeviceNode device) =>
+    private static readonly HashSet<string> UsbAncestorClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "USB", "USBDevice"
+    };
+
+    private static readonly HashSet<string> UsbAncestorRequiredClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Net", "MEDIA"
+    };
+
+    public static bool IsConnectionDevice(DeviceNode device, IReadOnlyDictionary<string, DeviceNode> allById) =>
         ConnectionClasses.Contains(device.ClassName) ||
+        HasUsbAncestorForClass(device, allById) ||
         device.FriendlyName.Contains("USB4", StringComparison.OrdinalIgnoreCase) ||
         device.FriendlyName.Contains("Thunderbolt", StringComparison.OrdinalIgnoreCase) ||
         device.FriendlyName.Contains("Type-C", StringComparison.OrdinalIgnoreCase);
+
+    private static bool HasUsbAncestorForClass(DeviceNode device, IReadOnlyDictionary<string, DeviceNode> allById)
+    {
+        if (!UsbAncestorRequiredClasses.Contains(device.ClassName))
+        {
+            return false;
+        }
+
+        var parentId = device.ParentInstanceId;
+        while (parentId is not null && allById.TryGetValue(parentId, out var parent))
+        {
+            if (UsbAncestorClasses.Contains(parent.ClassName))
+            {
+                return true;
+            }
+
+            parentId = parent.ParentInstanceId;
+        }
+
+        return false;
+    }
 }

@@ -44,7 +44,8 @@ internal static class Program
         Console.WriteLine($"Present devices: {snapshot.Devices.Count}");
         Console.WriteLine();
 
-        foreach (var device in snapshot.Devices.Where(DeviceFilters.IsConnectionDevice)
+        var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
+        foreach (var device in snapshot.Devices.Where(device => DeviceFilters.IsConnectionDevice(device, byId))
                      .OrderBy(device => device.ClassName)
                      .ThenBy(device => device.FriendlyName))
         {
@@ -115,8 +116,8 @@ internal static class Program
             Console.WriteLine();
         }
 
-        WriteChanges("Missing", report.Missing);
-        WriteChanges("Added", report.Added);
+        WriteChanges("Missing", report.Missing, baseline.Devices);
+        WriteChanges("Added", report.Added, current.Devices);
         return report.Findings.Any(finding => finding.Severity == "critical") ? 2 : 0;
     }
 
@@ -146,15 +147,16 @@ internal static class Program
         return 0;
     }
 
-    private static void WriteChanges(string title, IReadOnlyList<DeviceNode> devices)
+    private static void WriteChanges(string title, IReadOnlyList<DeviceNode> devices, IReadOnlyList<DeviceNode> allDevices)
     {
         if (devices.Count == 0)
         {
             return;
         }
 
+        var allById = allDevices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
         Console.WriteLine($"{title} ({devices.Count})");
-        foreach (var device in devices.Where(DeviceFilters.IsConnectionDevice).Take(30))
+        foreach (var device in devices.Where(device => DeviceFilters.IsConnectionDevice(device, allById)).Take(30))
         {
             var id = device.VidPid is null ? string.Empty : $" [{device.VidPid}]";
             Console.WriteLine($"  {device.ClassName,-12} {device.FriendlyName}{id}");

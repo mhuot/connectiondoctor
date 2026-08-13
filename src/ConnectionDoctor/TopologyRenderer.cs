@@ -7,8 +7,8 @@ internal static class TopologyRenderer
         writer.WriteLine($"ConnectionDoctor tree - {snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}");
         writer.WriteLine($"{snapshot.HostName} [{(snapshot.Power.LineOnline ? "AC" : "battery")}, {snapshot.Power.BatteryPercent}%]");
 
-        var interesting = snapshot.Devices.Where(DeviceFilters.IsConnectionDevice).ToList();
         var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
+        var interesting = snapshot.Devices.Where(device => DeviceFilters.IsConnectionDevice(device, byId)).ToList();
         var includedIds = new HashSet<string>(interesting.Select(device => device.InstanceId), StringComparer.OrdinalIgnoreCase);
 
         foreach (var device in interesting)
@@ -16,7 +16,7 @@ internal static class TopologyRenderer
             var parentId = device.ParentInstanceId;
             while (parentId is not null && byId.TryGetValue(parentId, out var parent))
             {
-                if (DeviceFilters.IsConnectionDevice(parent))
+                if (DeviceFilters.IsConnectionDevice(parent, byId))
                 {
                     includedIds.Add(parent.InstanceId);
                 }
