@@ -115,6 +115,29 @@ internal static class BackgroundCollector
         return entries;
     }
 
+    public static ConnectionSnapshot? ReadCurrentSnapshot()
+    {
+        if (!File.Exists(CurrentSnapshotPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<ConnectionSnapshot>(
+                File.ReadAllText(CurrentSnapshotPath),
+                JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
     public static CollectorStatus ReadStatus()
     {
         if (!File.Exists(HeartbeatPath))

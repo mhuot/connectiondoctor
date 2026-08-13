@@ -6,7 +6,8 @@ namespace ConnectionDoctor;
 internal static class StartupRegistration
 {
     private const string RunKeyPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string ValueName = "ConnectionDoctor";
+    private const string CollectorValueName = "ConnectionDoctor";
+    private const string TrayValueName = "ConnectionDoctor.UI";
 
     public static string Install()
     {
@@ -20,7 +21,8 @@ internal static class StartupRegistration
 
         var command = $"\"{executable}\" collect";
         using var key = Registry.CurrentUser.CreateSubKey(RunKeyPath);
-        key.SetValue(ValueName, command, RegistryValueKind.String);
+        key.SetValue(CollectorValueName, command, RegistryValueKind.String);
+        key.SetValue(TrayValueName, $"\"{executable}\" tray", RegistryValueKind.String);
 
         var status = BackgroundCollector.ReadStatus();
         if (!status.IsRunning)
@@ -33,14 +35,22 @@ internal static class StartupRegistration
                 WindowStyle = ProcessWindowStyle.Hidden
             });
         }
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = executable,
+            Arguments = "tray",
+            UseShellExecute = true,
+            WindowStyle = ProcessWindowStyle.Hidden
+        });
 
-        return $"Installed per-user startup registration: {command}";
+        return $"Installed per-user collector and tray startup registration for {executable}";
     }
 
     public static string Uninstall()
     {
         using var key = Registry.CurrentUser.OpenSubKey(RunKeyPath, writable: true);
-        key?.DeleteValue(ValueName, throwOnMissingValue: false);
-        return "Removed ConnectionDoctor per-user startup registration.";
+        key?.DeleteValue(CollectorValueName, throwOnMissingValue: false);
+        key?.DeleteValue(TrayValueName, throwOnMissingValue: false);
+        return "Removed ConnectionDoctor per-user collector and tray startup registration.";
     }
 }

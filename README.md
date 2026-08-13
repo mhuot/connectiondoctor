@@ -34,6 +34,7 @@ Publish and install continuous collection:
 dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained false -o .\artifacts\win-arm64
 .\artifacts\win-arm64\ConnectionDoctor.exe install
 .\artifacts\win-arm64\ConnectionDoctor.exe status
+.\artifacts\win-arm64\ConnectionDoctor.exe ui
 ```
 
 ## Commands
@@ -51,6 +52,8 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `status` | Report collector process and heartbeat health |
 | `install` | Start collecting and register startup for the current user |
 | `uninstall` | Remove the startup registration |
+| `ui` | Open or activate the live dashboard |
+| `tray` | Run the notification-area dashboard host |
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
 Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
@@ -72,7 +75,7 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 3. Incident stitching that separates root events from downstream fallout.
 4. Modern Standby and lid-action awareness.
 5. QueryDisplayConfig display-path correlation and USB4 route details.
-6. Timeline and physical/logical topology UI inspired by TBDoctor.
+6. Expand the initial live dashboard into a charted timeline and graphical physical/logical topology inspired by TBDoctor.
 7. MCP tools for probe, diagnosis, incidents, and diagrams.
 
 ## Naming

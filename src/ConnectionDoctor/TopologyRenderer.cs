@@ -1,3 +1,5 @@
+using System.IO;
+
 namespace ConnectionDoctor;
 
 internal static class TopologyRenderer
