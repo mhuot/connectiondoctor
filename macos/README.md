@@ -61,7 +61,13 @@ TBDoctor.app/Contents/MacOS/TBDoctor --probe     # current state, once
 TBDoctor.app/Contents/MacOS/TBDoctor --tree      # connection tree + where power enters
 TBDoctor.app/Contents/MacOS/TBDoctor --report    # analyse history, print findings
 TBDoctor.app/Contents/MacOS/TBDoctor --watch     # live one-line-per-sample table
+TBDoctor.app/Contents/MacOS/TBDoctor --inspect samples.jsonl   # draw a recorded tree
 ```
+
+`--inspect` opens the connection tree for a *recorded* sample instead of live
+hardware, so you can look at a capture from another machine. A dock that
+misbehaves on one Mac and not another is a common shape for this fault, and the
+two trees side by side are the fastest way to see why.
 
 ## Connections
 

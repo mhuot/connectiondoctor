@@ -124,10 +124,11 @@ private struct NodeView: View {
                 .fill(TopoStyle.rail)
                 .frame(width: 1)
                 .frame(maxHeight: isLast ? TopoStyle.elbowY : .infinity, alignment: .top)
-            // Horizontal stub into the card.
+            // Horizontal stub, run to the full gutter width so it meets the
+            // card's edge — stopping short leaves the two looking unconnected.
             Rectangle()
                 .fill(TopoStyle.rail)
-                .frame(width: TopoStyle.gutter - 10, height: 1)
+                .frame(width: TopoStyle.gutter, height: 1)
                 .offset(y: TopoStyle.elbowY)
         }
         .frame(width: TopoStyle.gutter, alignment: .leading)

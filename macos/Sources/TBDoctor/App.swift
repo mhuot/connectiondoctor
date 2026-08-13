@@ -6,9 +6,11 @@ struct TBDoctorApp: App {
     @StateObject private var collector = Collector.shared
 
     init() {
-        // Runs before any scene is built, so a terminal invocation never flashes
-        // a menu bar item or takes over the run loop.
-        if Headless.run(Array(CommandLine.arguments.dropFirst())) { exit(0) }
+        let arguments = Array(CommandLine.arguments.dropFirst())
+        // --inspect needs a window, so it is handled by the delegate rather than
+        // exiting here like the other terminal modes.
+        if !arguments.contains("--inspect"), Headless.run(arguments) { exit(0) }
+        _ = Inspect.parse(arguments)
     }
 
     var body: some Scene {
@@ -27,7 +29,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // to begin here rather than in a view's onAppear: the whole point is to
         // be recording before anyone thinks to open the UI.
         NSApp.setActivationPolicy(.accessory)
-        MainActor.assumeIsolated { Collector.shared.start() }
+        MainActor.assumeIsolated {
+            // Inspecting a recording is a read-only, one-window mode: it must not
+            // start collecting, or it would contend for the store lock with a
+            // real instance already running on this machine.
+            if let recorded = Inspect.sample {
+                Inspect.present(recorded)
+                return
+            }
+            Collector.shared.start()
+        }
     }
 
     /// Launching the app again while it is already running opens the timeline
