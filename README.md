@@ -45,7 +45,8 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `snapshot [path]` | Save the current state as JSON |
 | `baseline save [path]` | Save a known-good state |
 | `diff [path]` | Compare current state with known-good and diagnose changes |
-| `report [path]` | Alias for `diff` |
+| `report [path]` | Summarize recorded incidents from the event log; or compare with a baseline if `path` is given |
+| `watch [--interval N]` | Record device-change events continuously (default 5-second poll); alias `record` |
 | `collect` | Record a present-device snapshot every five seconds |
 | `status` | Report collector process and heartbeat health |
 | `install` | Start collecting and register startup for the current user |
@@ -53,6 +54,24 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
 Continuous samples are stored under `%LOCALAPPDATA%\ConnectionDoctor\samples.jsonl` and trimmed at 24 MB.
+Change events from `watch` are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
+
+### Always-on recording with Task Scheduler
+
+Run `watch` at every user logon without building a Windows service:
+
+```powershell
+$exe = "C:\path\to\ConnectionDoctor.exe"
+$action  = New-ScheduledTaskAction -Execute $exe -Argument "watch"
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+Register-ScheduledTask -TaskName "ConnectionDoctorWatch" -Action $action -Trigger $trigger -RunLevel Limited -Force
+```
+
+Once the recorder has been running for a while, `report` with no arguments shows recorded incidents newest-first:
+
+```powershell
+ConnectionDoctor.exe report
+```
 
 ## Why not TBDoctor for Windows?
 
@@ -66,9 +85,9 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 
 ## Next milestones
 
-1. Continuous bounded JSONL recording with 5-second samples.
-2. ETW ingestion from USBHUB3, USBXHCI, USB-UCX, UCSI, USB4 router, Kernel-PnP, and Kernel-Power providers.
-3. Incident stitching that separates root events from downstream fallout.
+1. ~~Continuous bounded JSONL recording with 5-second samples.~~ ✓ (`collect`)
+2. ~~Change-only event log and incident stitching.~~ ✓ (`watch` / `report`)
+3. ETW ingestion from USBHUB3, USBXHCI, USB-UCX, UCSI, USB4 router, Kernel-PnP, and Kernel-Power providers.
 4. Modern Standby and lid-action awareness.
 5. QueryDisplayConfig display-path correlation and USB4 route details.
 6. Timeline and physical/logical topology UI inspired by TBDoctor.
