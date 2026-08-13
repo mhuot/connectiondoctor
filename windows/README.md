@@ -12,7 +12,7 @@ The first supported case came from a Surface Laptop 7 connected to an LG UltraWi
 - Saves auditable JSON snapshots.
 - Captures a known-good baseline and compares it with the current setup.
 - Detects the initial high-value signature: an LG display remains active while its expected USB hub branch is missing.
-- Continuously records bounded JSONL history in the background with a health heartbeat.
+- Continuously records connection changes to bounded JSONL, with hourly full snapshots as sync points.
 - Registers itself per-user to start collecting at login.
 - Runs natively on Windows ARM64 and x64 with .NET 8.
 
@@ -45,14 +45,15 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `snapshot [path]` | Save the current state as JSON |
 | `baseline save [path]` | Save a known-good state |
 | `diff [path]` | Compare current state with known-good and diagnose changes |
-| `report [path]` | Alias for `diff` |
+| `report` | Stitch recorded changes into incidents and print them newest-first |
 | `collect` | Record a present-device snapshot every five seconds |
+| `watch` | Alias for `collect`; print each connection change live |
 | `status` | Report collector process and heartbeat health |
 | `install` | Start collecting and register startup for the current user |
 | `uninstall` | Remove the startup registration |
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
-Continuous samples are stored under `%LOCALAPPDATA%\ConnectionDoctor\samples.jsonl` and trimmed at 24 MB.
+Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
 
 ## Why not TBDoctor for Windows?
 

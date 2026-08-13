@@ -9,7 +9,11 @@ internal sealed record ConnectionSnapshot(
     PowerState Power,
     IReadOnlyList<DeviceNode> Devices);
 
-internal sealed record PowerState(bool LineOnline, int BatteryPercent);
+internal sealed record PowerState(bool LineOnline, int BatteryPercent, int? BatteryRateMilliwatts)
+{
+    public const int DeficitThresholdMilliwatts = 2000;
+    public bool IsDeficit => LineOnline && BatteryRateMilliwatts <= -DeficitThresholdMilliwatts;
+}
 
 internal sealed record DeviceNode(
     string InstanceId,
@@ -54,13 +58,59 @@ internal sealed record ComparisonReport(
 
 internal static class DeviceFilters
 {
-    private static readonly HashSet<string> ConnectionClasses = new(StringComparer.OrdinalIgnoreCase)
+    private static readonly HashSet<string> DirectConnectionClasses = new(StringComparer.OrdinalIgnoreCase)
     {
-        "USB", "USBDevice", "HIDClass", "Keyboard", "Mouse", "Monitor", "Firmware"
+        "USB", "USBDevice", "HIDClass", "Keyboard", "Mouse", "Monitor"
     };
 
-    public static bool IsConnectionDevice(DeviceNode device) =>
-        ConnectionClasses.Contains(device.ClassName) ||
+    public static IReadOnlyList<DeviceNode> ConnectionDevices(ConnectionSnapshot snapshot)
+    {
+        var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
+        return snapshot.Devices.Where(device => IsConnectionDevice(device, byId)).ToList();
+    }
+
+    public static bool IsConnectionDevice(
+        DeviceNode device,
+        IReadOnlyDictionary<string, DeviceNode> devicesById)
+    {
+        if (DirectConnectionClasses.Contains(device.ClassName) ||
+            HasConnectionName(device))
+        {
+            return true;
+        }
+
+        return (device.ClassName.Equals("Net", StringComparison.OrdinalIgnoreCase) ||
+                device.ClassName.Equals("MEDIA", StringComparison.OrdinalIgnoreCase)) &&
+               HasUsbAncestor(device, devicesById);
+    }
+
+    private static bool HasUsbAncestor(
+        DeviceNode device,
+        IReadOnlyDictionary<string, DeviceNode> devicesById)
+    {
+        var current = device;
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        while (visited.Add(current.InstanceId))
+        {
+            if (current.InstanceId.StartsWith(@"USB\", StringComparison.OrdinalIgnoreCase) ||
+                current.ClassName.Equals("USB", StringComparison.OrdinalIgnoreCase) ||
+                current.ClassName.Equals("USBDevice", StringComparison.OrdinalIgnoreCase) ||
+                HasConnectionName(current))
+            {
+                return true;
+            }
+
+            if (current.ParentInstanceId is null ||
+                !devicesById.TryGetValue(current.ParentInstanceId, out current!))
+            {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool HasConnectionName(DeviceNode device) =>
         device.FriendlyName.Contains("USB4", StringComparison.OrdinalIgnoreCase) ||
         device.FriendlyName.Contains("Thunderbolt", StringComparison.OrdinalIgnoreCase) ||
         device.FriendlyName.Contains("Type-C", StringComparison.OrdinalIgnoreCase);
