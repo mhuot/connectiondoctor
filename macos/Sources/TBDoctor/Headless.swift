@@ -8,9 +8,10 @@ enum Headless {
     static func run(_ arguments: [String]) -> Bool {
         if arguments.contains("--mcp") { MCPServer.serve(); return true }
         if arguments.contains("--probe") { probe(); return true }
-        if arguments.contains("--tree") { tree(); return true }
+        if arguments.contains("--tree") { tree(mode: arguments.contains("--full") ? .full : .physical); return true }
         if let i = arguments.firstIndex(of: "--excalidraw"), i + 1 < arguments.count {
-            excalidraw(to: arguments[i + 1], style: styleArgument(arguments)); return true
+            excalidraw(to: arguments[i + 1], style: styleArgument(arguments),
+                       mode: arguments.contains("--full") ? .full : .physical); return true
         }
         if arguments.contains("--report") { report(); return true }
         if arguments.contains("--watch") { watch(); return true }
@@ -71,9 +72,9 @@ enum Headless {
 
     // MARK: - Connection tree
 
-    static func tree() {
-        render(Topology.build(from: Probes.sample()), ancestorsLast: [], isLast: true)
-        print("\nPower flows down this tree, never up. Anything below the Mac is a consumer.")
+    static func tree(mode: TopoMode = .physical) {
+        render(Topology.build(from: Probes.sample(), mode: mode), ancestorsLast: [], isLast: true)
+        print("\n\(mode.label): \(mode.summary)")
     }
 
     private static func render(_ node: TopoNode, ancestorsLast: [Bool], isLast: Bool) {
@@ -84,7 +85,8 @@ enum Headless {
         }
 
         let badges = node.badges.isEmpty ? "" : "  [" + node.badges.joined(separator: " · ") + "]"
-        print("\(prefix)\(node.title)\(badges)")
+        let link = node.isTunneled ? "  ~tunneled~" : ""
+        print("\(prefix)\(node.title)\(badges)\(link)")
 
         if let note = node.note {
             var indent = ""
@@ -106,9 +108,9 @@ enum Headless {
         return style
     }
 
-    static func excalidraw(to path: String, style: DiagramStyle) {
+    static func excalidraw(to path: String, style: DiagramStyle, mode: TopoMode = .physical) {
         let sample = Probes.sample()
-        let layout = Diagram.layout(root: Topology.build(from: sample), style: style)
+        let layout = Diagram.layout(root: Topology.build(from: sample, mode: mode), style: style)
         guard let data = ExcalidrawExport.document(
             layout: layout,
             caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))") else {

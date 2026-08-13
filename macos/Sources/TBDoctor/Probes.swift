@@ -75,7 +75,8 @@ enum Probes {
                     // and `stringValue` would render them as negative numbers
                     // that no longer match what ioreg reports.
                     uid: (props["UID"] as? NSNumber).map { String($0.uint64Value) } ?? "?",
-                    linkGbps: nil))
+                    linkGbps: nil,
+                    vendorID: (props["Vendor ID"] as? NSNumber)?.intValue))
             }
         }
 

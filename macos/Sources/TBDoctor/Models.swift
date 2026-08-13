@@ -10,6 +10,8 @@ struct TBDevice: Codable, Hashable, Identifiable {
     var route: Int
     var uid: String
     var linkGbps: Double?
+    /// Lets a dock's own USB hubs be recognised as belonging to it.
+    var vendorID: Int?
 
     var id: String { uid }
     var label: String { "\(vendor) \(model)" }

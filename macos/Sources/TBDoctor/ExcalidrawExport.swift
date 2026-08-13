@@ -28,8 +28,17 @@ enum ExcalidrawExport {
         }
     }
 
-    private static let dataStroke = "#868e96"
-    private static let powerStroke = "#f08c00"
+    /// Same protocol encoding as the app, remapped to Excalidraw's palette.
+    private static func linkStroke(_ p: LinkProtocol) -> String {
+        switch p {
+        case .power:       return "#f08c00"
+        case .thunderbolt: return "#6741d9"
+        case .usb3:        return "#1971c2"
+        case .usb2:        return "#0c8599"
+        case .usbLow:      return "#868e96"
+        case .unknown:     return "#adb5bd"
+        }
+    }
     private static let textColor = "#1e1e1e"
 
     // MARK: - Document
@@ -48,9 +57,11 @@ enum ExcalidrawExport {
                                x: Double(first.x), y: Double(first.y),
                                width: Double((xs.max() ?? 0) - (xs.min() ?? 0)),
                                height: Double((ys.max() ?? 0) - (ys.min() ?? 0)),
-                               stroke: edge.kind == .power ? powerStroke : dataStroke,
+                               stroke: linkStroke(edge.linkProtocol),
                                fill: "transparent")
-            element["strokeWidth"] = edge.kind == .power ? 2 : 1
+            element["strokeWidth"] = (edge.linkProtocol == .power || edge.linkProtocol == .thunderbolt) ? 2 : 1
+            // Dashed carries the same meaning as in the app: tunneled traffic.
+            if edge.tunneled { element["strokeStyle"] = "dashed" }
             element["points"] = relative
             element["lastCommittedPoint"] = NSNull()
             element["startBinding"] = NSNull()

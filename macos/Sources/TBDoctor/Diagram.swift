@@ -36,10 +36,11 @@ struct PlacedNode: Identifiable {
 }
 
 struct DiagramEdge: Identifiable {
-    enum Kind { case data, power }
     var id: String
     var points: [CGPoint]
-    var kind: Kind
+    var linkProtocol: LinkProtocol
+    /// Drawn dashed: this link's traffic rides a Thunderbolt tunnel.
+    var tunneled: Bool = false
 }
 
 struct DiagramLayout {
@@ -90,9 +91,7 @@ enum Diagram {
 
     /// Power edges are the ones feeding the host — drawn distinctly so the
     /// power path never gets confused with the data tree.
-    private static func kind(childIsHost: Bool) -> DiagramEdge.Kind {
-        childIsHost ? .power : .data
-    }
+    private static func kind(childIsHost: Bool) -> LinkProtocol { childIsHost ? .power : .unknown }
 
     // MARK: Cascade
 
@@ -116,7 +115,7 @@ enum Diagram {
                     CGPoint(x: x, y: parent.maxY),
                     CGPoint(x: x, y: frame.midY),
                     CGPoint(x: frame.minX, y: frame.midY)
-                ], kind: kind(childIsHost: node.kind == .host)))
+                ], linkProtocol: node.linkProtocol, tunneled: node.isTunneled))
             }
 
             for child in node.children { walk(child, depth: depth + 1, parent: frame) }
@@ -174,7 +173,7 @@ enum Diagram {
         result.edges.append(DiagramEdge(id: "power", points: [
             CGPoint(x: powerFrame.maxX, y: powerFrame.midY),
             CGPoint(x: hostFrame.minX, y: hostFrame.midY)
-        ], kind: .power))
+        ], linkProtocol: .power))
 
         for (child, parent, childFrame) in links {
             let midY = parent.maxY + vGap / 2
@@ -183,7 +182,7 @@ enum Diagram {
                 CGPoint(x: parent.midX, y: midY),
                 CGPoint(x: childFrame.midX, y: midY),
                 CGPoint(x: childFrame.midX, y: childFrame.minY)
-            ], kind: .data))
+            ], linkProtocol: child.linkProtocol, tunneled: child.isTunneled))
         }
 
         return finish(result)
@@ -238,7 +237,7 @@ enum Diagram {
                     CGPoint(x: midX, y: frame.midY),
                     CGPoint(x: midX, y: childFrame.midY),
                     CGPoint(x: childFrame.minX, y: childFrame.midY)
-                ], kind: kind(childIsHost: child.kind == .host)))
+                ], linkProtocol: child.linkProtocol, tunneled: child.isTunneled))
             }
             return frame
         }
@@ -276,7 +275,7 @@ enum Diagram {
         result.edges = result.edges.map {
             DiagramEdge(id: $0.id,
                         points: $0.points.map { CGPoint(x: $0.x + dx, y: $0.y + dy) },
-                        kind: $0.kind)
+                        linkProtocol: $0.linkProtocol, tunneled: $0.tunneled)
         }
         result.size = CGSize(width: (result.nodes.map(\.frame.maxX).max() ?? 0) + margin,
                              height: (result.nodes.map(\.frame.maxY).max() ?? 0) + margin)
@@ -313,4 +312,24 @@ enum TopoStyle {
     ]
 
     static let rail = Color.secondary.opacity(0.45)
+
+    /// Edges are coloured by what the link actually carries.
+    static func color(_ p: LinkProtocol) -> Color {
+        switch p {
+        case .power:       return .yellow
+        case .thunderbolt: return .purple
+        case .usb3:        return .blue
+        case .usb2:        return .teal
+        case .usbLow:      return .gray
+        case .unknown:     return .secondary
+        }
+    }
+
+    static func width(_ p: LinkProtocol) -> CGFloat {
+        switch p {
+        case .power, .thunderbolt: return 2.4
+        case .usb3:                return 2.0
+        default:                   return 1.4
+        }
+    }
 }

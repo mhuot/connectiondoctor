@@ -8,6 +8,7 @@ struct DiagramView: View {
     var onRefresh: (() -> Void)?
 
     @AppStorage("diagramStyle") private var storedStyle = DiagramStyle.cascade.rawValue
+    @AppStorage("diagramMode") private var storedMode = TopoMode.physical.rawValue
     @State private var scale: CGFloat = 1
     @State private var selectedID: String?
 
@@ -15,8 +16,10 @@ struct DiagramView: View {
         DiagramStyle(rawValue: storedStyle) ?? .cascade
     }
 
+    private var mode: TopoMode { TopoMode(rawValue: storedMode) ?? .physical }
+
     private var layout: DiagramLayout {
-        Diagram.layout(root: Topology.build(from: sample), style: style)
+        Diagram.layout(root: Topology.build(from: sample, mode: mode), style: style)
     }
 
     var body: some View {
@@ -57,6 +60,15 @@ struct DiagramView: View {
             .labelsHidden()
             .frame(width: 250)
             .help(style.summary)
+
+            Picker("", selection: $storedMode) {
+                Text("Physical").tag(TopoMode.physical.rawValue)
+                Text("+ logical").tag(TopoMode.full.rawValue)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 160)
+            .help(mode.summary)
 
             Divider().frame(height: 16)
 
@@ -126,9 +138,10 @@ struct DiagramView: View {
             ZStack(alignment: .topLeading) {
                 ForEach(placed.edges) { edge in
                     EdgeShape(points: edge.points)
-                        .stroke(edge.kind == .power ? Color.yellow.opacity(0.85) : TopoStyle.rail,
-                                style: StrokeStyle(lineWidth: edge.kind == .power ? 2 : 1.4,
-                                                   lineJoin: .round))
+                        .stroke(TopoStyle.color(edge.linkProtocol).opacity(0.9),
+                                style: StrokeStyle(lineWidth: TopoStyle.width(edge.linkProtocol),
+                                                   lineJoin: .round,
+                                                   dash: edge.tunneled ? [5, 3] : []))
                 }
                 ForEach(placed.nodes) { placedNode in
                     NodeBox(node: placedNode.node, isSelected: placedNode.id == selectedID)
@@ -161,9 +174,16 @@ struct DiagramView: View {
                 }
             }
             Divider().frame(height: 12)
+            ForEach([LinkProtocol.power, .thunderbolt, .usb3, .usb2, .usbLow], id: \.self) { p in
+                HStack(spacing: 5) {
+                    Rectangle().fill(TopoStyle.color(p)).frame(width: 14, height: 2.5)
+                    Text(p.label).font(.caption2).foregroundStyle(.secondary)
+                }
+            }
             HStack(spacing: 5) {
-                Rectangle().fill(Color.yellow).frame(width: 14, height: 2)
-                Text("power path").font(.caption2).foregroundStyle(.secondary)
+                Rectangle().fill(Color.secondary).frame(width: 14, height: 2.5)
+                    .mask(HStack(spacing: 3) { ForEach(0..<3, id: \.self) { _ in Rectangle().frame(width: 3) } })
+                Text("tunneled over Thunderbolt").font(.caption2).foregroundStyle(.secondary)
             }
             Spacer(minLength: 0)
         }

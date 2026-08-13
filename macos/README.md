@@ -79,6 +79,17 @@ location-ID nibbles. It exists because this is the part people misread — a
 monitor with a built-in hub looks like infrastructure, and the devices behind it
 look directly attached.
 
+**Physical / + logical** toggle. Physical shows only enclosures you could point
+at — internal hubs, control interfaces and controller silicon fold into the box
+they live in, with a `+N internal` badge so nothing is hidden silently. A
+daisy-chained dock's peripherals are reparented under that dock, since the USB
+tree nests them under the *upstream* dock purely as an artifact of tunneling.
+
+**Links are coloured by protocol** — power, Thunderbolt/USB4, USB 3.x, USB 2.0,
+USB 1.x — and **dashed when tunneled over Thunderbolt**. That makes two things
+visible at a glance that previously took real effort: whether Thunderbolt is
+actually carrying anything, and that every peripheral is stuck on USB 2.0.
+
 Three layouts, switchable and remembered between launches:
 
 | Layout | Shape | Good for |
