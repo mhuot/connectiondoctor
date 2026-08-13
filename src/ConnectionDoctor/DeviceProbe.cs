@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Management;
 using System.Runtime.InteropServices;
 using System.Text;
 
@@ -123,9 +124,46 @@ internal static class DeviceProbe
 
     private static PowerState ReadPowerState()
     {
-        return GetSystemPowerStatus(out var status)
+        var baseState = GetSystemPowerStatus(out var status)
             ? new PowerState(status.AcLineStatus == 1, status.BatteryLifePercent == 255 ? -1 : status.BatteryLifePercent)
             : new PowerState(false, -1);
+
+        var dischargeRate = ReadDischargeRateMilliwatts();
+        return baseState with { DischargeRateMilliwatts = dischargeRate };
+    }
+
+    private static int? ReadDischargeRateMilliwatts()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher(
+                @"root\wmi",
+                "SELECT ChargeRate, DischargeRate, PowerOnline FROM BatteryStatus");
+            using var results = searcher.Get();
+            foreach (ManagementObject obj in results)
+            {
+                using (obj)
+                {
+                    var dischargeRate = obj["DischargeRate"];
+                    var chargeRate = obj["ChargeRate"];
+                    if (dischargeRate != null && Convert.ToUInt32(dischargeRate) > 0)
+                    {
+                        return -(int)Convert.ToUInt32(dischargeRate);
+                    }
+
+                    if (chargeRate != null && Convert.ToUInt32(chargeRate) > 0)
+                    {
+                        return (int)Convert.ToUInt32(chargeRate);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // No battery or WMI not available — degrade gracefully.
+        }
+
+        return null;
     }
 
     [StructLayout(LayoutKind.Sequential)]

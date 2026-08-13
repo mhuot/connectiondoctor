@@ -40,7 +40,28 @@ internal static class Program
         var snapshot = DeviceProbe.Capture();
         Console.WriteLine($"ConnectionDoctor probe - {snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}");
         Console.WriteLine($"Host: {snapshot.HostName} ({snapshot.OperatingSystemArchitecture})");
-        Console.WriteLine($"Power: {(snapshot.Power.LineOnline ? "AC" : "battery")}, {snapshot.Power.BatteryPercent}%");
+
+        var powerLine = $"Power: {(snapshot.Power.LineOnline ? "AC" : "battery")}, {snapshot.Power.BatteryPercent}%";
+        if (snapshot.Power.DischargeRateMilliwatts.HasValue)
+        {
+            var rateMw = snapshot.Power.DischargeRateMilliwatts.Value;
+            var rateLabel = rateMw < 0
+                ? $"-{-rateMw / 1000.0:F1} W (discharging)"
+                : $"+{rateMw / 1000.0:F1} W (charging)";
+            powerLine += $", {rateLabel}";
+        }
+
+        Console.WriteLine(powerLine);
+
+        const int deficitThresholdMilliwatts = 2000;
+        if (snapshot.Power.LineOnline &&
+            snapshot.Power.DischargeRateMilliwatts.HasValue &&
+            snapshot.Power.DischargeRateMilliwatts.Value < -deficitThresholdMilliwatts)
+        {
+            var watts = -snapshot.Power.DischargeRateMilliwatts.Value / 1000.0;
+            Console.WriteLine($"WARNING: Battery is covering {watts:F1} W while on AC — the supply is not meeting demand.");
+        }
+
         Console.WriteLine($"Present devices: {snapshot.Devices.Count}");
         Console.WriteLine();
 

@@ -9,7 +9,7 @@ internal sealed record ConnectionSnapshot(
     PowerState Power,
     IReadOnlyList<DeviceNode> Devices);
 
-internal sealed record PowerState(bool LineOnline, int BatteryPercent);
+internal sealed record PowerState(bool LineOnline, int BatteryPercent, int? DischargeRateMilliwatts = null);
 
 internal sealed record DeviceNode(
     string InstanceId,
