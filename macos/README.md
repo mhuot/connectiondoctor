@@ -3,6 +3,10 @@
 Finds the root cause of Thunderbolt dock, USB peripheral and power faults on macOS —
 the "my dock keeps disconnecting" and "my devices randomly drop" class of problem.
 
+<img src="docs/images/connections-physical.png" width="760"
+     alt="Connections window, physical mode: a Surface Thunderbolt 4 Dock at 40 Gb/s supplying 96W host power, with an LG UltraWide (its DisplayPort tunnel drawn as a dashed pink edge alongside its USB link), a Sony ZV-E10, an Anker PowerConf C300 and a RØDE NT-USB Mini, each link coloured by protocol">
+
+
 Built after a CalDigit Element Hub kept dropping a keyboard, mouse, monitor hub, mic
 and two cameras. The cause turned out to be a power supply that could not cover the
 laptop's demand: when demand exceeds supply, USB-C power delivery renegotiates, that
@@ -54,6 +58,14 @@ wattage, battery current, USB device count, the leading root cause, and the last
 incident. "Open timeline…" gives charts of link state, power and device count with
 root events marked, alongside the full findings list.
 
+<img src="docs/images/timeline.png" width="760"
+     alt="Timeline window: link-state, power and USB-device-count charts on the left; on the right, ranked findings — power supply under-served at high confidence with its evidence, grouped device loss, and repeated power-source switching — above the incident list">
+
+The screenshot above is a real diagnosis from the day this was written: a 68W-rated
+adapter against ~79W of demand, the battery quietly covering the difference while
+the machine reported AC power, and a Thunderbolt link drop landing inside that
+deficit window.
+
 ## Command line
 
 ```sh
@@ -98,6 +110,16 @@ Three layouts, switchable and remembered between launches:
 | **Top-down** | Children fan out below, power enters from the left | Reads as a schematic |
 | **Flow** | Left to right: power, Mac, dock, hubs, devices | Matches how you'd describe a dock chain |
 
+<img src="docs/images/connections-topdown.png" width="760"
+     alt="Top-down layout: power adapter feeding the Mac from the left in amber, the Surface dock below it, children fanning out beneath, and the LG's DisplayPort edge routed down the left margin outside the tree">
+
+<img src="docs/images/connections-flow.png" width="760"
+     alt="Flow layout: power, Mac, dock, hubs and devices reading left to right, with the DisplayPort edge routed over the top of the diagram">
+
+Secondary DisplayPort edges route *outside* the tree's footprint — down a side
+margin in top-down, over the top in flow — because a tree can express only one
+parent per node, and a monitor with a hub genuinely has two connections.
+
 The power path is drawn in amber and separately from the data tree, so where
 power enters is never confused with what carries data. Boxes are sized to their
 text rather than fixed — truncating "4-Port USB 2.0 Hub — LG Electronics Inc."
@@ -114,6 +136,14 @@ That matters because hubs routinely name themselves uselessly. Three different
 boxes here call themselves "USB2.0 Hub"; their VID:PIDs identify them as CalDigit,
 Genesys Logic and Intel silicon respectively. `--probe` prints the same VID:PID
 column for research over SSH.
+
+<img src="docs/images/inspector.png" width="520"
+     alt="Inspector panel for a Magic Keyboard: product name, vendor, VID:PID 05AC:029F, and vendor ID rows, each with a copy button">
+
+The VID:PID pair is the identifier worth having: assigned by USB-IF, identical on
+every OS, and searchable in public databases — it identifies hardware whose own
+name identifies nothing. (The same pair later matched these devices one-for-one in
+Windows Device Manager on a Surface, where instance IDs carry `VID_xxxx&PID_xxxx`.)
 
 `--tree` prints the same topology as text.
 
@@ -133,6 +163,10 @@ re-exporting the same topology produces a diffable file instead of churning
 every element.
 
 Agents can request one directly via the `tb_diagram` MCP tool.
+
+<img src="docs/images/excalidraw-export.png" width="560"
+     alt="Exported Excalidraw document rendered on a white canvas: the same topology as colour-coded rounded boxes with orthogonal connectors, an amber power edge, and a caption stamping when it was captured">
+
 
 Note that IOKit exposes no per-device power draw on current hardware, so the
 diagram shows where power *enters* and which nodes are consumers — it does not
@@ -203,5 +237,55 @@ Things that were not obvious, recorded so they are not re-learned the hard way:
 - Link speed is reported per-link, taking the fastest active port. Exact for a single
   dock; a daisy chain reports the fastest hop rather than per-device speeds.
 - Ad-hoc signed. Fine locally; needs a Developer ID identity to distribute.
-- Only tested against the hardware it was written on: an M5 Pro MacBook Pro and a
-  CalDigit Element Hub. The class-name matching above is the main portability risk.
+- Tested against the hardware it was written on: an M5 Pro and an M3 Pro MacBook Pro,
+  a CalDigit Element Hub, a Microsoft Surface Thunderbolt 4 Dock (singly and
+  daisy-chained), an LG UltraWide with built-in hub, and the usual desk clutter of
+  cameras, mics and input devices. The class-name matching above is the main
+  portability risk on other silicon.
+- macOS only. See below.
+
+## Why Windows needs this tool too
+
+The same class of fault was debugged the same week on a Surface Laptop 7
+(Snapdragon X) — same dock, same monitor, same peripherals — and the experience
+made the case better than any argument: it was all manual PowerShell, Device
+Manager spelunking, and photographing screens. The failure (a monitor's USB hub
+wedged after a host switch; video fine, hub dead) was eventually cured by
+power-cycling the monitor, but nothing on Windows could *say* that.
+
+What a Windows counterpart would read, mapped from what TBDoctor reads:
+
+| TBDoctor (macOS) | Windows equivalent |
+|---|---|
+| `IOThunderboltSwitch*` registry entries | USB4 router devnodes via CfgMgr32 (`CM_Get_Parent` walks the topology); USB4 host router events |
+| `log stream` kernel predicates | ETW: `Microsoft-Windows-USB-USBHUB3`, `-USBXHCI`, `-USB-UCX`, `Kernel-Power` |
+| `AppleSmartBattery` amperage | WMI `Win32_Battery` / `BatteryStatus` — discharge-while-plugged-in is the same tell |
+| `IOPSCopyExternalPowerAdapterDetails` | UCSI / power delivery events; `powercfg /systempowerreport` |
+| CoreGraphics display list | `QueryDisplayConfig` for active DP/HDMI paths |
+
+Ranked by what would have actually helped, from the live debugging session:
+
+1. **Present-vs-ghost discrimination.** `Get-PnpDevice` returns every device the
+   machine has *ever* seen; a screenful of `Unknown`-status ghosts derailed the
+   diagnosis for a round. `-PresentOnly` semantics must be the default, with
+   ghosts available as history — which is genuinely useful signal, not noise.
+2. **Baseline diff.** The dock moves between three hosts. "Here is the known-good
+   topology from the last time this worked; here is what is missing right now"
+   answers the host-switch question in one command. (The VID:PID checklist that
+   solved the Surface case was hand-built from TBDoctor's recording.)
+3. **Continuous recording + root-vs-fallout stitching.** Identical rationale to
+   macOS: the fault hits while you are busy, and one hub reset produces a cascade
+   of downstream errors that point at innocent devices.
+4. **Sleep-state awareness.** On Windows the first suspect for "everything died
+   when I closed the lid" is the lid action and Modern Standby (S0ix powers down
+   USB4 controllers), not the dock. A tool that checks `powercfg` state before
+   blaming hardware skips a whole wrong turn.
+5. **ARM-specific notes.** Snapdragon X machines do USB4 with DP and USB3
+   tunneling but in practice fail PCIe tunneling (eGPUs, TB NVMe enclosures show
+   up broken or not at all). Worth detecting and saying explicitly, because "ARM
+   doesn't do Thunderbolt" is the folk explanation and it is wrong — the dock
+   enumerated as a USB4 router and worked.
+
+The MCP server would port as-is — it is stdio JSON-RPC with no platform
+dependencies — so agents would get `tb_probe`/`tb_diagnose`/`tb_incidents` on
+Windows unchanged.
