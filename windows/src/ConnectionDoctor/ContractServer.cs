@@ -1,15 +1,19 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Net;
+using System.Net.Http;
 using System.Text;
 
 namespace ConnectionDoctor;
 
 /// <summary>
-/// Read-only HTTP endpoint for the Connection Dashboard, the Windows twin of
+/// Serves the Connection Dashboard and the data behind it, the Windows twin of
 /// TBDoctor's --serve:
 ///   GET /contract  → current state as a Connection Contract v1 envelope
 ///   GET /events    → recorded changes as v1 events JSONL
+///   GET /*         → the dashboard bundle compiled into this exe
 ///
+/// One process and one URL: the user downloads an exe and opens a browser.
 /// Loopback by default. `--bind lan` exposes it on the local network — the data
 /// is topology and power telemetry with no authentication, which is fine for a
 /// home lab fleet and explicitly opt-in for anything else.
@@ -18,7 +22,7 @@ internal static class ContractServer
 {
     public const int DefaultPort = 8787;
 
-    public static int Run(int port, bool lan)
+    public static int Run(int port, bool lan, bool openBrowser = false)
     {
         using var listener = new HttpListener();
 
@@ -44,11 +48,23 @@ internal static class ContractServer
             return 1;
         }
 
-        Console.WriteLine(
-            $"ConnectionDoctor serving on {(lan ? "0.0.0.0" : "127.0.0.1")}:{port}  (GET /contract, GET /events)");
+        var address = $"http://{(lan ? "0.0.0.0" : "127.0.0.1")}:{port}";
+        Console.WriteLine(EmbeddedUi.IsPresent
+            ? $"ConnectionDoctor serving the dashboard on {address}"
+            : $"ConnectionDoctor serving on {address}  (GET /contract, GET /events)");
+        if (!EmbeddedUi.IsPresent)
+        {
+            Console.WriteLine("note: no dashboard bundle is embedded; run scripts/build-ui.ps1 and rebuild");
+        }
+
         if (lan)
         {
             Console.WriteLine("note: LAN binding is unauthenticated read-only telemetry — opt-in by design");
+        }
+
+        if (openBrowser)
+        {
+            OpenBrowser($"http://localhost:{port}/");
         }
 
         var stopping = false;
@@ -91,44 +107,122 @@ internal static class ContractServer
         return 0;
     }
 
+    /// <summary>
+    /// Opens the dashboard, reusing a collector or `serve` that already holds
+    /// the port instead of failing on a bind conflict.
+    /// </summary>
+    public static int OpenDashboard(int port)
+    {
+        if (IsAlreadyServing(port))
+        {
+            Console.WriteLine($"ConnectionDoctor is already serving on port {port}; opening the dashboard.");
+            OpenBrowser($"http://localhost:{port}/");
+            return 0;
+        }
+
+        return Run(port, lan: false, openBrowser: true);
+    }
+
+    private static bool IsAlreadyServing(int port)
+    {
+        try
+        {
+            // Probe the root, not /contract: a contract request enumerates every
+            // device on the machine and would time out here long before it answered.
+            using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+            using var response = client.GetAsync($"http://localhost:{port}/").GetAwaiter().GetResult();
+            return response.IsSuccessStatusCode;
+        }
+        catch (HttpRequestException)
+        {
+            return false;
+        }
+        catch (TaskCanceledException)
+        {
+            return false;
+        }
+    }
+
+    private static void OpenBrowser(string url)
+    {
+        try
+        {
+            using var process = Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        }
+        catch (Win32Exception)
+        {
+            Console.WriteLine($"Open {url} in a browser.");
+        }
+        catch (FileNotFoundException)
+        {
+            Console.WriteLine($"Open {url} in a browser.");
+        }
+    }
+
     private static void Respond(HttpListenerContext context)
     {
         var path = context.Request.Url?.AbsolutePath ?? "/";
         var isGet = string.Equals(context.Request.HttpMethod, "GET", StringComparison.Ordinal);
-        var response = (isGet, path) switch
-        {
-            (true, "/contract") => Contract(),
-            (true, "/events") => Events(),
-            (true, "/") => new Payload(
-                200,
-                "text/plain",
-                "ConnectionDoctor contract endpoint. GET /contract or GET /events\n"),
-            _ => new Payload(404, "text/plain", "not found\n")
-        };
 
-        var bytes = Encoding.UTF8.GetBytes(response.Body);
+        var response = !isGet
+            ? Text(405, "method not allowed\n")
+            : path switch
+            {
+                "/contract" => Contract(),
+                "/events" => Events(),
+                _ => Ui(path)
+            };
+
         context.Response.StatusCode = response.Status;
         context.Response.ContentType = response.ContentType;
-        context.Response.ContentLength64 = bytes.Length;
+        context.Response.ContentLength64 = response.Body.Length;
 
-        // The dashboard is a browser app served from a different origin.
+        // The dashboard may also be served from a dev Vite origin.
         context.Response.AddHeader("Access-Control-Allow-Origin", "*");
-        context.Response.OutputStream.Write(bytes, 0, bytes.Length);
+        if (response.CacheControl is not null)
+        {
+            context.Response.AddHeader("Cache-Control", response.CacheControl);
+        }
+
+        context.Response.OutputStream.Write(response.Body, 0, response.Body.Length);
         context.Response.Close();
+    }
+
+    private static Payload Ui(string path)
+    {
+        var asset = EmbeddedUi.Find(path);
+        if (asset is not null)
+        {
+            return new Payload(
+                200,
+                asset.ContentType,
+                asset.Bytes,
+                asset.Immutable ? "public, max-age=31536000, immutable" : "no-cache");
+        }
+
+        if (!EmbeddedUi.IsPresent && path == "/")
+        {
+            return Text(
+                200,
+                "ConnectionDoctor contract endpoint. GET /contract or GET /events\n" +
+                "No dashboard bundle is embedded in this build; run scripts/build-ui.ps1 and rebuild.\n");
+        }
+
+        return Text(404, "not found\n");
     }
 
     private static Payload Contract()
     {
         try
         {
-            return new Payload(
+            return Text(
                 200,
-                "application/json",
-                ContractV1.Serialize(ContractV1.ToEnvelope(DeviceProbe.Capture())));
+                ContractV1.Serialize(ContractV1.ToEnvelope(DeviceProbe.Capture())),
+                "application/json");
         }
         catch (Win32Exception exception)
         {
-            return new Payload(500, "text/plain", $"probe failed: {exception.Message}\n");
+            return Text(500, $"probe failed: {exception.Message}\n");
         }
     }
 
@@ -136,16 +230,19 @@ internal static class ContractServer
     {
         try
         {
-            return new Payload(
+            return Text(
                 200,
-                "application/x-ndjson",
-                ContractV1.ToEventStream(BackgroundCollector.ReadEntries()));
+                ContractV1.ToEventStream(BackgroundCollector.ReadEntries()),
+                "application/x-ndjson");
         }
         catch (IOException exception)
         {
-            return new Payload(500, "text/plain", $"events unavailable: {exception.Message}\n");
+            return Text(500, $"events unavailable: {exception.Message}\n");
         }
     }
 
-    private sealed record Payload(int Status, string ContentType, string Body);
+    private static Payload Text(int status, string body, string contentType = "text/plain; charset=utf-8") =>
+        new(status, contentType, Encoding.UTF8.GetBytes(body), null);
+
+    private sealed record Payload(int Status, string ContentType, byte[] Body, string? CacheControl);
 }
