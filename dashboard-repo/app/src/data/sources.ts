@@ -32,11 +32,48 @@ function hostNameFromFile(filename: string): string {
   return dash >= 0 ? base.slice(dash + 1) : base;
 }
 
-/** Future: poll a collector's HTTP endpoint. Same interface as files, so the
- *  views never know the difference. Not wired to UI yet (see tasks 4.2). */
+/** Fetch a collector endpoint (TBDoctor --serve): /contract plus /events.
+ *  Same Source boundary as files — views never know the difference. Errors
+ *  name the URL and the cause so a fleet refresh can fail per-host. */
 export async function loadHttp(baseUrl: string): Promise<HostData> {
-  const response = await fetch(new URL('/contract', baseUrl));
-  if (!response.ok) throw new Error(`GET /contract → ${response.status}`);
-  const envelope = parseEnvelope(await response.json());
-  return { name: envelope.host.name, envelope, events: [], origin: baseUrl };
+  let envelope;
+  try {
+    const response = await fetch(new URL('/contract', baseUrl));
+    if (!response.ok) throw new Error(`GET /contract → HTTP ${response.status}`);
+    envelope = parseEnvelope(await response.json());
+  } catch (cause) {
+    throw new Error(`${baseUrl}: ${cause instanceof Error ? cause.message : String(cause)}`);
+  }
+
+  // Events are best-effort: a collector that has recorded nothing yet serves
+  // an empty stream, and an unreachable /events must not sink the envelope.
+  let events: HostData['events'] = [];
+  try {
+    const response = await fetch(new URL('/events', baseUrl));
+    if (response.ok) events = parseEventStream(await response.text()).events;
+  } catch {
+    /* envelope-only host */
+  }
+
+  return { name: envelope.host.name, envelope, events, origin: baseUrl };
+}
+
+/** Re-fetch every HTTP-origin host. Atomic per host: a failure keeps that
+ *  host's previous data and reports the error; others still update. */
+export async function refreshHttpHosts(
+  hosts: HostData[],
+): Promise<{ hosts: HostData[]; errors: string[] }> {
+  const errors: string[] = [];
+  const next = await Promise.all(
+    hosts.map(async (host) => {
+      if (!host.origin.startsWith('http')) return host;
+      try {
+        return await loadHttp(host.origin);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : String(error));
+        return host;
+      }
+    }),
+  );
+  return { hosts: next, errors };
 }

@@ -50,3 +50,5 @@ button.on { background: #2d63c8; border-color: #2d63c8; color: #fff; }
 .empty-state { padding: 60px 0; max-width: 560px; }
 .error { color: #ff8a80; }
 h3 { font-size: 13px; margin: 18px 0 8px; }
+input { background: var(--panel); color: var(--text); border: 1px solid var(--line);
+  border-radius: 7px; padding: 5px 10px; font-size: 12.5px; width: 170px; }

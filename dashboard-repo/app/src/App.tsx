@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import type { HostData } from './data/store';
-import { loadFiles } from './data/sources';
+import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
 import { TimelineView } from './components/TimelineView';
 import { FleetView } from './components/FleetView';
@@ -17,6 +17,25 @@ export function App() {
   const [tab, setTab] = useState<Tab>('topology');
   const [activeHost, setActiveHost] = useState<string>();
   const [error, setError] = useState<string>();
+  const [url, setUrl] = useState('');
+
+  const addUrl = async () => {
+    if (!url) return;
+    try {
+      const host = await loadHttp(url.includes('://') ? url : `http://${url}`);
+      setHosts((prev) => [...prev.filter((h) => h.name !== host.name), host]);
+      setUrl('');
+      setError(undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const refresh = async () => {
+    const { hosts: next, errors } = await refreshHttpHosts(hosts);
+    setHosts(next);
+    setError(errors.length > 0 ? errors.join(' · ') : undefined);
+  };
 
   const active = hosts.find((h) => h.name === activeHost) ?? hosts.find((h) => h.envelope);
 
@@ -56,6 +75,13 @@ export function App() {
           <select value={active?.name} onChange={(e) => setActiveHost(e.target.value)}>
             {hosts.map((h) => <option key={h.name}>{h.name}</option>)}
           </select>
+        )}
+        <input placeholder="collector host:port" value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') void addUrl(); }} />
+        <button onClick={() => void addUrl()}>Add host</button>
+        {hosts.some((h) => h.origin.startsWith('http')) && (
+          <button onClick={() => void refresh()}>Refresh</button>
         )}
         <button onClick={loadFixtures}>Load fleet fixtures</button>
       </header>
