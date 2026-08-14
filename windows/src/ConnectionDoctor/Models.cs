@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace ConnectionDoctor;
@@ -20,10 +21,26 @@ internal sealed record DeviceNode(
     string ClassName,
     string FriendlyName,
     string? Manufacturer,
-    string? ParentInstanceId)
+    string? ParentInstanceId,
+    string? CompatibleIds = null)
 {
+    /// <summary>bDeviceClass 9 - a hub even when the friendly name says nothing.</summary>
+    public const int UsbHubClass = 9;
+
     private static readonly Regex VidPidPattern = new(
         @"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // Windows reports bDeviceClass in the compatible IDs: "USB\Class_09&..."
+    // for a plain device, "USB\DevClass_00&..." for a composite one.
+    private static readonly Regex UsbClassPattern = new(
+        @"(?:Dev)?Class_([0-9A-F]{2})",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
+    // Windows describes hubs as "USB\USB20_HUB" / "USB\USB30_HUB" rather than
+    // "USB\Class_09", but a hub's bDeviceClass is 9 by specification.
+    private static readonly Regex HubCompatiblePattern = new(
+        @"USB[0-9]{2}_HUB|ROOT_HUB",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     public string? VidPid
@@ -34,6 +51,31 @@ internal sealed record DeviceNode(
             return match.Success
                 ? $"{match.Groups[1].Value.ToUpperInvariant()}:{match.Groups[2].Value.ToUpperInvariant()}"
                 : null;
+        }
+    }
+
+    /// <summary>bDeviceClass as reported by the bus, or null when unknown.</summary>
+    public int? UsbClass
+    {
+        get
+        {
+            if (CompatibleIds is null)
+            {
+                return null;
+            }
+
+            var match = UsbClassPattern.Match(CompatibleIds);
+            if (match.Success &&
+                int.TryParse(
+                    match.Groups[1].Value,
+                    NumberStyles.HexNumber,
+                    CultureInfo.InvariantCulture,
+                    out var value))
+            {
+                return value;
+            }
+
+            return HubCompatiblePattern.IsMatch(CompatibleIds) ? UsbHubClass : null;
         }
     }
 
@@ -79,6 +121,39 @@ internal static class DeviceFilters
                 IsConnectionDevice(device, byId) &&
                 (includeBuiltIn || IsExternalDevice(device, byId)))
             .ToList();
+    }
+
+    /// <summary>
+    /// The devices that make up the topology: everything visible, plus every
+    /// ancestor needed to connect them. `tree` and the Connection Contract v1
+    /// export share this so their hierarchies cannot drift apart.
+    /// </summary>
+    public static IReadOnlyList<DeviceNode> TopologyDevices(
+        ConnectionSnapshot snapshot,
+        bool includeBuiltIn)
+    {
+        var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
+        var visible = VisibleConnectionDevices(snapshot, includeBuiltIn);
+        var includedIds = new HashSet<string>(
+            visible.Select(device => device.InstanceId),
+            StringComparer.OrdinalIgnoreCase);
+
+        foreach (var device in visible)
+        {
+            var parentId = device.ParentInstanceId;
+            while (parentId is not null && byId.TryGetValue(parentId, out var parent))
+            {
+                if (IsConnectionDevice(parent, byId) &&
+                    (includeBuiltIn || IsExternalDevice(parent, byId)))
+                {
+                    includedIds.Add(parent.InstanceId);
+                }
+
+                parentId = parent.ParentInstanceId;
+            }
+        }
+
+        return snapshot.Devices.Where(device => includedIds.Contains(device.InstanceId)).ToList();
     }
 
     public static bool IsConnectionDevice(

@@ -15,6 +15,8 @@ The first supported case came from a Surface Laptop 7 connected to an LG UltraWi
 - Continuously records connection changes to bounded JSONL, with hourly full snapshots as sync points.
 - Registers itself per-user to start collecting at login.
 - Hides built-in laptop devices in the dashboard by default, with an **Include built-in devices** toggle.
+- Emits **Connection Contract v1**, the schema shared with TBDoctor, either as a
+  one-shot export or over HTTP for the [Connection Dashboard](https://github.com/mhuot/connection-dashboard).
 - Runs natively on Windows ARM64 and x64 with .NET 8.
 
 ## Build and run
@@ -45,6 +47,8 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `probe` | Print the current present-only connection state |
 | `tree` | Print the parent-device topology |
 | `snapshot [path]` | Save the current state as JSON |
+| `contract [path]` | Export the current state as a Connection Contract v1 envelope |
+| `serve [port]` | Serve `/contract` and `/events` for the dashboard (default 8787, loopback) |
 | `baseline save [path]` | Save a known-good state |
 | `diff [path]` | Compare current state with known-good and diagnose changes |
 | `report` | Stitch recorded changes into incidents and print them newest-first |
@@ -58,6 +62,29 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
 Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
+
+## Feeding the dashboard
+
+```powershell
+connectiondoctor install          # start recording, and keep recording at login
+connectiondoctor serve            # GET /contract and GET /events on 127.0.0.1:8787
+```
+
+Then add `http://localhost:8787` as a host in the
+[Connection Dashboard](https://github.com/mhuot/connection-dashboard). Add
+`--bind lan` to serve the fleet; that is unauthenticated read-only telemetry, so
+it is opt-in and needs a one-time `netsh http add urlacl` from an elevated
+prompt.
+
+Two fields are deliberately honest about what Windows does not tell us here:
+
+- `nodes[].protocol` is `unknown` for USB links, and `tunneled` is always false.
+  SetupAPI reports no negotiated link speed, so guessing usb2 against usb3 —
+  or claiming a USB4 tunnel — would be inventing evidence. Real speeds need
+  `IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX`.
+- `displaysKnown` is false and `displays` is absent, because native pixel sizes
+  need `QueryDisplayConfig`. "We do not know" is a different claim from
+  "nothing is attached".
 
 ## Why not TBDoctor for Windows?
 
@@ -78,6 +105,7 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 5. QueryDisplayConfig display-path correlation and USB4 route details.
 6. Expand the initial live dashboard into a charted timeline and graphical physical/logical topology inspired by TBDoctor.
 7. MCP tools for probe, diagnosis, incidents, and diagrams.
+8. Real USB link speeds and USB4 tunnel facts, so `protocol` and `tunneled` stop saying "unknown".
 
 ## Naming
 

@@ -12,25 +12,10 @@ internal static class TopologyRenderer
         writer.WriteLine($"ConnectionDoctor tree - {snapshot.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}");
         writer.WriteLine($"{snapshot.HostName} [{(snapshot.Power.LineOnline ? "AC" : "battery")}, {snapshot.Power.BatteryPercent}%]");
 
-        var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
-        var interesting = DeviceFilters.VisibleConnectionDevices(snapshot, includeBuiltIn).ToList();
-        var includedIds = new HashSet<string>(interesting.Select(device => device.InstanceId), StringComparer.OrdinalIgnoreCase);
-
-        foreach (var device in interesting)
-        {
-            var parentId = device.ParentInstanceId;
-            while (parentId is not null && byId.TryGetValue(parentId, out var parent))
-            {
-                if (DeviceFilters.IsConnectionDevice(parent, byId) &&
-                    (includeBuiltIn || DeviceFilters.IsExternalDevice(parent, byId)))
-                {
-                    includedIds.Add(parent.InstanceId);
-                }
-                parentId = parent.ParentInstanceId;
-            }
-        }
-
-        var included = snapshot.Devices.Where(device => includedIds.Contains(device.InstanceId)).ToList();
+        var included = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn);
+        var includedIds = new HashSet<string>(
+            included.Select(device => device.InstanceId),
+            StringComparer.OrdinalIgnoreCase);
         var children = included
             .Where(device => device.ParentInstanceId is not null && includedIds.Contains(device.ParentInstanceId))
             .GroupBy(device => device.ParentInstanceId!, StringComparer.OrdinalIgnoreCase)

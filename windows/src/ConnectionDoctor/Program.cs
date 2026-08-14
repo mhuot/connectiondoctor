@@ -1,4 +1,4 @@
-﻿namespace ConnectionDoctor;
+namespace ConnectionDoctor;
 
 internal static class Program
 {
@@ -19,6 +19,8 @@ internal static class Program
                 "probe" => Probe(),
                 "tree" => Tree(),
                 "snapshot" => Snapshot(args.Skip(1).FirstOrDefault()),
+                "contract" => Contract(args.Skip(1).FirstOrDefault()),
+                "serve" => Serve(args.Skip(1).ToArray()),
                 "baseline" => Baseline(args.Skip(1).ToArray()),
                 "diff" => Diff(args.Skip(1).FirstOrDefault()),
                 "report" => Report(),
@@ -80,6 +82,39 @@ internal static class Program
         SnapshotStore.Save(DeviceProbe.Capture(), destination);
         Console.WriteLine($"Saved snapshot to {Path.GetFullPath(destination)}");
         return 0;
+    }
+
+    private static int Contract(string? path)
+    {
+        var json = ContractV1.Serialize(ContractV1.ToEnvelope(DeviceProbe.Capture()));
+        if (path is null)
+        {
+            Console.WriteLine(json);
+            return 0;
+        }
+
+        var fullPath = Path.GetFullPath(path);
+        Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+        File.WriteAllText(fullPath, json);
+        Console.WriteLine($"Saved Connection Contract v1 envelope to {fullPath}");
+        return 0;
+    }
+
+    private static int Serve(string[] args)
+    {
+        var port = ContractServer.DefaultPort;
+        var portArgument = args.FirstOrDefault(argument => !argument.StartsWith('-'));
+        if (portArgument is not null &&
+            (!int.TryParse(portArgument, out port) || port is < 1 or > 65535))
+        {
+            Console.Error.WriteLine(
+                $"Usage: connectiondoctor serve [port] [--bind lan]   (default {ContractServer.DefaultPort})");
+            return 1;
+        }
+
+        var lan = args.Contains("--bind", StringComparer.OrdinalIgnoreCase) &&
+                  args.Contains("lan", StringComparer.OrdinalIgnoreCase);
+        return ContractServer.Run(port, lan);
     }
 
     private static int Baseline(string[] args)
@@ -216,6 +251,8 @@ internal static class Program
               probe                    Show the current present-only connection state
               tree                     Draw the current parent-device topology
               snapshot [path]          Save the current state as JSON
+              contract [path]          Export state as a Connection Contract v1 envelope
+              serve [port]             Serve /contract and /events for the dashboard
               baseline save [path]     Save a known-good state
               diff [baseline-path]     Compare current state with known-good
               report                   Summarize recorded incidents newest-first
