@@ -104,3 +104,15 @@ describe('isDeficit', () => {
     expect(isDeficit({ ...base, externalConnected: false, batteryRateMilliwatts: -10500 })).toBe(false);
   });
 });
+
+describe('live producer round-trip', () => {
+  it('parses a contract emitted by TBDoctor on an M4 mini (desktop)', () => {
+    const env = parseEnvelope(JSON.parse(fixture('mini-desktop.v1.json')));
+    expect(env.power.source).toBe('mains');
+    expect(env.power.batteryPresent).toBe(false);
+    expect(env.host.model).toBe('Mac16,10');
+    expect(buildTree(env.nodes).orphanIds).toEqual([]);
+    // No Thunderbolt link on this machine — nothing may claim tunneling.
+    expect(env.nodes.every((n) => !n.tunneled)).toBe(true);
+  });
+});
