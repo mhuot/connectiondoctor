@@ -166,6 +166,57 @@ public sealed class ContractV1Tests
         Assert.Equal(0, device.UsbClass);
     }
 
+    // The parameter is int, not UsbLinkSpeed: xunit needs public test methods,
+    // and a public signature cannot expose an internal type.
+    [Theory]
+    [InlineData((int)UsbLinkSpeed.Low, "usbLow", 1_500_000L)]
+    [InlineData((int)UsbLinkSpeed.Full, "usbLow", 12_000_000L)]
+    [InlineData((int)UsbLinkSpeed.High, "usb2", 480_000_000L)]
+    [InlineData((int)UsbLinkSpeed.Super, "usb3", 5_000_000_000L)]
+    [InlineData((int)UsbLinkSpeed.SuperPlus, "usb3", 10_000_000_000L)]
+    public void NegotiatedSpeedBecomesProtocolAndRate(
+        int negotiated,
+        string protocol,
+        long bitsPerSecond)
+    {
+        var device = SnapshotComparerTests.Device(@"USB\VID_046D&PID_C08A\X", "USB", "Some device")
+            with { LinkSpeed = (UsbLinkSpeed)negotiated };
+        var snapshot = SnapshotComparerTests.Snapshot(device);
+
+        var node = ContractV1.ToEnvelope(snapshot).Nodes
+            .Single(item => item.Platform is not null && item.Platform["instanceId"] == device.InstanceId);
+
+        Assert.Equal(protocol, node.Protocol);
+        Assert.Equal(bitsPerSecond, node.LinkBitsPerSecond);
+    }
+
+    [Fact]
+    public void UnmeasuredLinksStaySilentRatherThanGuessing()
+    {
+        var device = SnapshotComparerTests.Device(@"USB\VID_046D&PID_C08A\X", "USB", "Some device");
+        var snapshot = SnapshotComparerTests.Snapshot(device);
+
+        var node = ContractV1.ToEnvelope(snapshot).Nodes
+            .Single(item => item.Platform is not null && item.Platform["instanceId"] == device.InstanceId);
+
+        Assert.Equal("unknown", node.Protocol);
+        Assert.Null(node.LinkBitsPerSecond);
+    }
+
+    [Fact]
+    public void KnowingTheSpeedStillDoesNotClaimAUsb4Tunnel()
+    {
+        // 10 Gbps is not evidence of tunneling; only USB4 router facts would be.
+        var device = SnapshotComparerTests.Device(@"USB\VID_046D&PID_C08A\X", "USB", "Fast device")
+            with { LinkSpeed = UsbLinkSpeed.SuperPlus };
+
+        var node = ContractV1.ToEnvelope(SnapshotComparerTests.Snapshot(device)).Nodes
+            .Single(item => item.Platform is not null && item.Platform["instanceId"] == device.InstanceId);
+
+        Assert.Equal("usb3", node.Protocol);
+        Assert.False(node.Tunneled);
+    }
+
     [Fact]
     public void NothingClaimsToBeTunneledBecauseNothingHereCanProveIt()
     {

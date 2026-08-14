@@ -32,6 +32,16 @@ internal static class TopologyRenderer
         }
     }
 
+    private static string Describe(UsbLinkSpeed speed) => speed switch
+    {
+        UsbLinkSpeed.Low => " 1.5Mb",
+        UsbLinkSpeed.Full => " 12Mb",
+        UsbLinkSpeed.High => " 480Mb",
+        UsbLinkSpeed.Super => " 5Gb",
+        UsbLinkSpeed.SuperPlus => " 10Gb",
+        _ => string.Empty
+    };
+
     private static void WriteNode(
         DeviceNode node,
         string prefix,
@@ -42,7 +52,8 @@ internal static class TopologyRenderer
     {
         var connector = isRoot ? string.Empty : isLast ? "└── " : "├── ";
         var id = node.VidPid is null ? string.Empty : $" [{node.VidPid}]";
-        writer.WriteLine($"{prefix}{connector}{node.FriendlyName} ({node.ClassName}){id}");
+        var speed = Describe(node.LinkSpeed);
+        writer.WriteLine($"{prefix}{connector}{node.FriendlyName} ({node.ClassName}){id}{speed}");
 
         if (!children.TryGetValue(node.InstanceId, out var childNodes))
         {
