@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -17,6 +17,15 @@
 
   <ItemGroup>
     <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <!-- The Connection Dashboard bundle, staged by scripts/build-ui.ps1 and
+       compiled in so users need no Node. Absent in a plain source build; the
+       server reports that rather than failing. -->
+  <ItemGroup>
+    <EmbeddedResource Include="ui/**/*" Exclude="ui/**/*.map">
+      <LogicalName>ui/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
 </Project>

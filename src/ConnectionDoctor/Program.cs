@@ -28,7 +28,8 @@ internal static class Program
                 "status" => Status(),
                 "install" => Install(),
                 "uninstall" => Uninstall(),
-                "ui" or "dashboard" => Dashboard(showImmediately: true),
+                "ui" or "dashboard" => ContractServer.OpenDashboard(ContractServer.DefaultPort),
+                "winui" => Dashboard(showImmediately: true),
                 "tray" => Dashboard(showImmediately: false),
                 "help" or "--help" or "-h" => Help(),
                 _ => Unknown(command)
@@ -261,7 +262,8 @@ internal static class Program
               status                   Show background collector health
               install                  Start collecting now and at user login
               uninstall                Remove login startup registration
-              ui                       Open the live dashboard
+              ui                       Open the Connection Dashboard in a browser
+              winui                    Open the legacy WinForms dashboard window
               tray                     Run the notification-area UI
             """);
         return 0;

@@ -57,24 +57,41 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `status` | Report collector process and heartbeat health |
 | `install` | Start collecting and register startup for the current user |
 | `uninstall` | Remove the startup registration |
-| `ui` | Open or activate the live dashboard |
+| `ui` | Serve and open the Connection Dashboard in a browser |
+| `winui` | Open the legacy WinForms dashboard window |
 | `tray` | Run the notification-area dashboard host |
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
 Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
 
-## Feeding the dashboard
+## The dashboard
+
+The [Connection Dashboard](https://github.com/mhuot/connection-dashboard) is
+compiled into the exe. There is nothing to install alongside it — no Node, no
+second app, no separate web server:
 
 ```powershell
 connectiondoctor install          # start recording, and keep recording at login
-connectiondoctor serve            # GET /contract and GET /events on 127.0.0.1:8787
+connectiondoctor ui               # opens the dashboard in your browser
 ```
 
-Then add `http://localhost:8787` as a host in the
-[Connection Dashboard](https://github.com/mhuot/connection-dashboard). Add
-`--bind lan` to serve the fleet; that is unauthenticated read-only telemetry, so
-it is opt-in and needs a one-time `netsh http add urlacl` from an elevated
-prompt.
+`ui` serves on 127.0.0.1:8787 and opens it; if a collector or `serve` already
+holds the port it just opens the browser. The page connects to the machine it
+is served from, so the topology is on screen with nothing to type.
+
+Add `--bind lan` to `serve` to view the fleet from another machine. That is
+unauthenticated read-only telemetry, so it is opt-in and needs a one-time
+`netsh http add urlacl` from an elevated prompt.
+
+Rebuilding the embedded UI needs Node, and only for whoever builds a release:
+
+```powershell
+.\scripts\build-ui.ps1           # builds ../connection-dashboard, stages dist
+dotnet build .\ConnectionDoctor.sln
+```
+
+A build with nothing staged still works; `/` then explains that instead of
+serving a UI.
 
 Two fields are deliberately honest about what Windows does not tell us here:
 
@@ -103,7 +120,7 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 3. Incident stitching that separates root events from downstream fallout.
 4. Modern Standby and lid-action awareness.
 5. QueryDisplayConfig display-path correlation and USB4 route details.
-6. Expand the initial live dashboard into a charted timeline and graphical physical/logical topology inspired by TBDoctor.
+6. Retire the WinForms dashboard once the React UI covers the tray workflows.
 7. MCP tools for probe, diagnosis, incidents, and diagrams.
 8. Real USB link speeds and USB4 tunnel facts, so `protocol` and `tunneled` stop saying "unknown".
 
