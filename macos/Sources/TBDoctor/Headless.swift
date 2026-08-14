@@ -7,6 +7,11 @@ enum Headless {
 
     static func run(_ arguments: [String]) -> Bool {
         if arguments.contains("--mcp") { MCPServer.serve(); return true }
+        if let i = arguments.firstIndex(of: "--serve") {
+            let port = i + 1 < arguments.count ? UInt16(arguments[i + 1]) ?? 8787 : 8787
+            Serve.run(port: port, lan: arguments.contains("--bind") && arguments.contains("lan"))
+            return true
+        }
         if arguments.contains("--probe") { probe(); return true }
         if arguments.contains("--tree") { tree(mode: arguments.contains("--full") ? .full : .physical); return true }
         if let i = arguments.firstIndex(of: "--contract") {
@@ -32,6 +37,8 @@ enum Headless {
           --report     analyse recorded history and print findings
           --watch      stream a live one-line-per-sample table
           --mcp        run as an MCP server on stdio (for coding agents)
+          --serve [port]      HTTP endpoint for the dashboard (default 8787,
+                              loopback; add --bind lan to expose on the LAN)
           --help       this message
 
         Recorded data lives in \(Store.directory.path)

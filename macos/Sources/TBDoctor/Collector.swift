@@ -110,6 +110,9 @@ final class Collector: ObservableObject {
 
     private let sampleStore = Store(filename: "samples.jsonl")
     private let eventStore = Store(filename: "events.jsonl")
+    private let contractLog = ContractLog()
+    /// Kernel events since the last tick, so linkDown carries the root timestamp.
+    private var pendingKernelEvents: [KernelEvent] = []
 
     /// Set when another collector already owns the store. Two collectors
     /// appending to one JSONL interleave their samples and produce duplicate
@@ -192,6 +195,8 @@ final class Collector: ObservableObject {
         current = sample
         samples.append(sample)
         sampleStore.append(sample)
+        contractLog.record(sample, kernelEvents: pendingKernelEvents)
+        pendingKernelEvents = []
 
         // Switch cadence based on whether we are inside an active window.
         let shouldBeFast = lastEventAt.map { Date().timeIntervalSince($0) < activeWindow } ?? false
@@ -206,6 +211,7 @@ final class Collector: ObservableObject {
         events.append(contentsOf: fresh)
         events.sort { $0.t < $1.t }
         eventStore.append(fresh)
+        pendingKernelEvents.append(contentsOf: fresh)
         lastEventAt = fresh.last?.t
 
         // Take an immediate sample so the analyser has power state from the
