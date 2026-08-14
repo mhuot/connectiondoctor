@@ -14,12 +14,25 @@ evaluated and rejected), capability specs, and task list.
 
 ## Run
 
+Most people should never run this repo directly: both collectors compile the
+built bundle into their own binary, so the dashboard arrives with them. Run
+[ConnectionDoctor](https://github.com/mhuot/connectiondoctor) `ui` on Windows or
+[TBDoctor](https://github.com/mhuot/tbdoctor) `--serve` on macOS and open
+http://localhost:8787 — the page adopts the machine serving it, so there is
+nothing to configure.
+
+To work on the UI itself:
+
 ```sh
 cd app
 npm install
 npm run dev     # then drop contract .json / events .jsonl files, or "Load fleet fixtures"
-npm test        # 27 tests: contract ingest, topology collapse, layout invariants, migrations
+npm test        # 28 tests: contract ingest, topology collapse, layout invariants, migrations
 ```
+
+`docs/embedding.md` is the contract between this bundle and the collectors that
+serve it — routes, MIME types, caching, path safety. Both producers implement
+it, so the same build behaves identically on either OS.
 
 ## What works today
 
@@ -40,7 +53,9 @@ npm test        # 27 tests: contract ingest, topology collapse, layout invariant
 Fixtures are real recordings from this fleet: an M3 Pro on a Surface TB4 dock
 chain, and the Mac mini's actual KVM flip at 22:19:06Z.
 
-## Next (per tasks.md)
+## Next
 
-Wire HttpSource UI once collectors emit v1 (tbdoctor#1 / connectiondoctor#15),
-then a Tauri wrap as its own OpenSpec change.
+ConnectionDoctor emits v1 and serves this bundle; TBDoctor does the same on
+macOS. Remaining: a release pipeline so each collector ships a downloadable
+binary, and retiring the collectors' native dashboards now that this is the UI
+for both.

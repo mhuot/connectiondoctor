@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { HostData } from './data/store';
 import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
@@ -18,6 +18,27 @@ export function App() {
   const [activeHost, setActiveHost] = useState<string>();
   const [error, setError] = useState<string>();
   const [url, setUrl] = useState('');
+  const [selfChecked, setSelfChecked] = useState(false);
+
+  // When a collector serves this bundle itself — ConnectionDoctor.exe on
+  // Windows, TBDoctor on macOS — the machine you are sitting at is already
+  // behind this origin. Adopting it means opening the URL is the whole setup.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const host = await loadHttp(window.location.origin);
+        if (!cancelled) setHosts((prev) => (prev.length > 0 ? prev : [host]));
+      } catch {
+        // Served by Vite in dev, or from a static host: no local collector.
+      } finally {
+        if (!cancelled) setSelfChecked(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const addUrl = async () => {
     if (!url) return;
@@ -90,9 +111,11 @@ export function App() {
 
       {hosts.length === 0 ? (
         <div className="empty-state">
-          <p>Drop Connection Contract v1 files anywhere — an envelope <code>.json</code> per host,
-            and/or an events <code>.jsonl</code> — or load the built-in fixtures
-            (real recordings from an M3 Pro + Surface TB4 dock chain and a KVM switch).</p>
+          {selfChecked && (
+            <p>Drop Connection Contract v1 files anywhere — an envelope <code>.json</code> per host,
+              and/or an events <code>.jsonl</code> — add a collector by address, or load the built-in
+              fixtures (real recordings from an M3 Pro + Surface TB4 dock chain and a KVM switch).</p>
+          )}
         </div>
       ) : (
         <>
