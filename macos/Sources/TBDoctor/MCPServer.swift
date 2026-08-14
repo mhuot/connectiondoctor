@@ -110,6 +110,16 @@ enum MCPServer {
                 ]
             ],
             [
+                "name": "tb_contract",
+                "description": """
+                The current state as a Connection Contract v1 envelope (JSON) — the shared schema \
+                also emitted by ConnectionDoctor on Windows and consumed by the Connection Dashboard. \
+                Flat node list with parentId, VID:PID identity, power source incl. dock/mains, honest \
+                tunneling flags. Use this when another tool or dashboard needs this machine's topology.
+                """,
+                "inputSchema": ["type": "object", "properties": [:] as [String: Any]]
+            ],
+            [
                 "name": "tb_incidents",
                 "description": """
                 Discrete fault incidents reconstructed from kernel events and power samples, newest \
@@ -159,6 +169,14 @@ enum MCPServer {
                 respond(id: id, result: ["content": [["type": "text", "text": json]]])
             } else {
                 respondError(id: id, code: -32603, message: "Could not build diagram")
+            }
+
+        case "tb_contract":
+            if let data = try? Contract.json(from: Probes.sample()),
+               let json = String(data: data, encoding: .utf8) {
+                respond(id: id, result: ["content": [["type": "text", "text": json]]])
+            } else {
+                respondError(id: id, code: -32603, message: "Could not build contract")
             }
 
         case "tb_incidents":

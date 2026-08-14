@@ -9,6 +9,10 @@ enum Headless {
         if arguments.contains("--mcp") { MCPServer.serve(); return true }
         if arguments.contains("--probe") { probe(); return true }
         if arguments.contains("--tree") { tree(mode: arguments.contains("--full") ? .full : .physical); return true }
+        if let i = arguments.firstIndex(of: "--contract") {
+            contract(to: i + 1 < arguments.count && !arguments[i + 1].hasPrefix("--") ? arguments[i + 1] : nil)
+            return true
+        }
         if let i = arguments.firstIndex(of: "--excalidraw"), i + 1 < arguments.count {
             excalidraw(to: arguments[i + 1], style: styleArgument(arguments),
                        mode: arguments.contains("--full") ? .full : .physical); return true
@@ -101,6 +105,23 @@ enum Headless {
 
         for (index, child) in node.children.enumerated() {
             render(child, ancestorsLast: ancestorsLast + [isLast], isLast: index == node.children.count - 1)
+        }
+    }
+
+    // MARK: - Contract
+
+    static func contract(to path: String?) {
+        do {
+            let data = try Contract.json(from: Probes.sample())
+            if let path {
+                try data.write(to: URL(fileURLWithPath: path))
+                print("Wrote \(path)")
+            } else if let text = String(data: data, encoding: .utf8) {
+                print(text)
+            }
+        } catch {
+            FileHandle.standardError.write("TBDoctor: \(error)\n".data(using: .utf8)!)
+            exit(1)
         }
     }
 
