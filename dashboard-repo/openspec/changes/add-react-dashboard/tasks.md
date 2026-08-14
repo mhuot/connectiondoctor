@@ -7,21 +7,21 @@
 - [x] 1.4 Fixtures from real fleet recordings (mini KVM flip, Surface-dock chain, 08-13 deficit incident) + parser tests over them
 
 ## 2. Domain
-- [ ] 2.1 `domain/topology.ts` — tree build + physical collapse (port of TBDoctor Topology: enclosure fold, controller-silicon list, +N internal, never fold thunderbolt nodes)
-- [ ] 2.2 `domain/layout.ts` — cascade/topDown/flow placement + orthogonal edge routing incl. out-of-footprint DP edges (port of TBDoctor Diagram); golden tests against captured Swift engine output
-- [ ] 2.3 `domain/incidents.ts` — event grouping (30s gap), root attribution, sharedParent
-- [ ] 2.4 `domain/migrate.ts` — cross-host migration detection per fleet-view spec (120s window, branch collapse, count-matching for duplicate vidPids) + tests
+- [x] 2.1 `domain/topology.ts` — tree build + physical collapse (port of TBDoctor Topology: enclosure fold, controller-silicon list, +N internal, never fold thunderbolt nodes)
+- [x] 2.2 `domain/layout.ts` — cascade/topDown/flow placement + orthogonal edge routing incl. out-of-footprint DP edges (port of TBDoctor Diagram); invariant tests (overlap/orthogonality/canvas); golden-vs-Swift deferred — needs a dump mode in TBDoctor
+- [x] 2.3 `domain/incidents.ts` — event grouping (30s gap), root attribution, sharedParent
+- [x] 2.4 `domain/migrate.ts` — cross-host migration detection per fleet-view spec (120s window, branch collapse, count-matching for duplicate vidPids) + tests
 
 ## 3. Views
-- [ ] 3.1 TopologyView: SVG canvas, protocol colours, tunneled dashes, zoom, layout picker, physical/logical toggle (persisted)
-- [ ] 3.2 Inspector panel: all node fields, copy per row, VID:PID lookup
-- [ ] 3.3 TimelineView: step-interpolated link chart, power chart, device count, root-event rules, findings with evidence, incident list
-- [ ] 3.4 FleetView: host cards + migration arrows; "recorded <time>" labelling throughout
+- [x] 3.1 TopologyView: SVG canvas, protocol colours, tunneled dashes, zoom, layout picker, physical/logical toggle (persisted)
+- [x] 3.2 Inspector panel: all node fields, copy per row, VID:PID lookup
+- [x] 3.3 TimelineView: step-interpolated link chart, power chart, device count, root-event rules, findings with evidence, incident list
+- [x] 3.4 FleetView: host cards + migration arrows; "recorded <time>" labelling throughout
 
 ## 4. Data sources
-- [ ] 4.1 `data/sources.ts` — Source interface; FileSource (drag-drop + picker)
-- [ ] 4.2 HttpSource stub behind the same interface (poll GET /contract when a base URL is configured)
+- [x] 4.1 `data/sources.ts` — Source interface; FileSource (drag-drop + picker)
+- [x] 4.2 HttpSource stub behind the same interface (loadHttp in sources.ts; no UI affordance yet — needs collectors emitting v1 first)
 
 ## 5. Wrap-up
-- [ ] 5.1 README with screenshots from fixtures; note Tauri wrap + collector endpoints as follow-up changes
+- [x] 5.1 README with screenshots from fixtures; note Tauri wrap + collector endpoints as follow-up changes
 - [ ] 5.2 `openspec archive add-react-dashboard` after review

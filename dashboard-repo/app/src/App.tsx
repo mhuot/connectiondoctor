@@ -1,122 +1,86 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import { useCallback, useState } from 'react';
+import type { HostData } from './data/store';
+import { loadFiles } from './data/sources';
+import { TopologyView } from './components/TopologyView';
+import { TimelineView } from './components/TimelineView';
+import { FleetView } from './components/FleetView';
+import { parseEnvelope, parseEventStream } from './contract/parse';
+import surfaceChain from './contract/fixtures/surface-chain.v1.json';
+import kvmMini from './contract/fixtures/kvm-mini.events.jsonl?raw';
+import kvmSurface from './contract/fixtures/kvm-surface.events.jsonl?raw';
+import './App.css';
 
-function App() {
-  const [count, setCount] = useState(0)
+type Tab = 'topology' | 'timeline' | 'fleet';
+
+export function App() {
+  const [hosts, setHosts] = useState<HostData[]>([]);
+  const [tab, setTab] = useState<Tab>('topology');
+  const [activeHost, setActiveHost] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  const active = hosts.find((h) => h.name === activeHost) ?? hosts.find((h) => h.envelope);
+
+  const onDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    try {
+      const next = await loadFiles([...e.dataTransfer.files], hosts);
+      setHosts(next);
+      setError(undefined);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }, [hosts]);
+
+  const loadFixtures = () => {
+    setHosts([
+      { name: 'm3pro', envelope: parseEnvelope(surfaceChain), events: [], origin: 'fixture' },
+      { name: 'mini', events: parseEventStream(kvmMini).events, origin: 'fixture' },
+      { name: 'surface', events: parseEventStream(kvmSurface).events, origin: 'fixture' },
+    ]);
+    setError(undefined);
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="app" onDrop={onDrop} onDragOver={(e) => e.preventDefault()}>
+      <header className="app-header">
+        <h1>Connection Dashboard</h1>
+        <nav>
+          {(['topology', 'timeline', 'fleet'] as const).map((t) => (
+            <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
+              {t[0].toUpperCase() + t.slice(1)}
+            </button>
+          ))}
+        </nav>
+        <span className="spacer" />
+        {hosts.length > 1 && (
+          <select value={active?.name} onChange={(e) => setActiveHost(e.target.value)}>
+            {hosts.map((h) => <option key={h.name}>{h.name}</option>)}
+          </select>
+        )}
+        <button onClick={loadFixtures}>Load fleet fixtures</button>
+      </header>
 
-      <div className="ticks"></div>
+      {error && <p className="error">{error}</p>}
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      {hosts.length === 0 ? (
+        <div className="empty-state">
+          <p>Drop Connection Contract v1 files anywhere — an envelope <code>.json</code> per host,
+            and/or an events <code>.jsonl</code> — or load the built-in fixtures
+            (real recordings from an M3 Pro + Surface TB4 dock chain and a KVM switch).</p>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      ) : (
+        <>
+          {tab === 'topology' && (active?.envelope ? (
+            <TopologyView envelope={active.envelope}
+              recordedLabel={`recorded ${active.envelope.capturedAt}`} />
+          ) : <p className="empty">Selected host has no envelope loaded.</p>)}
+          {tab === 'timeline' && (
+            <TimelineView events={active?.events ?? []} snapshot={active?.envelope}
+              recordedLabel={active ? `recorded · ${active.origin}` : ''} />
+          )}
+          {tab === 'fleet' && <FleetView hosts={hosts} />}
+        </>
+      )}
+    </div>
+  );
 }
-
-export default App
