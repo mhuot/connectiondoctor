@@ -13,6 +13,7 @@ internal static class DeviceProbe
     private const uint SpdrpManufacturer = 0x0000000B;
     private const uint SpdrpFriendlyName = 0x0000000C;
     private const uint SpdrpClass = 0x00000007;
+    private const uint SpdrpCompatibleIds = 0x00000002;
     private const uint CrSuccess = 0;
     private static readonly IntPtr InvalidHandleValue = new(-1);
 
@@ -65,8 +66,9 @@ internal static class DeviceProbe
                 var className = ReadRegistryProperty(deviceInfoSet, ref data, SpdrpClass) ?? "Unknown";
                 var manufacturer = ReadRegistryProperty(deviceInfoSet, ref data, SpdrpManufacturer);
                 var parent = ReadParentInstanceId(data.DeviceInstance);
+                var compatibleIds = ReadRegistryMultiString(deviceInfoSet, ref data, SpdrpCompatibleIds);
 
-                devices.Add(new DeviceNode(instanceId, className, name, manufacturer, parent));
+                devices.Add(new DeviceNode(instanceId, className, name, manufacturer, parent, compatibleIds));
             }
 
             return devices;
@@ -106,6 +108,27 @@ internal static class DeviceProbe
         var value = Encoding.Unicode.GetString(buffer);
         var terminator = value.IndexOf('\0');
         return terminator >= 0 ? value[..terminator] : value;
+    }
+
+    /// <summary>REG_MULTI_SZ property flattened to one semicolon-joined string.</summary>
+    private static string? ReadRegistryMultiString(IntPtr deviceInfoSet, ref SpDevInfoData data, uint property)
+    {
+        var buffer = new byte[4096];
+        if (!SetupDiGetDeviceRegistryPropertyW(
+                deviceInfoSet,
+                ref data,
+                property,
+                out _,
+                buffer,
+                (uint)buffer.Length,
+                out var size))
+        {
+            return null;
+        }
+
+        var value = Encoding.Unicode.GetString(buffer, 0, Math.Min((int)size, buffer.Length));
+        var parts = value.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? null : string.Join(';', parts);
     }
 
     private static string? ReadParentInstanceId(uint deviceInstance)
