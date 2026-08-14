@@ -1,0 +1,5 @@
+{"t":"2026-08-13T22:19:06Z","kind":"deviceRemoved","nodeId":"usb:0x00120000","vidPid":"05E3:0608","name":"USB2.0 Hub"}
+{"t":"2026-08-13T22:19:06Z","kind":"deviceRemoved","nodeId":"usb:0x00124000","vidPid":"043E:9C04","name":"4-Port USB 2.0 Hub"}
+{"t":"2026-08-13T22:19:06Z","kind":"deviceRemoved","nodeId":"usb:0x00124100","vidPid":"046D:C08A","name":"MX Vertical Advanced Ergonomic Mouse"}
+{"t":"2026-08-13T22:19:06Z","kind":"deviceRemoved","nodeId":"usb:0x00124200","vidPid":"05AC:029F","name":"Magic Keyboard with Touch ID and Numeric Keypad"}
+{"t":"2026-08-13T22:19:06Z","kind":"deviceRemoved","nodeId":"usb:0x00124300","vidPid":"043E:9A39","name":"LG Monitor Controls"}
