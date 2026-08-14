@@ -143,6 +143,9 @@ internal static class ContractServer
         }
     }
 
+    /// <summary>Opens the dashboard without starting a server of our own.</summary>
+    public static void OpenInBrowser(int port) => OpenBrowser($"http://localhost:{port}/");
+
     private static void OpenBrowser(string url)
     {
         try

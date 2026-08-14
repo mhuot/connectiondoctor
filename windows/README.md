@@ -59,8 +59,7 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `install` | Start collecting and register startup for the current user |
 | `uninstall` | Remove the startup registration |
 | `ui` | Serve and open the Connection Dashboard in a browser |
-| `winui` | Open the legacy WinForms dashboard window |
-| `tray` | Run the notification-area dashboard host |
+| `tray` | Notification-area status; serves the dashboard for the session |
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
 Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
@@ -76,9 +75,15 @@ connectiondoctor install          # start recording, and keep recording at login
 connectiondoctor ui               # opens the dashboard in your browser
 ```
 
-`ui` serves on 127.0.0.1:8787 and opens it; if a collector or `serve` already
-holds the port it just opens the browser. The page connects to the machine it
-is served from, so the topology is on screen with nothing to type.
+`ui` serves on 127.0.0.1:8787 and opens it; if `tray` or `serve` already holds
+the port it just opens the browser. The page connects to the machine it is
+served from, so the topology is on screen with nothing to type.
+
+`install` registers `tray` at login, and the tray serves the dashboard for the
+whole session — so after installing once, the URL is simply always there. The
+tray itself is a status light and a launcher: it shows whether the collector is
+recording, and copies a paste-into-a-ticket summary. There is no second set of
+views to drift out of step with the React ones.
 
 Add `--bind lan` to `serve` to view the fleet from another machine. That is
 unauthenticated read-only telemetry, so it is opt-in and needs a one-time
@@ -129,9 +134,8 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 3. Incident stitching that separates root events from downstream fallout.
 4. Modern Standby and lid-action awareness.
 5. QueryDisplayConfig display-path correlation and USB4 route details.
-6. Retire the WinForms dashboard once the React UI covers the tray workflows.
-7. MCP tools for probe, diagnosis, incidents, and diagrams.
-8. USB4 router facts, so `tunneled` stops being a flat false.
+6. MCP tools for probe, diagnosis, incidents, and diagrams.
+7. USB4 router facts, so `tunneled` stops being a flat false.
 
 ## Naming
 
