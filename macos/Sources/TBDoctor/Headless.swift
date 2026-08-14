@@ -37,8 +37,9 @@ enum Headless {
           --report     analyse recorded history and print findings
           --watch      stream a live one-line-per-sample table
           --mcp        run as an MCP server on stdio (for coding agents)
-          --serve [port]      HTTP endpoint for the dashboard (default 8787,
-                              loopback; add --bind lan to expose on the LAN)
+          --serve [port]      serve the Connection Dashboard and its data
+                              (default 8787, loopback; add --bind lan to
+                              expose on the LAN), then open http://localhost:8787
           --help       this message
 
         Recorded data lives in \(Store.directory.path)

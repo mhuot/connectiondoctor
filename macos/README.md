@@ -50,6 +50,30 @@ open TBDoctor.app
 Add it to Login Items (System Settings → General → Login Items) so it is recording
 before you need it.
 
+## Dashboard
+
+The [Connection Dashboard](https://github.com/mhuot/connection-dashboard) — the
+same React UI ConnectionDoctor serves on Windows — is compiled into the binary.
+Nothing to install alongside it, no Node, no second app:
+
+```sh
+TBDoctor.app/Contents/MacOS/TBDoctor --serve     # then open http://localhost:8787
+```
+
+The page connects to the machine serving it, so the topology is on screen with
+nothing to type. Add `--bind lan` to view the fleet from another machine; that
+is unauthenticated read-only telemetry and opt-in by design.
+
+Rebuilding the embedded UI needs Node, and only for whoever builds a release:
+
+```sh
+scripts/build-ui.sh    # builds ../connection-dashboard and stages dist
+./build_app.sh
+```
+
+A build with nothing staged still works; `/` then explains that instead of
+serving a UI.
+
 ## Menu bar
 
 A status symbol — shape-coded as well as colour-coded, so it stays readable in a
@@ -75,6 +99,7 @@ TBDoctor.app/Contents/MacOS/TBDoctor --report    # analyse history, print findin
 TBDoctor.app/Contents/MacOS/TBDoctor --watch     # live one-line-per-sample table
 TBDoctor.app/Contents/MacOS/TBDoctor --inspect samples.jsonl   # draw a recorded tree
 TBDoctor.app/Contents/MacOS/TBDoctor --excalidraw out.excalidraw --style flow
+TBDoctor.app/Contents/MacOS/TBDoctor --serve      # dashboard + contract endpoints
 ```
 
 `--inspect` opens the connection tree for a *recorded* sample instead of live

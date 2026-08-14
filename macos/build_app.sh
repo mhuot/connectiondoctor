@@ -16,6 +16,19 @@ rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN" "$APP/Contents/MacOS/TBDoctor"
 
+# SwiftPM emits target resources as a side-by-side bundle. Bundle.module looks
+# in Bundle.main.resourceURL first, so the dashboard only reaches the .app if
+# that bundle is copied into Contents/Resources.
+RESOURCES="$(swift build -c "$CONFIG" --show-bin-path)/TBDoctor_TBDoctor.bundle"
+if [ -d "$RESOURCES" ]; then
+  cp -R "$RESOURCES" "$APP/Contents/Resources/"
+  if [ -f "$RESOURCES/ui/index.html" ]; then
+    echo "Embedded the Connection Dashboard bundle."
+  else
+    echo "note: no dashboard staged; run scripts/build-ui.sh for the built-in UI"
+  fi
+fi
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

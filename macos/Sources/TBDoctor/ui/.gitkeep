@@ -1,0 +1,2 @@
+# Staged by scripts/build-ui.sh. Contents are build output and git-ignored;
+# this file keeps the directory present so SwiftPM's .copy("ui") resolves.
