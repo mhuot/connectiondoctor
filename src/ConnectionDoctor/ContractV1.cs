@@ -74,7 +74,8 @@ internal static class ContractV1
                 Name = device.FriendlyName,
                 VendorName = device.Manufacturer,
                 VidPid = device.VidPid,
-                Protocol = ProtocolOf(kind),
+                Protocol = ProtocolOf(kind, device.LinkSpeed),
+                LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
                 UsbClass = device.UsbClass,
                 Platform = new Dictionary<string, string> { ["instanceId"] = device.InstanceId }
             });
@@ -188,16 +189,41 @@ internal static class ContractV1
     }
 
     /// <summary>
-    /// The link into a node. SetupAPI reports no negotiated speed, so USB links
-    /// say "unknown" rather than guessing usb2 against usb3, and Tunneled stays
-    /// false because nothing available here can prove a USB4 tunnel. Real link
-    /// speeds need IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX.
+    /// The link into a node, from the speed the hub says the port negotiated
+    /// (see UsbSpeedProbe). Still "unknown" when no hub would answer, and
+    /// Tunneled stays false throughout: knowing a link is 10 Gbps does not
+    /// establish that USB4 is tunneling it.
     /// </summary>
-    private static string ProtocolOf(string kind) => kind switch
+    private static string ProtocolOf(string kind, UsbLinkSpeed speed)
     {
-        "display" => "displayPort",
-        "thunderbolt" => "thunderbolt",
-        _ => "unknown"
+        if (kind == "display")
+        {
+            return "displayPort";
+        }
+
+        if (kind == "thunderbolt")
+        {
+            return "thunderbolt";
+        }
+
+        return speed switch
+        {
+            UsbLinkSpeed.Super or UsbLinkSpeed.SuperPlus => "usb3",
+            UsbLinkSpeed.High => "usb2",
+            UsbLinkSpeed.Low or UsbLinkSpeed.Full => "usbLow",
+            _ => "unknown"
+        };
+    }
+
+    /// <summary>Nominal signalling rate for a negotiated speed.</summary>
+    private static long? BitsPerSecond(UsbLinkSpeed speed) => speed switch
+    {
+        UsbLinkSpeed.Low => 1_500_000L,
+        UsbLinkSpeed.Full => 12_000_000L,
+        UsbLinkSpeed.High => 480_000_000L,
+        UsbLinkSpeed.Super => 5_000_000_000L,
+        UsbLinkSpeed.SuperPlus => 10_000_000_000L,
+        _ => null
     };
 
     private static ContractPower ToPower(PowerState power, IReadOnlyList<ContractNode> nodes)
@@ -276,6 +302,7 @@ internal sealed record ContractNode
     public string? VendorName { get; init; }
     public string? VidPid { get; init; }
     public required string Protocol { get; init; }
+    public long? LinkBitsPerSecond { get; init; }
     public bool Tunneled { get; init; }
     public int? UsbClass { get; init; }
     public IReadOnlyDictionary<string, string>? Platform { get; init; }

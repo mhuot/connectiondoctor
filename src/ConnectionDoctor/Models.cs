@@ -22,7 +22,9 @@ internal sealed record DeviceNode(
     string FriendlyName,
     string? Manufacturer,
     string? ParentInstanceId,
-    string? CompatibleIds = null)
+    string? CompatibleIds = null,
+    int? Address = null,
+    UsbLinkSpeed LinkSpeed = UsbLinkSpeed.Unknown)
 {
     /// <summary>bDeviceClass 9 - a hub even when the friendly name says nothing.</summary>
     public const int UsbHubClass = 9;

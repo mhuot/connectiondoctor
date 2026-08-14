@@ -14,12 +14,13 @@ internal static class DeviceProbe
     private const uint SpdrpFriendlyName = 0x0000000C;
     private const uint SpdrpClass = 0x00000007;
     private const uint SpdrpCompatibleIds = 0x00000002;
+    private const uint SpdrpAddress = 0x0000001C;
     private const uint CrSuccess = 0;
     private static readonly IntPtr InvalidHandleValue = new(-1);
 
     public static ConnectionSnapshot Capture()
     {
-        var devices = EnumeratePresentDevices();
+        var devices = UsbSpeedProbe.WithLinkSpeeds(EnumeratePresentDevices());
         return new ConnectionSnapshot(
             DateTimeOffset.Now,
             Environment.MachineName,
@@ -67,8 +68,10 @@ internal static class DeviceProbe
                 var manufacturer = ReadRegistryProperty(deviceInfoSet, ref data, SpdrpManufacturer);
                 var parent = ReadParentInstanceId(data.DeviceInstance);
                 var compatibleIds = ReadRegistryMultiString(deviceInfoSet, ref data, SpdrpCompatibleIds);
+                var address = ReadRegistryDword(deviceInfoSet, ref data, SpdrpAddress);
 
-                devices.Add(new DeviceNode(instanceId, className, name, manufacturer, parent, compatibleIds));
+                devices.Add(new DeviceNode(
+                    instanceId, className, name, manufacturer, parent, compatibleIds, address));
             }
 
             return devices;
@@ -129,6 +132,16 @@ internal static class DeviceProbe
         var value = Encoding.Unicode.GetString(buffer, 0, Math.Min((int)size, buffer.Length));
         var parts = value.Split('\0', StringSplitOptions.RemoveEmptyEntries);
         return parts.Length == 0 ? null : string.Join(';', parts);
+    }
+
+    /// <summary>DWORD property; for a USB device SPDRP_ADDRESS is its port number.</summary>
+    private static int? ReadRegistryDword(IntPtr deviceInfoSet, ref SpDevInfoData data, uint property)
+    {
+        var buffer = new byte[4];
+        return SetupDiGetDeviceRegistryPropertyW(
+            deviceInfoSet, ref data, property, out _, buffer, (uint)buffer.Length, out var size) && size >= 4
+            ? BitConverter.ToInt32(buffer, 0)
+            : null;
     }
 
     private static string? ReadParentInstanceId(uint deviceInstance)

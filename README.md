@@ -8,6 +8,7 @@ The first supported case came from a Surface Laptop 7 connected to an LG UltraWi
 
 - Enumerates only devices that are physically present now; historical Device Manager ghosts are excluded.
 - Reads the Windows parent-device graph through SetupAPI and CfgMgr32.
+- Reports the speed each USB port actually negotiated, asked of the hub itself.
 - Shows USB, USB4, Thunderbolt, monitor, HID, keyboard, mouse, and firmware nodes.
 - Saves auditable JSON snapshots.
 - Captures a known-good baseline and compares it with the current setup.
@@ -93,12 +94,20 @@ dotnet build .\ConnectionDoctor.sln
 A build with nothing staged still works; `/` then explains that instead of
 serving a UI.
 
-Two fields are deliberately honest about what Windows does not tell us here:
+Link speeds are measured, not inferred. SetupAPI exposes no speed property, so
+every hub is asked directly — `IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX`
+per port, plus the V2 form to separate SuperSpeed from SuperSpeed+ — and each
+device is matched to its own port through `SPDRP_ADDRESS`. A port that will not
+answer stays `unknown`, because a wrong speed is worse than an absent one.
 
-- `nodes[].protocol` is `unknown` for USB links, and `tunneled` is always false.
-  SetupAPI reports no negotiated link speed, so guessing usb2 against usb3 —
-  or claiming a USB4 tunnel — would be inventing evidence. Real speeds need
-  `IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX`.
+That makes a degraded link visible rather than merely suspected: a hub whose
+descriptor says USB 2.0 while its port negotiated 12 Mb/s is a cable or
+connector problem, and everything behind it inherits the ceiling.
+
+Two things remain deliberately honest about what Windows does not tell us:
+
+- `tunneled` is always false. Knowing a link runs at 10 Gb/s does not establish
+  that USB4 is tunneling it; only USB4 router facts would.
 - `displaysKnown` is false and `displays` is absent, because native pixel sizes
   need `QueryDisplayConfig`. "We do not know" is a different claim from
   "nothing is attached".
@@ -122,7 +131,7 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 5. QueryDisplayConfig display-path correlation and USB4 route details.
 6. Retire the WinForms dashboard once the React UI covers the tray workflows.
 7. MCP tools for probe, diagnosis, incidents, and diagrams.
-8. Real USB link speeds and USB4 tunnel facts, so `protocol` and `tunneled` stop saying "unknown".
+8. USB4 router facts, so `tunneled` stops being a flat false.
 
 ## Naming
 
