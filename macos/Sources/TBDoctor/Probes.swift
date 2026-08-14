@@ -118,6 +118,7 @@ enum Probes {
         var amperageMilliAmps = 0
         var voltage = 0.0
         var percent = 0
+        var hasBattery = false
     }
 
     static func battery() -> BatteryState {
@@ -137,6 +138,9 @@ enum Probes {
             let maximum = (props["MaxCapacity"] as? NSNumber)?.doubleValue ?? 0
             let ratio = maximum > 0 ? (current / maximum) * 100 : current
             state.percent = min(100, max(0, Int(ratio.rounded())))
+            // Desktops can expose the service with all-zero values; capacity is
+            // the reliable tell for whether a battery physically exists.
+            state.hasBattery = maximum > 0 || current > 0
         }
 
         return state
@@ -222,10 +226,11 @@ enum Probes {
             t: Date(),
             tb: thunderbolt(),
             adapter: adapter(),
-            externalConnected: power.externalConnected,
+            externalConnected: power.externalConnected || !power.hasBattery,
             amperageMilliAmps: power.amperageMilliAmps,
             voltage: power.voltage,
             percent: power.percent,
+            hasBattery: power.hasBattery,
             usb: usb(),
             displays: displays(),
             displaysKnown: displaysAvailable())

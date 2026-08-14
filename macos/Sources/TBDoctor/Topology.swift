@@ -234,15 +234,20 @@ enum Topology {
             kind: .host,
             title: "This Mac",
             subtitle: nil,
-            badges: sample.externalConnected ? ["on AC"] : ["on battery"])
+            badges: sample.isDesktop ? ["mains"] : (sample.externalConnected ? ["on AC"] : ["on battery"]))
         host.linkProtocol = .power
-        host.details = [
-            NodeDetail(label: "External power", value: sample.externalConnected ? "connected" : "not connected"),
-            NodeDetail(label: "Battery", value: "\(sample.percent)%"),
-            NodeDetail(label: "Battery current", value: String(format: "%d mA  (%.1f W)", sample.amperageMilliAmps, sample.batteryWatts)),
-            NodeDetail(label: "Battery voltage", value: String(format: "%.2f V", sample.voltage)),
-            NodeDetail(label: "USB devices", value: String(sample.usb.count))
-        ]
+        host.details = sample.isDesktop
+            ? [
+                NodeDetail(label: "Power", value: "mains (desktop, no battery)"),
+                NodeDetail(label: "USB devices", value: String(sample.usb.count))
+            ]
+            : [
+                NodeDetail(label: "External power", value: sample.externalConnected ? "connected" : "not connected"),
+                NodeDetail(label: "Battery", value: "\(sample.percent)%"),
+                NodeDetail(label: "Battery current", value: String(format: "%d mA  (%.1f W)", sample.amperageMilliAmps, sample.batteryWatts)),
+                NodeDetail(label: "Battery voltage", value: String(format: "%.2f V", sample.voltage)),
+                NodeDetail(label: "USB devices", value: String(sample.usb.count))
+            ]
 
         // USB devices, indexed so children can find parents by location prefix.
         let byLocation = Dictionary(sample.usb.map { ($0.locationID, $0) }, uniquingKeysWith: { a, _ in a })
@@ -436,9 +441,6 @@ enum Topology {
             if let hz = display.refreshHz { node.badges.append(String(format: "%.0f Hz", hz)) }
             node.linkProtocol = .displayPort
             node.carriesDisplay = true
-            // Marked here rather than by the tunnel pass, which has already run
-            // by the time displays are attached.
-            node.isTunneled = !display.isBuiltIn
             node.details = displayDetails(display)
             return node
         }
@@ -471,7 +473,11 @@ enum Topology {
             if !merged {
                 func attachToDock(_ node: inout TopoNode) -> Bool {
                     if node.kind == .thunderbolt {
-                        node.children.append(displayNode(display))
+                        // Only here is the video genuinely tunneled; a display
+                        // hanging straight off the Mac is DP alt mode or HDMI.
+                        var attached = displayNode(display)
+                        attached.isTunneled = true
+                        node.children.append(attached)
                         return true
                     }
                     for index in node.children.indices where attachToDock(&node.children[index]) { return true }
@@ -550,6 +556,15 @@ enum Topology {
 
     private static func powerNode(_ sample: Sample) -> TopoNode {
         guard sample.adapter.isPresent else {
+            if sample.isDesktop {
+                return TopoNode(
+                    id: "power",
+                    kind: .powerSource,
+                    title: "Mains power",
+                    subtitle: "desktop — no battery",
+                    badges: [],
+                    note: "Powered directly from the wall; no adapter or battery telemetry exists on this machine.")
+            }
             return TopoNode(
                 id: "power",
                 kind: .powerSource,

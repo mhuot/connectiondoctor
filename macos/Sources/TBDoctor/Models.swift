@@ -151,6 +151,10 @@ struct Sample: Codable {
     var amperageMilliAmps: Int
     var voltage: Double
     var percent: Int
+    /// nil on recordings made before this field existed; treat as "has one".
+    /// False on desktops (Mac mini, Studio, Pro), which expose no battery —
+    /// zeros there are absence of hardware, not an empty battery.
+    var hasBattery: Bool? = true
     var usb: [USBDevice]
     /// Empty when the process has no window-server session (e.g. over SSH),
     /// which is not the same as "no displays attached".
@@ -158,6 +162,7 @@ struct Sample: Codable {
     var displaysKnown: Bool = true
 
     var tbConnected: Bool { !tb.isEmpty }
+    var isDesktop: Bool { hasBattery == false }
 
     /// Negative while discharging. This is the number that exposed the deficit:
     /// a laptop pulling watts out of the battery while nominally on AC power.

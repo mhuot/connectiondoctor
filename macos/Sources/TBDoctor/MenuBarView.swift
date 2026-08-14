@@ -55,8 +55,12 @@ struct MenuBarView: View {
                 row("Adapter", sample.adapter.summary,
                     detail: sample.adapter.id.map { "ID \($0)" })
 
-                row("Battery", "\(sample.percent)%",
-                    detail: String(format: "%d mA · %.1f W", sample.amperageMilliAmps, sample.batteryWatts))
+                if sample.isDesktop {
+                    row("Power", "mains", detail: "desktop — no battery")
+                } else {
+                    row("Battery", "\(sample.percent)%",
+                        detail: String(format: "%d mA · %.1f W", sample.amperageMilliAmps, sample.batteryWatts))
+                }
 
                 row("USB devices", "\(sample.usb.count)",
                     detail: sample.externalConnected ? "on AC" : "on battery")

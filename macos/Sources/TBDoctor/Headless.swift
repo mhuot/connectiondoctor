@@ -57,8 +57,12 @@ enum Headless {
         if let id = sample.adapter.id { print("  adapter ID     \(id)") }
         if let serial = sample.adapter.serial { print("  serial         \(serial)") }
         print("  external       \(sample.externalConnected ? "yes" : "no")")
-        print(String(format: "  battery        %d%%  %d mA  %.1f W",
-                     sample.percent, sample.amperageMilliAmps, sample.batteryWatts))
+        if sample.isDesktop {
+            print("  battery        none (desktop)")
+        } else {
+            print(String(format: "  battery        %d%%  %d mA  %.1f W",
+                         sample.percent, sample.amperageMilliAmps, sample.batteryWatts))
+        }
 
         print("\nUSB (\(sample.usb.count) devices)")
         for device in sample.usb {
