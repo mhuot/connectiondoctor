@@ -11,6 +11,9 @@ problem — on macOS and Windows, with one dashboard for both.
 | **Connection Dashboard** | The UI for both — topology, timeline, fleet (React) | [`dashboard/`](dashboard/README.md) |
 | **Connection Contract v1** | The JSON shape both collectors emit and the dashboard reads | [`docs/schema-v1.md`](docs/schema-v1.md) |
 | **Embedding contract** | How a collector serves the dashboard bundle | [`docs/embedding.md`](docs/embedding.md) |
+| **CLI / MCP contracts** | One verb set and one MCP tool set for both binaries *(proposed)* | [`docs/cli.md`](docs/cli.md) · [`docs/mcp.md`](docs/mcp.md) |
+| **Architecture** | One binary, three doors, one in-process core; what is shared and how | [`docs/architecture.md`](docs/architecture.md) |
+| **Distribution** | Release artifacts, signing, CI *(proposed)* | [`docs/distribution.md`](docs/distribution.md) |
 
 Both collectors record continuously, emit the same **Connection Contract v1**,
 and compile the dashboard bundle into their own binary. A user downloads one
@@ -65,6 +68,19 @@ docs/        schema-v1.md, embedding.md, images/
 scripts/     build-ui.sh / build-ui.ps1
 openspec/    spec-driven change history (OpenSpec); .claude/ holds the /opsx commands
 ```
+
+## Roadmap
+
+Spec-driven with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The open
+changes under [`openspec/changes/`](openspec/changes/) are the plan, in order:
+`define-interface-contracts` → `add-windows-mcp` · `align-cli-verbs`;
+`contract-findings-incidents` → `macos-resident-serves-dashboard`;
+`contract-conformance`; `release-pipeline`. Each has a proposal, design, spec
+deltas and tasks.
+
+## License
+
+Apache License 2.0 — see [`LICENSE`](LICENSE). Copyright 2026 Mike Huot.
 
 History: this repo was assembled from three repositories — `mhuot/connectiondoctor`,
 `mhuot/tbdoctor`, `mhuot/connection-dashboard` — with `git subtree`, so every

@@ -1,0 +1,38 @@
+# Tag vX.Y.Z → GitHub Release with the artifacts listed in docs/distribution.md.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - id: v
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+  build:
+    needs: meta
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.meta.outputs.version }}
+      release: true
+    secrets: inherit
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { path: dist }
+      - name: Collect and checksum
+        run: |
+          mkdir -p out
+          cp dist/macos/* out/ && cp dist/windows/* out/
+          (cd out && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+      - name: Create GitHub Release
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* --title "$GITHUB_REF_NAME" --notes-from-tag --verify-tag

@@ -4,3 +4,5 @@ TBDoctor.app/
 *.tgz
 .DS_Store
 
+TBDoctor-*.dmg
+TBDoctor-*.zip

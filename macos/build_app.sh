@@ -7,6 +7,11 @@ set -euo pipefail
 cd "$(dirname "$0")"
 CONFIG="${1:-release}"
 APP="TBDoctor.app"
+# VERSION comes from the release tag in CI (docs/distribution.md); local builds
+# default to a dev marker. SIGN_IDENTITY selects a Developer ID certificate;
+# empty means ad-hoc, which is enough to run locally.
+VERSION="${VERSION:-0.0.0-dev}"
+SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 
 echo "Building ($CONFIG)…"
 swift build -c "$CONFIG"
@@ -29,7 +34,7 @@ if [ -d "$RESOURCES" ]; then
   fi
 fi
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
+cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -39,8 +44,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key>      <string>TBDoctor</string>
     <key>CFBundleIdentifier</key>      <string>net.mhuot.tbdoctor</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
-    <key>CFBundleShortVersionString</key> <string>1.0.0</string>
-    <key>CFBundleVersion</key>         <string>1</string>
+    <key>CFBundleShortVersionString</key> <string>${VERSION%%-*}</string>
+    <key>CFBundleVersion</key>         <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>  <string>14.0</string>
     <!-- Menu bar only: no Dock icon, no window on launch. -->
     <key>LSUIElement</key>             <true/>
@@ -49,9 +54,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-# Ad-hoc signature. Enough to run locally; replace with a Developer ID identity
-# if this is ever distributed to another machine.
-codesign --force --deep --sign - "$APP" 2>/dev/null || echo "note: codesign skipped"
+if [ -n "$SIGN_IDENTITY" ]; then
+  # Developer ID + hardened runtime + timestamp: what notarization requires.
+  codesign --force --deep --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
+  echo "Signed with: $SIGN_IDENTITY"
+else
+  # Ad-hoc signature. Enough to run locally; CI passes SIGN_IDENTITY for releases.
+  codesign --force --deep --sign - "$APP" 2>/dev/null || echo "note: codesign skipped"
+fi
 
 echo "Built $APP"
 echo
