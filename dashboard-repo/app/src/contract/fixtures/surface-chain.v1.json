@@ -1,0 +1,296 @@
+{
+ "schema": "connection-contract/v1",
+ "capturedAt": "2026-08-13T19:47:24Z",
+ "host": {
+  "name": "m3pro",
+  "os": "macos",
+  "arch": "arm64",
+  "model": "Mac15,6"
+ },
+ "power": {
+  "source": "dock",
+  "externalConnected": true,
+  "batteryPresent": true,
+  "batteryPercent": 100,
+  "adapter": {
+   "watts": 96,
+   "identifiesItself": false
+  }
+ },
+ "nodes": [
+  {
+   "id": "host",
+   "kind": "host",
+   "name": "m3pro",
+   "protocol": "power"
+  },
+  {
+   "id": "tb:9261473637171479808",
+   "parentId": "host",
+   "kind": "thunderbolt",
+   "name": "Microsoft Surface Thunderbolt(TM) 4 Dock",
+   "protocol": "thunderbolt",
+   "tunneled": false,
+   "tb": {
+    "routeString": 1,
+    "depth": 1,
+    "linkGbps": 40
+   }
+  },
+  {
+   "id": "usb:0x02100000",
+   "parentId": "tb:9261473637171479808",
+   "kind": "hub",
+   "name": "USB2.0 Hub",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vendorName": "Fresco Logic, Inc.",
+   "vidPid": "045E:0859",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 34603008
+   }
+  },
+  {
+   "id": "usb:0x02120000",
+   "parentId": "usb:0x02100000",
+   "kind": "hub",
+   "name": "USB2.0 Hub",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vidPid": "05E3:0608",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 34734080
+   }
+  },
+  {
+   "id": "usb:0x02124000",
+   "parentId": "usb:0x02120000",
+   "kind": "hub",
+   "name": "4-Port USB 2.0 Hub",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vendorName": "Generic",
+   "vidPid": "043E:9C04",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 34750464
+   }
+  },
+  {
+   "id": "usb:0x02124100",
+   "parentId": "usb:0x02124000",
+   "kind": "device",
+   "name": "MX Vertical Advanced Ergonomic Mouse",
+   "protocol": "usbLow",
+   "tunneled": false,
+   "vendorName": "Logitech",
+   "vidPid": "046D:C08A",
+   "linkBitsPerSecond": 12000000,
+   "usbClass": 0,
+   "platform": {
+    "locationID": 34750720
+   }
+  },
+  {
+   "id": "usb:0x02124200",
+   "parentId": "usb:0x02124000",
+   "kind": "device",
+   "name": "Magic Keyboard with Touch ID and Numeric Keypad",
+   "protocol": "usbLow",
+   "tunneled": false,
+   "vendorName": "Apple Inc.",
+   "vidPid": "05AC:029F",
+   "linkBitsPerSecond": 12000000,
+   "usbClass": 0,
+   "platform": {
+    "locationID": 34750976
+   }
+  },
+  {
+   "id": "usb:0x02124300",
+   "parentId": "usb:0x02124000",
+   "kind": "device",
+   "name": "LG Monitor Controls",
+   "protocol": "usbLow",
+   "tunneled": false,
+   "vendorName": "LG Electronics Inc.",
+   "vidPid": "043E:9A39",
+   "linkBitsPerSecond": 12000000,
+   "usbClass": 239,
+   "platform": {
+    "locationID": 34751232
+   }
+  },
+  {
+   "id": "usb:0x02130000",
+   "parentId": "usb:0x02100000",
+   "kind": "device",
+   "name": "ZV-E10",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vendorName": "Sony",
+   "vidPid": "054C:0DE3",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 239,
+   "platform": {
+    "locationID": 34799616
+   }
+  },
+  {
+   "id": "usb:0x02140000",
+   "parentId": "usb:0x02100000",
+   "kind": "hub",
+   "name": "USB2 Hub",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vendorName": "Microsoft",
+   "vidPid": "045E:0858",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 34865152
+   }
+  },
+  {
+   "id": "usb:0x02142000",
+   "parentId": "usb:0x02140000",
+   "kind": "hub",
+   "name": "USB2.0 Hub",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vidPid": "05E3:0608",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 34873344
+   }
+  },
+  {
+   "id": "usb:0x02142200",
+   "parentId": "usb:0x02142000",
+   "kind": "device",
+   "name": "Anker PowerConf C300",
+   "protocol": "usb2",
+   "tunneled": false,
+   "vendorName": "Anker",
+   "vidPid": "291A:3361",
+   "linkBitsPerSecond": 480000000,
+   "usbClass": 239,
+   "platform": {
+    "locationID": 34873856
+   }
+  },
+  {
+   "id": "usb:0x02142300",
+   "parentId": "usb:0x02142000",
+   "kind": "device",
+   "name": "R\u00d8DE NT-USB Mini",
+   "protocol": "usbLow",
+   "tunneled": false,
+   "vendorName": "R\u00d8DE Microphones",
+   "vidPid": "19F7:0015",
+   "linkBitsPerSecond": 12000000,
+   "usbClass": 239,
+   "platform": {
+    "locationID": 34874112
+   }
+  },
+  {
+   "id": "usb:0x02145000",
+   "parentId": "usb:0x02140000",
+   "kind": "device",
+   "name": "Microsoft Surface Thunderbolt(TM) 4 Dock Audio",
+   "protocol": "usbLow",
+   "tunneled": false,
+   "vendorName": "Microsoft",
+   "vidPid": "045E:085B",
+   "linkBitsPerSecond": 12000000,
+   "usbClass": 239,
+   "platform": {
+    "locationID": 34885632
+   }
+  },
+  {
+   "id": "usb:0x02150000",
+   "parentId": "usb:0x02100000",
+   "kind": "device",
+   "name": "Microsoft Surface Thunderbolt(TM) 4 Dock",
+   "protocol": "usbLow",
+   "tunneled": false,
+   "vendorName": "Microsoft",
+   "vidPid": "045E:0855",
+   "linkBitsPerSecond": 12000000,
+   "usbClass": 0,
+   "platform": {
+    "locationID": 34930688
+   }
+  },
+  {
+   "id": "usb:0x02200000",
+   "parentId": "tb:9261473637171479808",
+   "kind": "hub",
+   "name": "USB3.0 Hub",
+   "protocol": "usb3",
+   "tunneled": true,
+   "vendorName": "Intel Corporation.",
+   "vidPid": "8087:0B40",
+   "linkBitsPerSecond": 10000000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 35651584
+   }
+  },
+  {
+   "id": "usb:0x02240000",
+   "parentId": "usb:0x02200000",
+   "kind": "hub",
+   "name": "USB3 Gen2 Hub",
+   "protocol": "usb3",
+   "tunneled": true,
+   "vendorName": "Microsoft",
+   "vidPid": "045E:0857",
+   "linkBitsPerSecond": 10000000000,
+   "usbClass": 9,
+   "platform": {
+    "locationID": 35913728
+   }
+  },
+  {
+   "id": "usb:0x02244000",
+   "parentId": "usb:0x02240000",
+   "kind": "device",
+   "name": "USB 10_100_1G_2_5G LAN",
+   "protocol": "usb3",
+   "tunneled": true,
+   "vendorName": "Realtek",
+   "vidPid": "045E:085C",
+   "linkBitsPerSecond": 5000000000,
+   "usbClass": 0,
+   "platform": {
+    "locationID": 35930112
+   }
+  }
+ ],
+ "displays": [
+  {
+   "name": "LG ULTRAWIDE",
+   "widthPx": 3440,
+   "heightPx": 1440,
+   "refreshHz": 60,
+   "builtIn": false
+  },
+  {
+   "name": "DP",
+   "widthPx": 960,
+   "heightPx": 540,
+   "refreshHz": 60,
+   "builtIn": false
+  }
+ ],
+ "displaysKnown": true
+}

@@ -1,0 +1,6 @@
+{"t":"2026-08-13T22:19:41Z","kind":"deviceAdded","nodeId":"usb:A2","vidPid":"05E3:0608","name":"Generic USB Hub"}
+{"t":"2026-08-13T22:19:41Z","kind":"deviceAdded","nodeId":"usb:A3","vidPid":"043E:9C04","name":"Generic USB Hub"}
+{"t":"2026-08-13T22:19:42Z","kind":"deviceAdded","nodeId":"usb:A4","vidPid":"046D:C08A","name":"USB Input Device"}
+{"t":"2026-08-13T22:19:42Z","kind":"deviceAdded","nodeId":"usb:A5","vidPid":"05AC:029F","name":"USB Input Device"}
+{"t":"2026-08-13T22:19:43Z","kind":"deviceAdded","nodeId":"usb:A6","vidPid":"043E:9A39","name":"USB Input Device"}
+not json at all

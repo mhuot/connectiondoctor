@@ -1,0 +1,92 @@
+{
+ "capturedAt": "2026-08-14T09:38:21Z",
+ "displays": [
+  {
+   "builtIn": false,
+   "heightPx": 1440,
+   "name": "LG ULTRAWIDE",
+   "refreshHz": 50,
+   "widthPx": 3440
+  }
+ ],
+ "displaysKnown": true,
+ "host": {
+  "arch": "arm64",
+  "model": "Mac16,10",
+  "name": "mini",
+  "os": "macos"
+ },
+ "nodes": [
+  {
+   "id": "host",
+   "kind": "host",
+   "name": "Mike\u2019s Mac mini",
+   "protocol": "power"
+  },
+  {
+   "id": "usb:0x00100000",
+   "kind": "hub",
+   "linkBitsPerSecond": 480000000,
+   "name": "USB2.0 Hub",
+   "parentId": "host",
+   "platform": {
+    "locationID": 1048576
+   },
+   "protocol": "usb2",
+   "tunneled": false,
+   "usbClass": 9,
+   "vidPid": "05E3:0608"
+  },
+  {
+   "id": "usb:0x00110000",
+   "kind": "device",
+   "linkBitsPerSecond": 1500000,
+   "name": "Anker USB-C Hub Device",
+   "parentId": "usb:0x00100000",
+   "platform": {
+    "locationID": 1114112
+   },
+   "protocol": "usbLow",
+   "tunneled": false,
+   "usbClass": 17,
+   "vendorName": "Anker",
+   "vidPid": "291A:8357"
+  },
+  {
+   "id": "usb:0x02100000",
+   "kind": "hub",
+   "linkBitsPerSecond": 480000000,
+   "name": "USB2 Hub",
+   "parentId": "host",
+   "platform": {
+    "locationID": 34603008
+   },
+   "protocol": "usb2",
+   "tunneled": false,
+   "usbClass": 9,
+   "vendorName": "Apple",
+   "vidPid": "05AC:800B"
+  },
+  {
+   "id": "usb:0x02200000",
+   "kind": "hub",
+   "linkBitsPerSecond": 10000000000,
+   "name": "USB3 Gen2 Hub",
+   "parentId": "host",
+   "platform": {
+    "locationID": 35651584
+   },
+   "protocol": "usb3",
+   "tunneled": false,
+   "usbClass": 9,
+   "vendorName": "Apple",
+   "vidPid": "05AC:800C"
+  }
+ ],
+ "power": {
+  "batteryPresent": false,
+  "externalConnected": true,
+  "source": "mains"
+ },
+ "schema": "connection-contract/v1"
+}
