@@ -1,7 +1,7 @@
 # Embedding the dashboard in a collector
 
-The dashboard is the UI for both collectors — [ConnectionDoctor](https://github.com/mhuot/connectiondoctor)
-on Windows and [TBDoctor](https://github.com/mhuot/tbdoctor) on macOS. Each one
+The dashboard is the UI for both collectors — [ConnectionDoctor](../windows/README.md)
+on Windows and [TBDoctor](../macos/README.md) on macOS. Each one
 compiles this bundle into its own binary and serves it next to the Connection
 Contract v1 endpoints, so a user downloads one file and opens one URL. Node is a
 build-time dependency of whoever cuts the release, never of the user.
@@ -12,7 +12,7 @@ implement it, so the same build behaves identically on either OS.
 ## Producing the bundle
 
 ```sh
-cd app && npm ci && npm run build   # → app/dist, ~235 KB across 5 files
+cd dashboard && npm ci && npm run build   # → dashboard/dist, ~235 KB across 5 files
 ```
 
 `vite.config.ts` sets `base: './'` so every asset reference in `index.html` is

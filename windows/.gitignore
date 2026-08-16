@@ -5,5 +5,3 @@ obj/
 connection-snapshot-*.json
 artifacts/
 
-# Dashboard bundle staged by scripts/build-ui.ps1
-src/ConnectionDoctor/ui/

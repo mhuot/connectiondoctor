@@ -4,6 +4,3 @@ TBDoctor.app/
 *.tgz
 .DS_Store
 
-# Dashboard bundle staged by scripts/build-ui.sh
-Sources/TBDoctor/ui/*
-!Sources/TBDoctor/ui/.gitkeep

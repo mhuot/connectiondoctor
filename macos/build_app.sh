@@ -25,7 +25,7 @@ if [ -d "$RESOURCES" ]; then
   if [ -f "$RESOURCES/ui/index.html" ]; then
     echo "Embedded the Connection Dashboard bundle."
   else
-    echo "note: no dashboard staged; run scripts/build-ui.sh for the built-in UI"
+    echo "note: no dashboard staged; run ../scripts/build-ui.sh macos for the built-in UI"
   fi
 fi
 

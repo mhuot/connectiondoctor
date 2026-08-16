@@ -8,7 +8,7 @@ namespace ConnectionDoctor;
 /// source build, in which case the server says so instead of failing.
 ///
 /// The route rules here are the shared ones TBDoctor implements on macOS —
-/// see the dashboard repo's docs/embedding.md — so the same bundle behaves
+/// see docs/embedding.md at the repo root — so the same bundle behaves
 /// identically whichever producer is serving it.
 /// </summary>
 internal static class EmbeddedUi

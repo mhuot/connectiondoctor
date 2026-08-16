@@ -1,6 +1,6 @@
 # ConnectionDoctor
 
-ConnectionDoctor is a Windows-native diagnostic tool for USB-C, USB4, docks, displays, hubs, power, and downstream peripherals. It is the Windows counterpart to [TBDoctor](https://github.com/mhuot/tbdoctor), but the broader name is intentional: failures often cross protocol boundaries and are not necessarily Thunderbolt failures.
+ConnectionDoctor is a Windows-native diagnostic tool for USB-C, USB4, docks, displays, hubs, power, and downstream peripherals. It is the Windows counterpart to [TBDoctor](../macos/README.md), but the broader name is intentional: failures often cross protocol boundaries and are not necessarily Thunderbolt failures.
 
 The first supported case came from a Surface Laptop 7 connected to an LG UltraWide with an integrated KVM. Video continued working while the monitor's USB hub and its keyboard and mouse failed to enumerate. Cold power-cycling the monitor restored the full branch.
 
@@ -17,7 +17,7 @@ The first supported case came from a Surface Laptop 7 connected to an LG UltraWi
 - Registers itself per-user to start collecting at login.
 - Hides built-in laptop devices in the dashboard by default, with an **Include built-in devices** toggle.
 - Emits **Connection Contract v1**, the schema shared with TBDoctor, either as a
-  one-shot export or over HTTP for the [Connection Dashboard](https://github.com/mhuot/connection-dashboard).
+  one-shot export or over HTTP for the [Connection Dashboard](../dashboard/README.md).
 - Runs natively on Windows ARM64 and x64 with .NET 8.
 
 ## Build and run
@@ -66,7 +66,7 @@ Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl
 
 ## The dashboard
 
-The [Connection Dashboard](https://github.com/mhuot/connection-dashboard) is
+The [Connection Dashboard](../dashboard/README.md) is
 compiled into the exe. There is nothing to install alongside it — no Node, no
 second app, no separate web server:
 
@@ -92,7 +92,7 @@ unauthenticated read-only telemetry, so it is opt-in and needs a one-time
 Rebuilding the embedded UI needs Node, and only for whoever builds a release:
 
 ```powershell
-.\scripts\build-ui.ps1           # builds ../connection-dashboard, stages dist
+..\scripts\build-ui.ps1 -Target windows   # builds ..\dashboard, stages dist here
 dotnet build .\ConnectionDoctor.sln
 ```
 

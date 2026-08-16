@@ -1,8 +1,8 @@
 # Connection Contract v1
 
 One JSON shape for connection-diagnostic data, shared by
-[TBDoctor](https://github.com/mhuot/tbdoctor) (macOS) and
-[ConnectionDoctor](https://github.com/mhuot/connectiondoctor) (Windows).
+[TBDoctor](../macos/README.md) (macOS) and
+[ConnectionDoctor](../windows/README.md) (Windows).
 
 The two tools independently converged on the same semantics — topology,
 root-vs-fallout, baseline diff, power deficit — implemented twice, in Swift and

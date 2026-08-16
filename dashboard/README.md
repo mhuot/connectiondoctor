@@ -1,36 +1,36 @@
 # Connection Dashboard
 
-One React UI for the connection-diagnostics family — [TBDoctor](https://github.com/mhuot/tbdoctor)
-(macOS) and [ConnectionDoctor](https://github.com/mhuot/connectiondoctor) (Windows) — reading the
-shared **Connection Contract v1** (`tbdoctor/docs/schema-v1.md`).
+One React UI for the connection-diagnostics family — [TBDoctor](../macos/README.md)
+(macOS) and [ConnectionDoctor](../windows/README.md) (Windows) — reading the
+shared **Connection Contract v1** (`../docs/schema-v1.md`).
 
 Spec-driven with [OpenSpec](https://github.com/Fission-AI/OpenSpec): see
 `openspec/changes/add-react-dashboard/` for the proposal, design (including the
 recorded decision to go web-first React + Tauri later, with React Native
 evaluated and rejected), capability specs, and task list.
 
-<img src="docs/images/topology-cascade.png" width="620"
+<img src="../docs/images/dashboard/topology-cascade.png" width="620"
      alt="Cascade topology of a real recording: dock power feeding an M3 Pro, Surface Thunderbolt 4 dock with tunnel badges, LG UltraWide merged with its hub, peripherals behind it, USB3 hub dashed as tunneled, and a dashed DisplayPort edge routed outside the tree">
 
 ## Run
 
 Most people should never run this repo directly: both collectors compile the
 built bundle into their own binary, so the dashboard arrives with them. Run
-[ConnectionDoctor](https://github.com/mhuot/connectiondoctor) `ui` on Windows or
-[TBDoctor](https://github.com/mhuot/tbdoctor) `--serve` on macOS and open
+[ConnectionDoctor](../windows/README.md) `ui` on Windows or
+[TBDoctor](../macos/README.md) `--serve` on macOS and open
 http://localhost:8787 — the page adopts the machine serving it, so there is
 nothing to configure.
 
 To work on the UI itself:
 
 ```sh
-cd app
+cd dashboard
 npm install
 npm run dev     # then drop contract .json / events .jsonl files, or "Load fleet fixtures"
 npm test        # 28 tests: contract ingest, topology collapse, layout invariants, migrations
 ```
 
-`docs/embedding.md` is the contract between this bundle and the collectors that
+`../docs/embedding.md` is the contract between this bundle and the collectors that
 serve it — routes, MIME types, caching, path safety. Both producers implement
 it, so the same build behaves identically on either OS.
 

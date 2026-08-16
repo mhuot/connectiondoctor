@@ -1,7 +1,7 @@
 /**
  * Connection Contract v1 — typed model.
  *
- * Canonical spec: mhuot/tbdoctor docs/schema-v1.md. Additive-only within v1;
+ * Canonical spec: docs/schema-v1.md at the repo root. Additive-only within v1;
  * consumers tolerate unknown fields, so every interface here is open to
  * extension and parsing never rejects extra keys.
  */

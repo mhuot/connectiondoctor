@@ -1,14 +1,17 @@
 schema: spec-driven
 
 context: |
-  Project: Connection Dashboard — one React UI for the connection-diagnostics
-  family (TBDoctor on macOS, ConnectionDoctor on Windows).
+  Project: ConnectionDoctor monorepo — one repo for the connection-diagnostics
+  family: dashboard/ (React UI, the only UI), macos/ (TBDoctor collector,
+  Swift), windows/ (ConnectionDoctor collector, C#), docs/ (the shared
+  Connection Contract v1 spec and the embedding contract).
   Data source: Connection Contract v1 (connection-contract/v1), specified in
-  mhuot/tbdoctor docs/schema-v1.md. Envelope {schema, capturedAt, host, power,
+  docs/schema-v1.md at the repo root. Envelope {schema, capturedAt, host, power,
   nodes[], displays[], displaysKnown}; flat nodes with parentId; vidPid as
   cross-platform identity; tunneled only for genuine USB4 tunnels (DP/USB3);
   deficit = externalConnected && batteryRateMilliwatts <= -2000.
-  Tech stack: TypeScript, React 18, Vite, vitest. Web-first; a Tauri shell wraps
+  Tech stack (dashboard): TypeScript, React 19, Vite, vitest. Served by the
+  collectors themselves (see docs/embedding.md); a Tauri shell wraps
   the same app later (decision recorded in design.md of add-react-dashboard —
   React Native was evaluated and rejected).
   Fleet: M5 Pro MBP, M3 Pro MBP, M4 Mac mini, Surface Laptop 7; one Surface

@@ -52,7 +52,7 @@ before you need it.
 
 ## Dashboard
 
-The [Connection Dashboard](https://github.com/mhuot/connection-dashboard) — the
+The [Connection Dashboard](../dashboard/README.md) — the
 same React UI ConnectionDoctor serves on Windows — is compiled into the binary.
 Nothing to install alongside it, no Node, no second app:
 
@@ -67,7 +67,7 @@ is unauthenticated read-only telemetry and opt-in by design.
 Rebuilding the embedded UI needs Node, and only for whoever builds a release:
 
 ```sh
-scripts/build-ui.sh    # builds ../connection-dashboard and stages dist
+../scripts/build-ui.sh macos   # builds ../dashboard and stages dist here
 ./build_app.sh
 ```
 

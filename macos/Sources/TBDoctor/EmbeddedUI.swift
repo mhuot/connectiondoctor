@@ -5,7 +5,7 @@ import Foundation
 /// source build, in which case `--serve` says so instead of failing.
 ///
 /// The route rules here are the shared ones ConnectionDoctor implements on
-/// Windows — see the dashboard repo's `docs/embedding.md` — so the same bundle
+/// Windows — see `docs/embedding.md` at the repo root — so the same bundle
 /// behaves identically whichever producer is serving it.
 enum EmbeddedUI {
 

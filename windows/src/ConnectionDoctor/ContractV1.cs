@@ -7,7 +7,7 @@ namespace ConnectionDoctor;
 /// <summary>
 /// Connection Contract v1 — the one JSON shape TBDoctor (macOS) and
 /// ConnectionDoctor (Windows) both emit, so a single dashboard can read every
-/// machine's recording. Canonical spec: mhuot/tbdoctor docs/schema-v1.md.
+/// machine's recording. Canonical spec: docs/schema-v1.md at the repo root.
 /// Additive-only within v1; consumers tolerate unknown fields.
 /// </summary>
 internal static class ContractV1

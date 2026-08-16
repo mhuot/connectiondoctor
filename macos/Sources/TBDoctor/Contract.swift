@@ -2,7 +2,7 @@ import Foundation
 
 /// Connection Contract v1 emission — the shared schema consumed by the
 /// dashboard and (eventually) ConnectionDoctor's exports. Spec:
-/// docs/schema-v1.md. Additive-only; adapter serials deliberately omitted
+/// docs/schema-v1.md (repo root). Additive-only; adapter serials deliberately omitted
 /// from anything that leaves the machine.
 enum Contract {
 
