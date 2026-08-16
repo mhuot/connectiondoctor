@@ -1,0 +1,10 @@
+# Tasks: release-pipeline
+- [x] 1.1 `docs/distribution.md`
+- [x] 1.2 `LICENSE` (Apache-2.0); README license section; `dashboard/package.json` license field
+- [x] 1.3 `.github/workflows/build.yml` (reusable: dashboard, macos, windows jobs) and `ci.yml` calling it on PR/push
+- [x] 1.4 `.github/workflows/release.yml` on `v*`: calls build with release=true, signs/notarizes when secrets present, SHA256SUMS, GitHub Release
+- [x] 1.5 `macos/build_app.sh`: `VERSION` → Info.plist; `SIGN_IDENTITY` env selects Developer ID vs ad-hoc; DMG step script `macos/scripts/make-dmg.sh`
+- [x] 1.6 Windows single-file/self-contained publish + `-p:Version` (passed as properties in `build.yml`; csproj unchanged)
+- [ ] 1.7 Both: `version` verb; envelope `producer{}`; dashboard footer shows bundle version
+- [ ] 1.8 Configure secrets; first tag `v0.1.0`; verify Gatekeeper opens the DMG on a clean Mac and SmartScreen accepts the exe on the Surface
+- [ ] 1.9 READMEs: "Download" section pointing at Releases

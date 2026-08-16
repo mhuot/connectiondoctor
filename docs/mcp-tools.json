@@ -1,0 +1,53 @@
+{
+  "$comment": "Single source of MCP tool metadata for both binaries (docs/mcp.md). Embedded by each collector and served verbatim from tools/list; a test on each side asserts the embedded copy equals this file.",
+  "server": { "name": "connectiondoctor" },
+  "tools": [
+    {
+      "name": "connection_probe",
+      "description": "Current dock, USB, display and power state of this machine as a Connection Contract v1 envelope: attached Thunderbolt/USB4 devices and negotiated link speed, the USB device tree with per-device negotiated speeds and VID:PID identity, displays, the active power adapter's identity and wattage, and instantaneous battery rate. Includes ranked findings and incidents when the recorder has history. Use this to answer \"what is plugged in right now\" and \"is the machine actually charging or quietly draining\". Read-only; to start recording at login use the CLI `install` verb.",
+      "inputSchema": { "type": "object", "properties": {} }
+    },
+    {
+      "name": "connection_diagnose",
+      "description": "Root-cause analysis of dock, peripheral and power faults from recorded history. Detects a power supply that cannot cover demand (battery discharging while on AC), link drops and whether they correlate with power deficits, groups of USB devices lost together behind a shared hub, and repeated power-source arbitration. Returns findings ranked critical → warning → info, each with the evidence behind it and a recommendation. Use this for \"my dock keeps disconnecting\" or \"devices randomly drop\". If the recorder has never run, returns an empty list and a note saying so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hours": { "type": "number", "description": "How far back to analyse. Default 6." }
+        }
+      }
+    },
+    {
+      "name": "connection_incidents",
+      "description": "Discrete fault incidents reconstructed from recorded events, newest first. Each has a start and end time, which devices disappeared (with VID:PID), the shared parent hub when the losses collapse to one, whether a link drop was the root event, and peak battery discharge. Use this to establish when and how often a fault occurred.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "hours": { "type": "number", "description": "How far back to look. Default 24." },
+          "limit": { "type": "number", "description": "Max incidents. Default 20." }
+        }
+      }
+    },
+    {
+      "name": "connection_diff",
+      "description": "Compare the machine's current connection state against a saved known-good baseline (`baseline save` on the CLI): findings, and the nodes missing now that were present when the setup worked, and nodes added since. Devices are matched by VID:PID and parent so a dock that moved ports does not read as replaced. Use this for \"what is missing now that was there when the desk worked\", especially after a host switch or a monitor hub wedge.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "baseline": { "type": "string", "description": "Path to a baseline envelope. Default: the saved baseline in the data directory." }
+        }
+      }
+    },
+    {
+      "name": "connection_diagram",
+      "description": "The current connection topology as an Excalidraw document (JSON). Boxes for the power source, the host, any Thunderbolt/USB4 device and the whole USB hub tree, joined by orthogonal connectors, with the power path drawn distinctly and displays attached to what carries their video. Use this when someone wants to see or share how their devices are wired together, or to reason about which devices sit behind which hub. Write the returned JSON to a .excalidraw file.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "style": { "type": "string", "enum": ["cascade", "topDown", "flow"], "description": "Layout. cascade steps down-right (default); topDown fans children below; flow reads left to right." },
+          "full": { "type": "boolean", "description": "Include internal hubs and controller silicon instead of collapsing them into their enclosure. Default false." }
+        }
+      }
+    }
+  ]
+}
