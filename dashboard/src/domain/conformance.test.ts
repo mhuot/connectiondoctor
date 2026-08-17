@@ -226,6 +226,65 @@ describe('conformance corpus', () => {
     expect(stitchIncidents(brief, coverage(false, ['gap']))).toEqual([]);
   });
 
+  // `complete: true` is a claim about [availableFrom, through] and nothing
+  // outside it. Treating it as a global flag blesses spans the recorder never
+  // saw, which is exactly what imported history looks like.
+  it('completeness vouches for an interval, not for every event that was imported', () => {
+    const { envelope } = load('fault-power-deficit');
+    const at = (hour: number, minute = 0) => new Date(Date.UTC(2026, 6, 4, hour, minute)).toISOString();
+    const covered = (from: string, to: string, extra: Record<string, unknown> = {}) => ({
+      ...envelope,
+      capturedAt: to,
+      analysis: {
+        windowHours: 6,
+        generatedAt: to,
+        coverage: { availableFrom: from, through: to, complete: true, ...extra },
+      },
+    });
+
+    // Recorded before the window opened: the producer never saw it, however
+    // complete the window it did see.
+    const before = stitchIncidents(
+      [{ t: at(8), kind: 'deficitStart' }, { t: at(8, 5), kind: 'deficitEnd' }],
+      covered(at(10), at(16)),
+    );
+    expect(before[0].deficit).toEqual({ since: at(8), until: at(8, 5), durationProven: false });
+
+    // An open episode that began before the window: the recorder cannot vouch
+    // for the part that predates it, so the duration is not claimed at all.
+    const crossing = stitchIncidents([{ t: at(8), kind: 'deficitStart' }], covered(at(10), at(16)));
+    expect(crossing[0].deficit).toEqual({ since: at(8), durationProven: false });
+
+    // Evidence past `through` — a stray imported event an hour later — says
+    // nothing about whether the supply was still short. The episode is capped
+    // at the boundary rather than discarded, so the part the recorder did see
+    // is still proven.
+    const past = stitchIncidents(
+      [{ t: at(12), kind: 'deficitStart' }, { t: at(17), kind: 'linkUp' }],
+      covered(at(10), at(16)),
+    );
+    expect(past[0].deficit).toEqual({ since: at(12), durationProven: true });
+
+    // And when the cap leaves too little inside the window to be sustained,
+    // nothing is proven — the later evidence cannot make up the difference.
+    // Thirty seconds before `through`, with an event an hour past it: the
+    // hour is real and is why this reaches the timeline at all, but only the
+    // thirty seconds are vouched for, and thirty seconds is not sustained.
+    const lateStart = new Date(Date.UTC(2026, 6, 4, 15, 59, 30)).toISOString();
+    const barely = stitchIncidents(
+      [{ t: lateStart, kind: 'deficitStart' }, { t: at(17), kind: 'linkUp' }],
+      covered(at(10), at(16)),
+    );
+    expect(barely[0].deficit).toEqual({ since: lateStart, durationProven: false });
+
+    // Bounds that are absent or unparseable are unknown, not health.
+    const unparseable = stitchIncidents(
+      [{ t: at(12), kind: 'deficitStart' }],
+      covered('not-a-date', at(16)),
+    );
+    expect(unparseable[0].deficit?.durationProven).toBe(false);
+  });
+
   it('an incomplete window is never reported as health', () => {
     const { envelope, expected } = load('control-incomplete-history');
     expect(envelope.analysis?.coverage.complete).toBe(false);

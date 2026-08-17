@@ -77,10 +77,19 @@ export function stitchIncidents(
     ].filter((t) => Number.isFinite(t)),
   );
 
-  // Whether the recording is continuous at all. Absent coverage is unknown,
-  // not health (schema § analysis: absent ≠ empty), so only an explicit
-  // `complete: true` licenses measuring a duration across the window.
-  const continuous = currentSnapshot?.analysis?.coverage.complete === true;
+  // What the producer vouches for, as an interval rather than a flag.
+  // `complete: true` is a claim about `[availableFrom, through]` and nothing
+  // outside it, so applying it as a global boolean would bless spans the
+  // recorder never saw — imported history from before the window, or an
+  // episode still running past its end. Absent or unparseable bounds are
+  // unknown, not health (schema § analysis: absent ≠ empty).
+  const vouched = ((): { from: number; to: number } | undefined => {
+    const coverage = currentSnapshot?.analysis?.coverage;
+    if (coverage?.complete !== true) return undefined;
+    const from = Date.parse(coverage.availableFrom);
+    const to = Date.parse(coverage.through);
+    return Number.isFinite(from) && Number.isFinite(to) && from <= to ? { from, to } : undefined;
+  })();
 
   const sorted = ordered.filter((e) => e.kind !== 'fullSnapshot');
   if (sorted.length === 0) return [];
@@ -125,7 +134,7 @@ export function stitchIncidents(
     .filter(
       (g) =>
         g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)) ||
-        deficitVerdict(g, evidenceThrough, continuous).kind !== 'none',
+        deficitVerdict(g, evidenceThrough, vouched).kind !== 'none',
     )
     .map((group) => {
       const lost = group
@@ -138,7 +147,7 @@ export function stitchIncidents(
         rootEvent: group.find((e) => ROOT_EVENT_KINDS.has(e.kind))?.kind,
         devicesLost: lost,
       };
-      const deficit = deficitVerdict(group, evidenceThrough, continuous);
+      const deficit = deficitVerdict(group, evidenceThrough, vouched);
       if (deficit.kind === 'deficit') {
         incident.deficit = {
           since: deficit.since,
@@ -184,7 +193,7 @@ type DeficitVerdict =
 function deficitVerdict(
   group: ContractEvent[],
   evidenceThrough: number,
-  continuous: boolean,
+  vouched: { from: number; to: number } | undefined,
 ): DeficitVerdict {
   let start: ContractEvent | undefined;
   for (const event of group) {
@@ -196,7 +205,13 @@ function deficitVerdict(
       // sustained and stays silent. A long one is worth showing, with the
       // duration claimed only when the window vouches for itself.
       if (Date.parse(event.t) - Date.parse(start.t) >= SUSTAINED_DEFICIT_MS) {
-        return { kind: 'deficit', since: start.t, until: event.t, durationProven: continuous };
+        // Both transitions must sit inside the vouched interval. History
+        // imported from before the recording started is not covered by a
+        // window that begins later, however complete that window is.
+        const inside = vouched !== undefined &&
+          Date.parse(start.t) >= vouched.from &&
+          Date.parse(event.t) <= vouched.to;
+        return { kind: 'deficit', since: start.t, until: event.t, durationProven: inside };
       }
       start = undefined;
     }
@@ -208,7 +223,17 @@ function deficitVerdict(
   // nothing about what happened in between — which is the whole point above.
   if (evidenceThrough - Date.parse(start.t) < SUSTAINED_DEFICIT_MS) return { kind: 'none' };
 
-  return { kind: 'deficit', since: start.t, durationProven: continuous };
+  // An open episode is measured to the end of what the producer vouches for,
+  // never to a later unrelated timestamp: a stray imported event an hour past
+  // `through` says nothing about whether the supply was still short. Capped
+  // rather than discarded, so a deficit that begins inside a complete window
+  // is still proven for the part of it the recorder actually saw.
+  const from = Date.parse(start.t);
+  const ceiling = vouched !== undefined ? Math.min(evidenceThrough, vouched.to) : evidenceThrough;
+  const proven = vouched !== undefined &&
+    from >= vouched.from &&
+    ceiling - from >= SUSTAINED_DEFICIT_MS;
+  return { kind: 'deficit', since: start.t, durationProven: proven };
 }
 
 /** Deepest common ancestor of the removed nodes in the pre-incident tree —
