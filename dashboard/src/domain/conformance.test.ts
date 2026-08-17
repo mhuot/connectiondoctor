@@ -173,7 +173,7 @@ describe('conformance corpus', () => {
   // A later timestamp is not proof of continuity, and this is the distinction
   // that keeps "unresolved for twenty minutes" from being asserted over a hole
   // in the recording where the deficitEnd may well be sitting.
-  it('an open deficit across incomplete history keeps its start and drops its duration', () => {
+  it('a deficit keeps its recorded transitions and claims a duration only over a complete window', () => {
     const { envelope } = load('fault-power-deficit');
     const at = (minutes: number) => new Date(Date.UTC(2026, 6, 4, 9, minutes)).toISOString();
     const start = { t: at(0), kind: 'deficitStart' as const };
@@ -187,27 +187,43 @@ describe('conformance corpus', () => {
       },
     });
 
-    // Continuous recording: the supply has been short the whole twenty minutes
-    // and saying so is a fact, not an inference.
+    // Continuous recording, still open: the supply has been short the whole
+    // twenty minutes and saying so is a fact, not an inference.
     const proven = stitchIncidents([start], coverage(true));
     expect(proven).toHaveLength(1);
-    expect(proven[0].openDeficit).toEqual({ since: at(0), durationProven: true });
+    expect(proven[0].deficit).toEqual({ since: at(0), durationProven: true });
 
     // A gap in the same window: the end may be inside it. The start is still
     // worth showing — a deficit began and we lost the recording — but the
     // duration is not ours to claim.
     const unproven = stitchIncidents([start], coverage(false, ['gap']));
     expect(unproven).toHaveLength(1);
-    expect(unproven[0].openDeficit).toEqual({ since: at(0), durationProven: false });
+    expect(unproven[0].deficit).toEqual({ since: at(0), durationProven: false });
 
     // No coverage at all is unknown, not health: absent ≠ complete.
-    expect(stitchIncidents([start], { ...envelope, capturedAt: at(20) })[0].openDeficit?.durationProven).toBe(false);
+    const uncovered = { ...envelope, capturedAt: at(20), analysis: undefined };
+    expect(stitchIncidents([start], uncovered)[0].deficit?.durationProven).toBe(false);
 
-    // A *closed* episode is measured between two recorded facts, so a gap
-    // elsewhere in the window does not make its duration less certain.
-    const closed = stitchIncidents([start, { t: at(5), kind: 'deficitEnd' }], coverage(false, ['gap']));
-    expect(closed).toHaveLength(1);
-    expect(closed[0].openDeficit).toBeUndefined();
+    // A *closed* pair over an incomplete window keeps both transitions and
+    // still claims no duration. The two events prove the machine was short of
+    // power at T0 and had recovered by T5; they do not prove five continuous
+    // minutes, because an end we missed followed by a restart looks identical
+    // from here — and `coverage.complete` is a boolean over the whole window
+    // with no interval that could place the gap outside the pair.
+    const closedInGap = stitchIncidents([start, { t: at(5), kind: 'deficitEnd' }], coverage(false, ['gap']));
+    expect(closedInGap).toHaveLength(1);
+    expect(closedInGap[0].deficit).toEqual({ since: at(0), until: at(5), durationProven: false });
+
+    // The same pair over a window the producer vouches for: now it is five
+    // continuous minutes, and that is the only case where we say so.
+    const closedProven = stitchIncidents([start, { t: at(5), kind: 'deficitEnd' }], coverage(true));
+    expect(closedProven[0].deficit).toEqual({ since: at(0), until: at(5), durationProven: true });
+
+    // And a short pair stays silent however incomplete the window is: a hole
+    // between two transitions can only make the real deficit shorter, never
+    // longer, so five seconds is certainly not sustained.
+    const brief = [start, { t: new Date(Date.UTC(2026, 6, 4, 9, 0, 5)).toISOString(), kind: 'deficitEnd' as const }];
+    expect(stitchIncidents(brief, coverage(false, ['gap']))).toEqual([]);
   });
 
   it('an incomplete window is never reported as health', () => {

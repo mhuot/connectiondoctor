@@ -28,17 +28,17 @@ export interface Incident {
   rootEvent?: EventKind;
   devicesLost: Array<{ vidPid?: string; name: string }>;
   sharedParent?: { id: string; name: string };
-  /** Present when a deficit in this run began and never reported an end.
+  /** Present when this run contains a power deficit worth a mark on the
+   *  timeline. `until` is absent when the episode never reported an end.
    *
-   *  `durationProven` separates two situations a timestamp cannot tell apart.
-   *  If the recording is continuous from `since` to the last evidence, the
-   *  supply has been short that whole time and the duration is a fact. If the
-   *  window is incomplete — a gap, a trim, corrupt lines, or simply no
-   *  coverage to vouch for it — the missing `deficitEnd` may be sitting inside
-   *  the hole, and "twenty minutes later there was a snapshot" proves only
-   *  that twenty minutes passed. The start is still evidence worth showing;
-   *  the duration is not ours to claim. */
-  openDeficit?: { since: string; durationProven: boolean };
+   *  `durationProven` separates two situations timestamps cannot tell apart.
+   *  Over a recording the producer vouches for as complete, the span between
+   *  the transitions is a fact. Over an incomplete one it is not: an unlocated
+   *  gap could hold a missing `deficitEnd`, or an end and a later restart, and
+   *  `coverage.complete` is a boolean over the whole window with no interval
+   *  to show the gap fell elsewhere. The transitions are recorded facts and
+   *  are kept in both cases; the duration between them is not ours to claim. */
+  deficit?: { since: string; until?: string; durationProven: boolean };
 }
 
 export function stitchIncidents(
@@ -139,8 +139,12 @@ export function stitchIncidents(
         devicesLost: lost,
       };
       const deficit = deficitVerdict(group, evidenceThrough, continuous);
-      if (deficit.kind === 'open') {
-        incident.openDeficit = { since: deficit.since, durationProven: deficit.durationProven };
+      if (deficit.kind === 'deficit') {
+        incident.deficit = {
+          since: deficit.since,
+          ...(deficit.until ? { until: deficit.until } : {}),
+          durationProven: deficit.durationProven,
+        };
       }
       const before = topologyBefore(group[0].t);
       if (before && lost.length >= 2) {
@@ -163,14 +167,19 @@ export function stitchIncidents(
  *  seconds long, so the longer the fault runs unresolved the more certain the
  *  silence — the exact failure the sustained rule exists to prevent.
  *
- *  Returns what the evidence supports, which is three answers and not two:
- *  a closed episode is measured exactly, an open one over a continuous
- *  recording is measured to the last evidence, and an open one over an
- *  incomplete recording has a start and no knowable duration. */
+ *  What the two recorded transitions prove and what they do not is the whole
+ *  of this function. `deficitStart` at T0 and `deficitEnd` at T5 prove the
+ *  machine was short of power at T0 and had recovered by T5. They do not prove
+ *  one continuous five-minute deficit: if the recording has a hole in it, an
+ *  earlier end and a later restart would look exactly the same from here.
+ *  Nothing available to a consumer locates that hole — `coverage.complete` is
+ *  a boolean over the whole window with no interval attached — so there is no
+ *  way to show a gap fell outside the pair. Duration is therefore claimed only
+ *  when the recording is explicitly complete, for closed and open episodes
+ *  alike, and both recorded transitions are preserved either way. */
 type DeficitVerdict =
   | { kind: 'none' }
-  | { kind: 'sustained' }
-  | { kind: 'open'; since: string; durationProven: boolean };
+  | { kind: 'deficit'; since: string; until?: string; durationProven: boolean };
 
 function deficitVerdict(
   group: ContractEvent[],
@@ -181,9 +190,14 @@ function deficitVerdict(
   for (const event of group) {
     if (event.kind === 'deficitStart') start ??= event;
     if (event.kind === 'deficitEnd' && start !== undefined) {
-      // A closed episode is measured between two recorded facts, so a gap
-      // elsewhere in the window does not make its duration less certain.
-      if (Date.parse(event.t) - Date.parse(start.t) >= SUSTAINED_DEFICIT_MS) return { kind: 'sustained' };
+      // Elapsed time between two recorded transitions. A hole between them can
+      // only make the real deficit *shorter* — an end we missed followed by a
+      // restart — never longer, so a short pair is still certainly not
+      // sustained and stays silent. A long one is worth showing, with the
+      // duration claimed only when the window vouches for itself.
+      if (Date.parse(event.t) - Date.parse(start.t) >= SUSTAINED_DEFICIT_MS) {
+        return { kind: 'deficit', since: start.t, until: event.t, durationProven: continuous };
+      }
       start = undefined;
     }
   }
@@ -191,10 +205,10 @@ function deficitVerdict(
 
   // Enough time passed between the start and the last thing we know for this
   // to be worth showing at all. That is a fact about timestamps and claims
-  // nothing about what happened in between — which is the whole point below.
+  // nothing about what happened in between — which is the whole point above.
   if (evidenceThrough - Date.parse(start.t) < SUSTAINED_DEFICIT_MS) return { kind: 'none' };
 
-  return { kind: 'open', since: start.t, durationProven: continuous };
+  return { kind: 'deficit', since: start.t, durationProven: continuous };
 }
 
 /** Deepest common ancestor of the removed nodes in the pre-incident tree —
