@@ -9,7 +9,7 @@
 
 #### Scenario: Diff from an agent
 - **WHEN** a baseline was saved with `baseline save` and the agent calls `connection_diff`
-- **THEN** it receives `{findings, missing, added, baselineCapturedAt}` matching `diff --json`
+- **THEN** it receives a diff document identical to `diff --json`; until `contract-conformance` lands, its `note` states that matching is by instance id
 
 #### Scenario: Diagram not yet available
 - **WHEN** `connection_diagram` is called before the shared Excalidraw export exists

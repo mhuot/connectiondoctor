@@ -7,12 +7,14 @@ agent or person is likely to have used. macOS moves to it and keeps `--verb`
 forms as one-release deprecated aliases so `claude mcp add … --mcp`
 registrations and shell history keep working with a stderr notice.
 
-## Decision: `--json` means Contract v1, always
+## Decision: `--json` means a Contract v1 document, always
 No verb gets a private JSON shape. `probe --json` and `tree --json` are the
-envelope; `report --json` is `{findings[], incidents[]}`; `diff --json` is
-`{findings[], missing[], added[]}` with nodes as contract nodes. This is what
-makes the CLI, MCP and dashboard three views of one model, and it is what the
-conformance fixtures can test.
+envelope; `report --json` is the **report** document; `diff --json` is the
+**diff** document, with `missing`/`added` as contract nodes. The wrappers are
+defined in `schema-v1.md` § Documents (added after review issue #20 — the
+first draft claimed "validates against schema-v1.md" for shapes it did not
+define). This is what makes the CLI, MCP and dashboard three views of one
+model, and what the JSON Schema files in `contract-conformance` validate.
 
 ## Decision: MCP results are contract shapes; names are platform-neutral
 `tb_*` names encode the macOS product and the assumption that Thunderbolt is

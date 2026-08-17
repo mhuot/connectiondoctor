@@ -12,7 +12,7 @@ The CLI SHALL expose the verb set defined in `docs/cli.md` with identical names,
 - **THEN** it behaves as `tbdoctor probe` and prints a one-line deprecation notice on stderr
 
 ### Requirement: `--json` emits Contract v1 shapes
-Any verb that reports state SHALL accept `--json` and emit only shapes defined in `docs/schema-v1.md`: the envelope for `probe`/`tree`/`contract`, `{findings, incidents}` for `report`, `{findings, missing, added}` for `diff`.
+Any verb that reports state SHALL accept `--json` and emit one of the documents defined in `docs/schema-v1.md` § Documents: the envelope for `probe`/`tree`/`contract`, the report document for `report`, the diff document for `diff` — validated against the JSON Schema files under `docs/schema/v1/` once `contract-conformance` adds them.
 
 #### Scenario: Piping probe
 - **WHEN** `probe --json` is run

@@ -17,10 +17,14 @@ claude mcp add connectiondoctor -- C:\path\to\ConnectionDoctor.exe mcp          
 
 ## Principles
 
-- **Results are Contract v1 shapes.** Every tool returns JSON that validates
-  against [`schema-v1.md`](schema-v1.md): the envelope, `Finding[]`,
-  `Incident[]`. No tool invents a third shape; the dashboard, the CLI's
-  `--json` and the MCP tools are three views of one data model.
+- **Results are Contract v1 documents.** Every tool returns one of the
+  documents defined in [`schema-v1.md` § Documents](schema-v1.md#documents):
+  the **envelope**, a **report** (`{findings?, incidents?, note?}` with a
+  `kind: "report"` discriminator) or a **diff** (`kind: "diff"`) — or, for
+  `connection_diagram`, an Excalidraw document. No tool invents a private
+  shape; the dashboard, the CLI's `--json` and the MCP tools are three views of
+  one data model, and the JSON Schema files under `docs/schema/v1/` (from
+  `contract-conformance`) are what a test validates against.
 - **Read-only.** No tool changes machine state, starts the recorder, or writes
   outside the data directory. `install`/`uninstall` are CLI-only on purpose.
 - **Honest about absence.** When the recorder has never run, history-based
@@ -35,9 +39,9 @@ claude mcp add connectiondoctor -- C:\path\to\ConnectionDoctor.exe mcp          
 | Tool | Input | Returns | Use it for |
 |---|---|---|---|
 | `connection_probe` | `{}` | v1 **envelope** (current state) | "what is plugged in right now", "is it actually charging" |
-| `connection_diagnose` | `{ hours?: number = 6 }` | `{ findings: Finding[], note?: string }` ranked critical → info, each with mandatory `evidence[]` | "my dock keeps disconnecting", root-cause questions |
-| `connection_incidents` | `{ hours?: number = 24, limit?: number = 20 }` | `{ incidents: Incident[], note?: string }` newest first | "when and how often did it happen" |
-| `connection_diff` | `{ baseline?: string }` (path; default = saved baseline) | `{ findings: Finding[], missing: Node[], added: Node[], baselineCapturedAt: string }` | "what is missing now that was there when the desk worked" |
+| `connection_diagnose` | `{ hours?: number = 6 }` | **Report** with `findings` ranked critical → info, each with mandatory `evidence[]` (`note` when no recording) | "my dock keeps disconnecting", root-cause questions |
+| `connection_incidents` | `{ hours?: number = 24, limit?: number = 20 }` | **Report** with `incidents` newest first | "when and how often did it happen" |
+| `connection_diff` | `{ baseline?: string }` (path; default = saved baseline) | **Diff** document: `findings`, `missing: Node[]`, `added: Node[]`, `baselineCapturedAt`, `note?` | "what is missing now that was there when the desk worked" |
 | `connection_diagram` | `{ style?: "cascade" \| "topDown" \| "flow" = "cascade", full?: boolean = false }` | Excalidraw document (JSON) | "show me / share how this is wired" |
 
 Descriptions are written for the model, in the style of the existing

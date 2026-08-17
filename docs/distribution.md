@@ -15,7 +15,7 @@ One GitHub Release per tag `vX.Y.Z`, built by CI from that tag (see
 
 | Platform | Artifact | Why this form |
 |---|---|---|
-| macOS (arm64 + x86_64 universal) | `TBDoctor-X.Y.Z.dmg` — drag to Applications | What Mac users expect for an app; opens, drag, done. Signed with Developer ID and **notarized**, so Gatekeeper opens it without ceremony. |
+| macOS (Apple silicon, arm64) | `TBDoctor-X.Y.Z.dmg` — drag to Applications | What Mac users expect for an app; opens, drag, done. Signed with Developer ID and **notarized**, so Gatekeeper opens it without ceremony. arm64 only — the fleet is Apple silicon; a universal build is a one-line change (`--arch arm64 --arch x86_64`) if an Intel user appears, and the release job asserts the shipped architecture with `lipo -info`. |
 | macOS | `TBDoctor-X.Y.Z.zip` — the same `.app` | For automation: Homebrew cask, scripted installs, future in-app updates. Same signature and notarization ticket. |
 | Windows arm64 | `ConnectionDoctor-X.Y.Z-win-arm64.exe` | **Single-file, self-contained** (.NET runtime inside). No prerequisite; runs from a USB stick or a download folder; `install` when you want it resident. Authenticode-signed via SignPath. |
 | Windows x64 | `ConnectionDoctor-X.Y.Z-win-x64.exe` | Same. |

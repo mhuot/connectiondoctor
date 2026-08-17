@@ -25,7 +25,11 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: dashboard/package-lock.json }
       - run: npm ci --no-fund --no-audit
       - run: npm test
-      - run: npm version --no-git-tag-version "${{ inputs.version }}" || true
+      - name: Set the bundle version from the tag
+        run: |
+          npm version --no-git-tag-version "${{ inputs.version }}"
+          got="$(node -p "require('./package.json').version")"
+          [ "$got" = "${{ inputs.version }}" ] || { echo "package.json version is '$got', expected '${{ inputs.version }}'" >&2; exit 1; }
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with: { name: dashboard-dist, path: dashboard/dist, if-no-files-found: error }
@@ -64,6 +68,12 @@ jobs:
         env:
           SIGN_IDENTITY: ${{ steps.cert.outputs.have == 'true' && vars.DEVELOPER_ID_IDENTITY || '' }}
         run: ./build_app.sh release
+      - name: Assert architecture matches docs/distribution.md
+        working-directory: macos
+        run: |
+          archs="$(lipo -archs TBDoctor.app/Contents/MacOS/TBDoctor)"
+          echo "TBDoctor architectures: $archs"
+          [ "$archs" = "arm64" ] || { echo "expected arm64 only, got '$archs' — update docs/distribution.md and release-pipeline/design.md together" >&2; exit 1; }
       - name: Notarize and staple
         if: steps.cert.outputs.have == 'true'
         working-directory: macos
