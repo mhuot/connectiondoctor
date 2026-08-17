@@ -38,9 +38,9 @@ only; breaking changes bump the version.
 | `schema` | Literal `connection-contract/v1` |
 | `host.os` | `macos` \| `windows` |
 | `host.model` *(opt)* | Hardware model identifier |
-| `host.id` *(opt, proposed)* | **Opaque, random, per-installation** endpoint identity (UUIDv4 generated on first run, persisted in the data directory). Survives hostname changes; regenerates on reinstall or when the data directory is removed. **Not derived from hardware** — never a hash of IOPlatformUUID / MachineGuid, which would be a global tracking identifier. Consumers key hosts on it when present, `host.name` otherwise. Portable exports may replace it with an export-scoped pseudonym so two shared bundles are not linkable (`contract --redact`, `contract-conformance`). Managed-fleet correlation uses a platform-supplied endpoint ID or a tenant-keyed HMAC — fleet-integration milestone, not this field. (issue #27) |
+| `host.id` *(opt, proposed)* | **Opaque, random, per-installation** endpoint identity (UUIDv4 generated on first run, persisted in the data directory). Survives hostname changes and normal upgrades/reinstalls (which keep the data directory); regenerates only when identity state or the data directory is reset. **Not derived from hardware** — never a hash of IOPlatformUUID / MachineGuid, which would be a global tracking identifier. Consumers key hosts on it when present, `host.name` otherwise. Portable exports replace it with a **share-scoped** pseudonym (see § Redaction and share scope) so two shared bundles are not linkable while documents inside one bundle still join. Managed-fleet correlation uses a platform-supplied endpoint ID or a tenant-keyed HMAC — fleet-integration milestone, not this field. (issue #27) |
 | `displaysKnown` | `false` when the producer had no display session (SSH on macOS); distinct from "no displays attached" |
-| `findings` / `incidents` / `analysis` *(opt, proposed)* | Added by `contract-findings-incidents`: `analysis: {windowHours, generatedAt}` plus the two arrays, present only when recorded history exists. Absent ≠ empty |
+| `findings` / `incidents` / `analysis` *(opt, proposed)* | Added by `contract-findings-incidents`: `analysis: {windowHours, generatedAt, coverage}` plus the two arrays, present only when recorded history exists. Absent ≠ empty. **`coverage`** = `{availableFrom, through, complete: bool, reasons?: string[]}` — what the recorder can actually vouch for: `complete` is true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; `reasons` names why not (`recorder-started-inside-window`, `trimmed`, `gap`, `no-history`). Consumers show "unknown" rather than "none" whenever `complete` is false — an empty valid stream, a newly installed recorder and a trimmed log are indistinguishable without this |
 | `producer` *(opt, proposed)* | `{name: "tbdoctor"\|"connectiondoctor", version, commit?, dashboard?}` — added by `release-pipeline` |
 
 ## Power
@@ -228,6 +228,27 @@ platforms; until then a producer that matches otherwise says so in `note`.
 [Excalidraw document](https://github.com/excalidraw/excalidraw/blob/master/packages/excalidraw/data/types.ts)
 (`{type: "excalidraw", version: 2, source, elements[], appState}`) — an
 external format, referenced not redefined here.
+
+### Redaction and share scope
+
+Documents that leave the machine — a support case, an issue attachment, a
+bundle for a colleague — are redacted under a **share scope**:
+
+- A scope is a random token. Every document produced in the same scope carries
+  the same pseudonymous `host.id` (an HMAC of the real one under the scope
+  token), so the recipient can join the envelope, the report and the events of
+  one case. A different scope yields a different pseudonym, so two bundles
+  from the same machine are not linkable.
+- Redaction is **recursive**: `platform{}`, `unitKey`, native identifiers and
+  raw serials are removed from every node, from `displays[]`, from each
+  incident's `devicesLost`, and from every envelope embedded in a
+  `fullSnapshot` event — not only from the top-level document.
+- `contract --redact` / `report --redact` / `diff --redact` on their own use an
+  implicit one-document scope. `bundle <out.zip> [--hours N]` produces the
+  envelope, the report and the events window under one explicit scope; a
+  `--scope <token>` flag lets separate commands share a scope when needed.
+- The identity state itself (`identity.json`: `host.id`, `installationKey`)
+  never leaves the machine and is not part of any bundle.
 
 ### Machine-checkable schema
 

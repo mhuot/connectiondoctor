@@ -29,16 +29,29 @@ evidence on both OSes. The event-log deficit rule (−2 W instantaneous) stays a
 is — spec already distinguishes them once `contract-conformance` writes it
 down.
 
-## Host state (issue #29)
-`HostData` gains `contact: {contractAt?, eventsAt?, contractError?, eventsError?,
-skippedLines}` and a derived `state`: **live** (both fetched within 2×refresh
-interval), **stale** (last success older than that, data retained),
-**offline** (last refresh failed for both), **envelope-only** (`/events`
-failed or absent), **history-incomplete** (`skippedLines > 0`, or the events
-window is shorter than `analysis.windowHours`). Fleet cards and the host
-selector show the state as a chip; the Findings/Timeline panels read it to
-decide whether "none" is a claim they can make. Thresholds are constants in
-one place and named in the spec.
+## Host contact and history (issue #29; split after review of #34)
+Two independent statuses, because they overlap in every combination (offline
+*and* incomplete; live *and* envelope-only; stale *and* complete):
+
+- **contact** — `live` (contract or events succeeded within 2× the refresh
+  interval), `stale` (older than that; data retained and shown as stale),
+  `offline` (last refresh failed for both). `HostData.contact = {contractAt?,
+  eventsAt?, contractError?, eventsError?}` keeps the timestamps separately.
+- **history** — `complete`, `no-history` (recorder never ran: `analysis`
+  absent), `envelope-only` (`/events` failed or empty while `/contract`
+  succeeded), `incomplete` with **durable reasons**: `skippedLines > 0`,
+  `coverage.complete == false` (with the producer's `reasons`), events window
+  shorter than `analysis.windowHours`. A reason is cleared **only when a later
+  payload proves the window complete** (`coverage.complete` true for the
+  requested window and zero skipped lines) — a successful refresh does not
+  restore lines that were skipped or trimmed earlier.
+
+Completeness is never inferred from the first event alone; it comes from
+`analysis.coverage`, which the producers compute from the recorder's actual
+span, trims and gaps. Both statuses show as chips on fleet cards and the host
+selector; the Findings and Timeline panels read `history` to decide whether
+"none" is a claim they can make. Thresholds are constants in one place and
+named in the spec.
 
 ## Dashboard panel
 `FindingsView`: list, not cards; severity chip; title; explanation; evidence as

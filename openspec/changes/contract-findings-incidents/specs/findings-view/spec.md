@@ -12,8 +12,8 @@ The dashboard SHALL show a Findings panel listing the active host's findings ran
 - **THEN** the panel says no findings in the window; **WHEN** `analysis` is absent, it says the collector has no recording and how to start one
 
 #### Scenario: Incomplete window
-- **WHEN** the host is history-incomplete or envelope-only
-- **THEN** the panel says "unknown — history incomplete" with the reason, never "no findings"
+- **WHEN** the host's history status is `incomplete`, `envelope-only` or `no-history`
+- **THEN** the panel says "unknown — <reason>" (from `coverage.reasons` or the fetch failure), never "no findings"
 
 ### Requirement: Timeline prefers producer incidents
 The Timeline SHALL use `incidents[]` from the envelope when present and its own stitching otherwise, and SHALL label which it is showing.

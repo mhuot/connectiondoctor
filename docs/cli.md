@@ -19,6 +19,9 @@ does not silently omit the verb.
   **documents** ([`schema-v1.md` § Documents](schema-v1.md#documents)): the
   envelope (`probe`, `tree`, `contract`), a report (`report`), a diff (`diff`)
   — never an ad-hoc JSON.
+- **`--redact`** on `contract`, `report` and `diff` (and always in `bundle`)
+  applies the share-scoped redaction in `schema-v1.md` § Redaction: pseudonymous
+  `host.id`, no `platform{}`, `unitKey` or serials, recursively.
 - **stdout is the answer, stderr is commentary.** Progress, deprecation notices
   and errors go to stderr, so `--json` output pipes cleanly.
 - **Exit codes:** `0` ok · `1` usage or runtime error · `2` a `critical`
@@ -49,6 +52,7 @@ does not silently omit the verb.
 | `uninstall` | Remove the login registration; stop nothing that is running | text | win ✓; **mac to add** |
 | `status` | Is the recorder running, when was the last sample, where the data is | text; `0` healthy · `1` not running / stale / no heartbeat · `3` lock conflict | win ✓; **mac to add** |
 | `excalidraw <out.excalidraw> [--style cascade\|topDown\|flow] [--full]` | Topology as an Excalidraw document | file | mac ✓; **win to add** |
+| `bundle <out.zip> [--hours N] [--scope token]` | Redacted support bundle: envelope, report and events window under one share scope (`schema-v1.md` § Redaction) | zip | **both to add** (`contract-conformance`) |
 | `version` | Version, commit, and the embedded dashboard bundle's version | text; `--json` | **both to add** |
 | `help` | This table | text | ✓ |
 
