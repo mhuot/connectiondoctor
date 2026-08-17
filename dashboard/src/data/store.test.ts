@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyContact, hostContact, hostHistory, mergeRefresh, type HostData } from './store';
+import { ifMatchHeader } from './baseline';
 import { deviceCountSeries } from '../domain/series';
 import { parseEnvelope, parseEventStream, ContractError } from '../contract/parse';
 import type { ContractEnvelope, ContractEvent } from '../contract/types';
@@ -175,5 +176,11 @@ describe('post-merge honesty follow-ups (review of #53)', () => {
     expect(skippedLines).toBe(1);
     expect(events).toHaveLength(1);
     expect(lastSnapshotIndex).toBeNull();
+  });
+});
+
+describe('baseline mutation client shape (review of #55)', () => {
+  it('sends If-Match as one quoted ETag, which is what the server accepts', () => {
+    expect(ifMatchHeader('2026-08-16T09:00:00.0000000-05:00')).toBe('"2026-08-16T09:00:00.0000000-05:00"');
   });
 });

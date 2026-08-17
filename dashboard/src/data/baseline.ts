@@ -19,11 +19,19 @@ export function canMutate(host: HostData): boolean {
   return host.origin === window.location.origin;
 }
 
+/** The exact header value the server accepts: the capture time, quoted. */
+export function ifMatchHeader(capturedAt: string): string {
+  return `"${capturedAt}"`;
+}
+
 export async function captureBaseline(host: HostData, options: { replace?: boolean; ifMatch?: string } = {}): Promise<BaselineResult> {
   const url = new URL('/baseline', host.origin);
   if (options.replace) url.searchParams.set('replace', '1');
   const headers: Record<string, string> = { 'X-ConnectionDoctor-Request': '1' };
-  if (options.ifMatch) headers['If-Match'] = options.ifMatch;
+  // Exactly one strong ETag, quoted — the server refuses anything else
+  // (docs/embedding.md § Mutations), and an unquoted timestamp would make
+  // every replacement fail.
+  if (options.ifMatch) headers['If-Match'] = ifMatchHeader(options.ifMatch);
 
   let response: Response;
   try {

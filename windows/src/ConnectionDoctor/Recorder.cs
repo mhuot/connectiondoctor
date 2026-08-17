@@ -32,14 +32,51 @@ internal sealed record RecorderEntry(
         new(snapshot.CapturedAt, RecorderEntryKinds.Snapshot, null, snapshot.Power, snapshot, analysis);
 }
 
+/// <summary>
+/// Remembers the deepest rate already written for the deficit in progress, so a
+/// deficit that slides from -3 W to -20 W in small steps still leaves evidence:
+/// comparing only adjacent samples would emit nothing at all.
+/// </summary>
+internal sealed class DeficitTracker
+{
+    public int? DeepestRecorded { get; private set; }
+
+    public bool ShouldRecord(PowerState power)
+    {
+        if (!power.IsDeficit || power.BatteryRateMilliwatts is not { } rate)
+        {
+            DeepestRecorded = null;
+            return false;
+        }
+
+        if (DeepestRecorded is not { } deepest)
+        {
+            DeepestRecorded = rate;
+            return false; // the deficitStarted entry already carries this rate
+        }
+
+        if (rate > deepest - Recorder.DeficitDeepeningStepMilliwatts)
+        {
+            return false;
+        }
+
+        DeepestRecorded = rate;
+        return true;
+    }
+}
+
 internal static class Recorder
 {
-    /// <summary>How much deeper a live deficit must get before it is worth another entry.</summary>
+    /// <summary>How much deeper than the deepest already recorded a live deficit must get before another entry.</summary>
     public const int DeficitDeepeningStepMilliwatts = 1000;
+
+    /// <summary>Used when a caller keeps no tracker (tests, one-off diffs).</summary>
+    private static readonly DeficitTracker FallbackTracker = new();
 
     public static IReadOnlyList<RecorderEntry> DetectChanges(
         ConnectionSnapshot previous,
-        ConnectionSnapshot current)
+        ConnectionSnapshot current,
+        DeficitTracker? deficit = null)
     {
         var entries = new List<RecorderEntry>();
         var previousDevices = DeviceFilters.ConnectionDevices(previous)
@@ -68,11 +105,10 @@ internal static class Recorder
         }
 
         // A deficit that deepens without any other transition would otherwise
-        // leave no sample deep enough to qualify: record the new extreme.
+        // leave no sample deep enough to qualify. Measured against the deepest
+        // already recorded, so gradual slides are captured too.
         if (previous.Power.IsDeficit && current.Power.IsDeficit &&
-            current.Power.BatteryRateMilliwatts is { } now &&
-            previous.Power.BatteryRateMilliwatts is { } before &&
-            now <= before - DeficitDeepeningStepMilliwatts)
+            (deficit ?? FallbackTracker).ShouldRecord(current.Power))
         {
             entries.Add(new RecorderEntry(
                 current.CapturedAt,

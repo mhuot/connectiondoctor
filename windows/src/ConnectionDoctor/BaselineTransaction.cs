@@ -46,6 +46,42 @@ internal static class BaselineTransaction
     /// null from the CLI, which is an explicit local action by the person at the keyboard.
     /// </param>
     /// <param name="capture">Takes the snapshot — inside the lock, so what is written is what was decided on.</param>
+    /// <summary>
+    /// Run <paramref name="work"/> holding the baseline lock — for readers that
+    /// must not interleave with a replacement (the analysis reads the baseline
+    /// and its fault history together). Returns false if the lock is busy.
+    /// </summary>
+    public static bool WithLock(Action work)
+    {
+        using var mutex = new Mutex(false, MutexName);
+        var held = false;
+        try
+        {
+            try
+            {
+                held = mutex.WaitOne(LockTimeout);
+            }
+            catch (AbandonedMutexException)
+            {
+                held = true;
+            }
+
+            if (held)
+            {
+                work();
+            }
+
+            return held;
+        }
+        finally
+        {
+            if (held)
+            {
+                mutex.ReleaseMutex();
+            }
+        }
+    }
+
     public static Result Run(bool replace, DateTimeOffset? expectedCapturedAt, Func<ConnectionSnapshot> capture, bool requireExpectedOnReplace)
     {
         using var mutex = new Mutex(false, MutexName);
@@ -76,9 +112,11 @@ internal static class BaselineTransaction
                 {
                     existing = SnapshotStore.Load(path);
                 }
-                catch (Exception exception) when (exception is InvalidDataException or JsonException or IOException)
+                catch (Exception exception) when (exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
                 {
                     // Fail closed: we cannot prove what we would be discarding.
+                    // (Access denied included — an unreadable baseline is a
+                    // structured error, never a crashed request loop.)
                     return new Result(Outcome.Unreadable, Detail: exception.Message);
                 }
             }
@@ -108,8 +146,14 @@ internal static class BaselineTransaction
             }
 
             // The fault/recovery history described the baseline we just
-            // discarded; every writer resets it, not just the HTTP one.
-            BaselineStateFile.Write(new BaselineStateFile());
+            // discarded; every writer resets it, not just the HTTP one. If the
+            // reset cannot be written, the replacement is a failure: keeping
+            // the old history against a new baseline would report a recovery
+            // from a fault that no longer has any meaning.
+            if (!BaselineStateFile.Write(new BaselineStateFile()))
+            {
+                return new Result(Outcome.WriteFailed, Detail: "baseline saved but its fault history could not be reset");
+            }
 
             var nodes = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Count;
             return new Result(existing is null ? Outcome.Captured : Outcome.Replaced, snapshot.CapturedAt, nodes, existing?.CapturedAt);

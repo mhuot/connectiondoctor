@@ -13,7 +13,7 @@ public sealed class WindowsAnalysisTests
     private static CollectorHeartbeat Beat(DateTimeOffset started, DateTimeOffset lastSample) =>
         new(1234, started, lastSample, "events.jsonl");
     private static WindowsAnalysis.Inputs Inputs(IReadOnlyList<RecorderEntry> entries, CollectorHeartbeat? beat, DateTimeOffset? trimmed = null) =>
-        new(entries, beat, trimmed, null, null);
+        new(entries, beat, trimmed, null, null, StateStore: new MemoryBaselineStateStore());
 
     [Fact]
     public void NoRecordingAtAllProducesNoAnalysisAtAll()
@@ -251,21 +251,61 @@ public sealed class WindowsAnalysisIntegrityTests
     }
 
     [Fact]
-    public void RecorderEmitsADeepeningEntryOnlyWhenItMattered()
+    public void ADeficitSlidingDownInSmallStepsStillLeavesEvidence()
+    {
+        // The blocker: -3 W to -20 W in ~0.5 W steps. Comparing adjacent
+        // samples emits nothing; comparing against the deepest already
+        // recorded emits a line for each further watt.
+        var deviceless = SnapshotComparerTests.Snapshot();
+        ConnectionSnapshot WithPower(int rate) => deviceless with { CapturedAt = Now, Power = new PowerState(true, 90, rate) };
+        var tracker = new DeficitTracker();
+        var previous = WithPower(-3000);
+        tracker.ShouldRecord(previous.Power); // the deficitStarted entry's rate
+
+        var deepened = 0;
+        var deepest = -3000;
+        for (var rate = -3500; rate >= -20000; rate -= 500)
+        {
+            var current = WithPower(rate);
+            if (Recorder.DetectChanges(previous, current, tracker).Any(entry => entry.Kind == RecorderEntryKinds.DeficitDeepened))
+            {
+                deepened++;
+                deepest = rate;
+            }
+
+            previous = current;
+        }
+
+        Assert.True(deepened >= 15, $"expected the slide to be recorded repeatedly, got {deepened} entries");
+        Assert.Equal(-20000, deepest);
+    }
+
+    [Fact]
+    public void JitterAndRecoveryDoNotEmitDeepeningEntries()
     {
         var deviceless = SnapshotComparerTests.Snapshot();
         ConnectionSnapshot WithPower(int rate) => deviceless with { CapturedAt = Now, Power = new PowerState(true, 90, rate) };
+        var tracker = new DeficitTracker();
+        tracker.ShouldRecord(WithPower(-5000).Power);
 
-        // Deepened by 5 W: worth recording.
-        Assert.Contains(Recorder.DetectChanges(WithPower(-5000), WithPower(-10000)),
+        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5000), WithPower(-5200), tracker),
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
-        // Jitter of 200 mW: not worth a line.
-        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5000), WithPower(-5200)),
+        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5200), WithPower(-4000), tracker),
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
-        // Recovering, not deepening.
-        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-10000), WithPower(-5000)),
+        // …and after recovering, a new dive past the old extreme still counts.
+        Assert.Contains(Recorder.DetectChanges(WithPower(-4000), WithPower(-9000), tracker),
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
     }
+}
+
+/// <summary>A baseline history that lives in the test, not on the machine.</summary>
+internal sealed class MemoryBaselineStateStore : IBaselineStateStore
+{
+    private BaselineStateFile? state;
+    public MemoryBaselineStateStore(BaselineStateFile? initial = null) => state = initial;
+    public BaselineStateFile? Read() => state;
+    public bool Write(BaselineStateFile value) { state = value; return true; }
+    public void WithLock(Action work) => work();
 }
 
 public sealed class BaselineFaultEvidenceTests
@@ -292,7 +332,7 @@ public sealed class BaselineFaultEvidenceTests
         var stale = new WindowsAnalysis.Inputs(
             [new RecorderEntry(Now.AddDays(-2), RecorderEntryKinds.DeviceDisappeared, null, new PowerState(true, 100, 0), null)],
             new CollectorHeartbeat(1, Now.AddDays(-2).AddHours(-1), Now.AddDays(-2), "events.jsonl"),
-            null, baseline, null);
+            null, baseline, null, StateStore: new MemoryBaselineStateStore());
 
         var result = WindowsAnalysis.Run(stale, current, 6, Now)!;
 
@@ -309,7 +349,7 @@ public sealed class BaselineFaultEvidenceTests
     {
         var (baseline, current) = DockMissing();
         var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
-            null, baseline, null);
+            null, baseline, null, StateStore: new MemoryBaselineStateStore());
 
         var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
         Assert.Equal("active-fault", result.Baseline.State);
@@ -326,10 +366,90 @@ public sealed class BaselineFaultEvidenceTests
     {
         var (baseline, _) = DockMissing();
         var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
-            null, baseline, null);
+            null, baseline, null, StateStore: new MemoryBaselineStateStore());
 
         var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
         Assert.Equal("healthy", result.Baseline.State);
         Assert.Empty(result.Findings);
+    }
+
+    [Fact]
+    public void AFreshInstallWithALiveFaultStillGetsAnalysisAndAFinding()
+    {
+        // Nothing recorded at all, but the power state in front of the user is
+        // a deficit: "no history" must not swallow the present.
+        var current = SnapshotComparerTests.Snapshot() with { CapturedAt = Now, Power = new PowerState(true, 88, -9000) };
+        var result = WindowsAnalysis.Run(new WindowsAnalysis.Inputs([], null, null, null, null), current, 6, Now)!;
+
+        Assert.Equal(["no-history"], result.Reasons);
+        Assert.False(result.Complete);
+        Assert.NotEmpty(result.Findings);
+        Assert.All(result.Findings, finding => Assert.NotEmpty(finding.Evidence));
+    }
+
+    [Fact]
+    public void AFreshInstallWithNothingWrongStillSaysNothing()
+    {
+        var quiet = SnapshotComparerTests.Snapshot() with { CapturedAt = Now, Power = new PowerState(true, 100, 0) };
+        Assert.Null(WindowsAnalysis.Run(new WindowsAnalysis.Inputs([], null, null, null, null), quiet, 6, Now));
+    }
+
+    [Fact]
+    public void AMissingHeartbeatCannotProduceCompleteCoverage()
+    {
+        var entries = new[]
+        {
+            new RecorderEntry(Now.AddHours(-6), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null),
+            new RecorderEntry(Now.AddSeconds(-1), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null)
+        };
+        var result = WindowsAnalysis.Run(new WindowsAnalysis.Inputs(entries, null, null, null, null),
+            SnapshotComparerTests.Snapshot() with { CapturedAt = Now }, 6, Now)!;
+
+        Assert.False(result.Complete);
+        Assert.Contains("no-heartbeat", result.Reasons);
+    }
+
+    [Fact]
+    public void UnreadableOutageEvidenceMakesCoverageIncomplete()
+    {
+        var inputs = new WindowsAnalysis.Inputs(
+            [new RecorderEntry(Now.AddHours(-1), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null)],
+            new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"),
+            null, null, null, 0, [], GapEvidenceUnreadable: true);
+        var result = WindowsAnalysis.Run(inputs, SnapshotComparerTests.Snapshot() with { CapturedAt = Now }, 6, Now)!;
+
+        Assert.False(result.Complete);
+        Assert.Contains("gap-evidence-unreadable", result.Reasons);
+    }
+}
+
+public sealed class BaselineHistoryRaceTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+
+    [Fact]
+    public void HistoryIsReadAndWrittenUnderTheLockSoAReplacementCannotBeUndone()
+    {
+        // A replacement resets the history while an analysis is in flight. The
+        // analysis re-reads inside the lock, so it updates the *new* state
+        // rather than writing the old fault back over it.
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub", dock.InstanceId);
+        var baseline = SnapshotComparerTests.Snapshot(dock, hub) with { CapturedAt = Now.AddDays(-1) };
+        var current = SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now };
+
+        // Inputs were read when a fault was already recorded…
+        var staleHistory = new BaselineStateFile(FaultSince: Now.AddHours(-5));
+        // …but by the time we take the lock, a replacement has reset it.
+        var store = new MemoryBaselineStateStore(new BaselineStateFile());
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"),
+            null, baseline, staleHistory, StateStore: store);
+
+        var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
+
+        Assert.Equal("active-fault", result.Baseline.State);
+        // The fault is dated from the reset state, not the stale five-hour-old one.
+        Assert.Equal(Now, result.Baseline.FaultSince);
+        Assert.Equal(Now, store.Read()!.FaultSince);
     }
 }
