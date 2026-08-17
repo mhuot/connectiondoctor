@@ -37,11 +37,15 @@ Two independent statuses, because they overlap in every combination (offline
   interval), `stale` (older than that; data retained and shown as stale),
   `offline` (last refresh failed for both). `HostData.contact = {contractAt?,
   eventsAt?, contractError?, eventsError?}` keeps the timestamps separately.
-- **history** — `complete`, `no-history` (recorder never ran: `analysis`
-  absent), `envelope-only` (`/events` failed or empty while `/contract`
-  succeeded), `incomplete` with **durable reasons**: `skippedLines > 0`,
-  `coverage.complete == false` (with the producer's `reasons`), events window
-  shorter than `analysis.windowHours`. A reason is cleared **only when a later
+- **history** — decided by `analysis.coverage`, which is authoritative:
+  `no-history` (recorder never ran: `analysis` absent); `envelope-only`
+  (`/events` fetch **absent or failed** while `/contract` succeeded — never
+  because the stream is empty); `complete` (fetch succeeded and
+  `coverage.complete` is true — **including with zero events**, which is the
+  healthy negative case and must read as healthy); `incomplete` (fetch
+  succeeded but `coverage.complete` is false, or `skippedLines > 0`, or the
+  events window is shorter than `analysis.windowHours`) with **durable
+  reasons**. A reason is cleared **only when a later
   payload proves the window complete** (`coverage.complete` true for the
   requested window and zero skipped lines) — a successful refresh does not
   restore lines that were skipped or trimmed earlier.

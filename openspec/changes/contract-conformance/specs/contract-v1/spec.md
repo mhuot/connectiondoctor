@@ -12,7 +12,7 @@
 - **THEN** both producers emit it in `displays[]` with `attachedTo`, and the dashboard merges it with its hub identically on both
 
 ### Requirement: Stable, scoped endpoint and unit identity
-Producers SHALL emit `host.id` as an opaque random per-installation identifier persisted in the data directory — never derived from a hardware identifier — and MAY emit `node.unitKey` as an HMAC of the device serial under a per-installation secret; the raw serial SHALL never appear in any document. Consumers SHALL key hosts on `host.id` when present and SHALL NOT claim two same-VID:PID nodes are one unit without matching `unitKey`. Redacted exports SHALL replace `host.id` with a share-scoped pseudonym — consistent across every document and embedded envelope in one bundle, different across bundles — and SHALL remove `unitKey`, `platform{}` and native identifiers recursively. `host.id` SHALL survive upgrades and reinstalls that keep the data directory, regenerating only when identity state or the data directory is reset.
+Producers SHALL emit `host.id` as an opaque random per-installation identifier persisted in the data directory — never derived from a hardware identifier — and MAY emit `node.unitKey` as an HMAC of the device serial under a per-installation secret; the raw serial SHALL never appear in any document. Consumers SHALL key hosts on `host.id` when present and SHALL NOT claim two same-VID:PID nodes are one unit without matching `unitKey`. Redacted exports SHALL pseudonymise `host.id`, `host.name` and every `nodes[].id` under a share scope — consistent across every document and embedded envelope in one bundle, different across bundles — rewriting every reference (`parentId`, `attachedTo`, `sharedParent`, event `nodeId`, diff nodes) so the graph still resolves; SHALL remove `unitKey`, `platform{}` and serials recursively; SHALL replace user-assigned names with conservative evidence-preserving labels; and SHALL include a manifest of what was transformed. `host.id` SHALL survive upgrades and reinstalls that keep the data directory, regenerating only when identity state or the data directory is reset.
 
 #### Scenario: Renamed Mac
 - **WHEN** a host's name changes between two recordings with the same `host.id`
@@ -24,7 +24,11 @@ Producers SHALL emit `host.id` as an opaque random per-installation identifier p
 
 #### Scenario: One support bundle
 - **WHEN** `bundle case.zip --hours 24` is produced
-- **THEN** the envelope, the report and every `fullSnapshot` inside the events carry the same pseudonymous `host.id`, and no `platform{}`, `unitKey` or serial appears anywhere in the archive
+- **THEN** the envelope, the report and every `fullSnapshot` inside the events carry the same pseudonymous `host.id`, `host.name` and node ids; every `parentId`/`attachedTo`/`sharedParent`/event `nodeId` resolves; the topology renders identically to the unredacted source; no original id, hostname, serial or `platform{}` substring appears anywhere in the archive; and `manifest.json` lists what was transformed
+
+#### Scenario: Personal name on a peripheral
+- **WHEN** a node's name is user-assigned (e.g. an iPhone named after its owner)
+- **THEN** the redacted node carries a label built from `vendorName`/`kind`/`vidPid`, `nameRedacted: true`, and the manifest counts it; descriptor product strings are unchanged
 
 #### Scenario: Two shared bundles
 - **WHEN** the same machine produces two bundles (or two standalone `--redact` documents)

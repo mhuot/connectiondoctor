@@ -232,23 +232,53 @@ external format, referenced not redefined here.
 ### Redaction and share scope
 
 Documents that leave the machine — a support case, an issue attachment, a
-bundle for a colleague — are redacted under a **share scope**:
+bundle for a colleague — are redacted under a **share scope**. Redaction
+**pseudonymises relational identity and removes non-relational identity**; it
+never breaks the graph.
 
-- A scope is a random token. Every document produced in the same scope carries
-  the same pseudonymous `host.id` (an HMAC of the real one under the scope
-  token), so the recipient can join the envelope, the report and the events of
-  one case. A different scope yields a different pseudonym, so two bundles
-  from the same machine are not linkable.
-- Redaction is **recursive**: `platform{}`, `unitKey`, native identifiers and
-  raw serials are removed from every node, from `displays[]`, from each
-  incident's `devicesLost`, and from every envelope embedded in a
-  `fullSnapshot` event — not only from the top-level document.
+- **Scope token.** A generated high-entropy random token, one per bundle,
+  managed by the `bundle` verb and never shown to a home user by default.
+  `--scope <token>` exists so separate commands can join one bundle; a
+  friendly case label is **not** a valid token (it is not the HMAC key), and
+  reusing a token across bundles makes them linkable — the CLI warns.
+- **Pseudonymised, consistently within the scope** (HMAC under the token,
+  truncated, prefixed so the kind stays readable):
+  - `host.id` and **`host.name`** (`host-3f9a…`) — a hostname such as
+    `mikes-macbook` or an asset tag identifies the person as surely as an ID;
+  - **every `nodes[].id`**, which embeds locationIDs / instance IDs, and every
+    field that references one — `parentId`, `displays[].attachedTo`,
+    `incidents[].sharedParent`, `incidents[].devicesLost[].nodeId` where
+    present, event `nodeId`, diff `missing[]`/`added[]` ids — rewritten
+    **recursively**, including inside every `fullSnapshot` envelope in the
+    events, so topology, evidence and diffs still resolve;
+  - `unitKey` is dropped (it is already scoped to the installation and adds
+    nothing a recipient can use).
+- **Removed** recursively: `platform{}`, raw serials, `adapter.serial`, and any
+  other field the schema marks as native or personal.
+- **Names.** Product strings from device descriptors (`4-Port USB 2.0 Hub`,
+  `MX Vertical`) are model identity and are kept with `vidPid`/`vendorName`.
+  Names that the OS reports as **user-assigned** — display names, Bluetooth and
+  Apple device names such as `Mike's iPhone`, renamed peripherals — are
+  replaced by a conservative label built from evidence that stays
+  (`<vendorName> <kind>` or `<vidPid>`), and the node gains
+  `nameRedacted: true`. Producers classify which name fields are user-assigned
+  per platform; the manifest lists them.
+- **Manifest.** Every bundle carries `manifest.json`: scope pseudonym for the
+  host, the list of fields transformed and removed, counts of names replaced,
+  the documents included and their coverage — so the user can see exactly what
+  they are about to share, before they share it.
 - `contract --redact` / `report --redact` / `diff --redact` on their own use an
-  implicit one-document scope. `bundle <out.zip> [--hours N]` produces the
-  envelope, the report and the events window under one explicit scope; a
-  `--scope <token>` flag lets separate commands share a scope when needed.
+  implicit one-document scope. `bundle <out.zip> [--hours N] [--scope token]`
+  produces the envelope, the report, the events window and the manifest under
+  one scope.
 - The identity state itself (`identity.json`: `host.id`, `installationKey`)
   never leaves the machine and is not part of any bundle.
+
+Tests a redacted bundle must pass: validates against the JSON Schema; every
+reference resolves; the topology (tree shape, kinds, protocols, vidPids) is
+unchanged from the unredacted source; no original id, hostname or serial
+substring survives anywhere in the archive; two bundles from one machine do
+not correlate; documents inside one bundle do.
 
 ### Machine-checkable schema
 

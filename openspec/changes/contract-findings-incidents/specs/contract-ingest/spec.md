@@ -8,7 +8,7 @@ The dashboard SHALL parse `findings[]`, `incidents[]` and `analysis{}` when pres
 - **THEN** the host loads normally and the findings panel explains that this collector has no recording yet
 
 ### Requirement: Per-host contact and history quality
-The dashboard SHALL track `/contract` and `/events` success independently per host with their last-success times, and SHALL derive two independent statuses: **contact** (`live` | `stale` | `offline`) and **history** (`complete` | `no-history` | `envelope-only` | `incomplete` with durable reasons: skipped lines, fetch failure, producer `coverage.complete == false`, window shorter than requested). Completeness SHALL come from the producer's `analysis.coverage`, never be inferred from the first event alone. Retained stale data SHALL remain visible but never read as current.
+The dashboard SHALL track `/contract` and `/events` success independently per host with their last-success times, and SHALL derive two independent statuses: **contact** (`live` | `stale` | `offline`) and **history** (`complete` | `no-history` | `envelope-only` | `incomplete` with durable reasons: skipped lines, producer `coverage.complete == false`, window shorter than requested). `envelope-only` SHALL mean the `/events` fetch was absent or failed — never that the stream was empty. Completeness SHALL come from the producer's `analysis.coverage`, never be inferred from the first event alone; a successfully fetched stream with zero events and `coverage.complete` true SHALL be `complete`. Retained stale data SHALL remain visible but never read as current.
 
 #### Scenario: Events unreachable, envelope fine
 - **WHEN** `/contract` succeeds and `/events` fails on refresh
@@ -21,6 +21,10 @@ The dashboard SHALL track `/contract` and `/events` success independently per ho
 #### Scenario: Recovery clears contact, not history
 - **WHEN** the next refresh succeeds after an outage
 - **THEN** contact returns to live; a history reason (skipped lines, trimmed coverage) clears only if the new payload proves the requested window complete — a later success cannot restore lines that were skipped or trimmed earlier
+
+#### Scenario: Zero events, complete window
+- **WHEN** `/events` fetches successfully with no lines and `analysis.coverage.complete` is true for the requested window
+- **THEN** history is `complete` and the timeline may say "no incidents in the last N h" — the healthy negative case
 
 #### Scenario: New recorder vs empty stream
 - **WHEN** a host has an empty but valid events stream
