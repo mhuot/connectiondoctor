@@ -81,15 +81,29 @@ struct Identity: Codable {
         return nil
     }
 
-    /// A device's identity within this installation: HMAC of its serial under
-    /// the installation key, truncated. An instance method, so a caller has to
-    /// have resolved the identity first — one document, one answer.
-    func unitKey(forSerial serial: String?) -> String? {
-        guard let serial, !serial.isEmpty else { return nil }
-        let identity = self
+    /// A device's identity within this installation: HMAC of its model *and*
+    /// serial under the installation key, truncated. An instance method, so a
+    /// caller has to have resolved the identity first — one document, one
+    /// answer.
+    ///
+    /// The model is part of the input, not decoration. Hashing the serial
+    /// alone means any two products that happen to report the same string
+    /// collapse to one key, and those strings are ordinary in the wild —
+    /// sequential placeholders, version-shaped tokens, plain "0". Consumers
+    /// are told equal keys mean equal physical units, so a value shared by a
+    /// dock and a webcam is not a weak answer, it is a wrong one.
+    ///
+    /// The limit this does not remove: one manufacturer shipping the same
+    /// serial across every unit of a product. Those units are genuinely
+    /// indistinguishable from outside — see docs/schema-v1.md § nodes.
+    func unitKey(forModel vidPid: String?, serial: String?) -> String? {
+        guard let serial, !serial.isEmpty, let vidPid, !vidPid.isEmpty else { return nil }
+        // Canonical and delimited, and identical to the Windows producer's
+        // input so the two platforms key the same unit the same way.
+        let scoped = "USB|\(vidPid.uppercased())|\(serial)"
         let mac = HMAC<SHA256>.authenticationCode(
-            for: Data(serial.utf8),
-            using: SymmetricKey(data: identity.installationKey))
+            for: Data(scoped.utf8),
+            using: SymmetricKey(data: installationKey))
         return mac.map { String(format: "%02x", $0) }.joined().prefix(16).description
     }
 

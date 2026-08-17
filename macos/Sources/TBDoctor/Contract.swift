@@ -215,7 +215,7 @@ enum Contract {
         if let vidPid = device.vidPid { node["vidPid"] = vidPid }
         // Two identical docks are two units here, and nothing anywhere else:
         // the serial is keyed with a secret that never leaves this machine.
-        if let unitKey = identity?.unitKey(forSerial: device.serial) { node["unitKey"] = unitKey }
+        if let unitKey = identity?.unitKey(forModel: device.vidPid, serial: device.serial) { node["unitKey"] = unitKey }
         if let bits { node["linkBitsPerSecond"] = bits }
         if let usbClass = device.deviceClass { node["usbClass"] = usbClass }
         // Producer classification of integrated devices (dashboard-topology-

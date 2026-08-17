@@ -67,20 +67,47 @@ final class IdentityTests: XCTestCase {
 
     func testUnitKeyDistinguishesTwoUnitsOfTheSameModelAndIsAbsentWithoutASerial() throws {
         let identity = try XCTUnwrap(Identity.resolve(in: directory))
-        let first = try XCTUnwrap(identity.unitKey(forSerial: "SERIAL-A"))
+        let first = try XCTUnwrap(identity.unitKey(forModel: "045E:0963", serial: "SERIAL-A"))
 
         XCTAssertEqual(first.count, 16)
         XCTAssertNotNil(first.range(of: "^[0-9a-f]{16}$", options: .regularExpression))
-        XCTAssertNotEqual(first, identity.unitKey(forSerial: "SERIAL-B"))
-        XCTAssertEqual(first, identity.unitKey(forSerial: "SERIAL-A"))   // stable
-        XCTAssertNil(identity.unitKey(forSerial: nil))                   // unit unknown
-        XCTAssertNil(identity.unitKey(forSerial: ""))
+        XCTAssertNotEqual(first, identity.unitKey(forModel: "045E:0963", serial: "SERIAL-B"))
+        XCTAssertEqual(first, identity.unitKey(forModel: "045E:0963", serial: "SERIAL-A"))   // stable
+        XCTAssertNil(identity.unitKey(forModel: "045E:0963", serial: nil))                   // unit unknown
+        XCTAssertNil(identity.unitKey(forModel: "045E:0963", serial: ""))
+    }
+
+    func testTwoProductsReportingTheSameSerialAreNotOneUnit() throws {
+        let identity = try XCTUnwrap(Identity.resolve(in: directory))
+
+        // Placeholder serials are ordinary in the wild — "0001", "1.00", "0".
+        // Hashing the serial alone made any two products reporting the same
+        // string collapse to one key, and consumers are told equal keys mean
+        // equal physical units, so that is a wrong answer rather than a weak
+        // one. The model is part of the hash input for exactly this case.
+        for serial in ["0001", "1.00", "0"] {
+            XCTAssertNotEqual(
+                identity.unitKey(forModel: "045E:0963", serial: serial),
+                identity.unitKey(forModel: "046D:C08A", serial: serial),
+                serial)
+        }
+
+        // Same product, same reported serial: one unit as far as anything
+        // outside can tell. This is the limit the scheme does not remove, and
+        // it is deliberate rather than overlooked.
+        XCTAssertEqual(
+            identity.unitKey(forModel: "045E:0963", serial: "0001"),
+            identity.unitKey(forModel: "045e:0963", serial: "0001"))
+
+        // No model, no key: the promise cannot be met without one.
+        XCTAssertNil(identity.unitKey(forModel: nil, serial: "SERIAL-A"))
+        XCTAssertNil(identity.unitKey(forModel: "", serial: "SERIAL-A"))
     }
 
     func testUnitKeyIsKeyedPerInstallationAndNeverExposesTheSerial() throws {
         let serial = "0123456789AB"
         let identity = try XCTUnwrap(Identity.resolve(in: directory))
-        let key = try XCTUnwrap(identity.unitKey(forSerial: serial))
+        let key = try XCTUnwrap(identity.unitKey(forModel: "045E:0963", serial: serial))
 
         XCTAssertNil(key.range(of: serial, options: .caseInsensitive))
 
@@ -92,7 +119,7 @@ final class IdentityTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: other) }
         let elsewhere = try XCTUnwrap(Identity.resolve(in: other))
 
-        XCTAssertNotEqual(key, elsewhere.unitKey(forSerial: serial))
+        XCTAssertNotEqual(key, elsewhere.unitKey(forModel: "045E:0963", serial: serial))
         XCTAssertNotEqual(identity.hostId, elsewhere.hostId)
     }
 }

@@ -42,18 +42,34 @@ internal sealed record Identity(string HostId, byte[] InstallationKey)
     public static string Path => PathIn(BackgroundCollector.DataDirectory);
 
     /// <summary>
-    /// A device's identity within this installation: HMAC of its serial under
-    /// the installation key, truncated. Null when the device reports no serial
-    /// — "same model, unit unknown" is a real answer.
+    /// A device's identity within this installation: HMAC of its model *and*
+    /// serial under the installation key, truncated. Null when either is
+    /// missing — "same model, unit unknown" is a real answer.
+    ///
+    /// The model is part of the input, not decoration. Hashing the serial
+    /// alone means any two products that happen to report the same string
+    /// collapse to one key, and real hardware showed how ordinary those
+    /// strings are: a billboard device reporting a sequential placeholder and
+    /// a composite device reporting something version-shaped. Consumers are
+    /// told equal keys mean equal physical units, so a value shared by a dock
+    /// and a webcam is not a weak answer, it is a wrong one.
+    ///
+    /// The limit this does not remove: one manufacturer shipping the same
+    /// iSerial across every unit of one product. Those units are genuinely
+    /// indistinguishable from outside, and no keying scheme invents the
+    /// difference — see docs/schema-v1.md § nodes.
     /// </summary>
-    public string? UnitKey(string? serial)
+    public string? UnitKey(string? vidPid, string? serial)
     {
-        if (string.IsNullOrEmpty(serial))
+        if (string.IsNullOrEmpty(serial) || string.IsNullOrEmpty(vidPid))
         {
             return null;
         }
 
-        var mac = HMACSHA256.HashData(InstallationKey, Encoding.UTF8.GetBytes(serial));
+        // Canonical and delimited, so "USB|045E:0963" + "42" cannot collide
+        // with "USB|045E:0963" + "42" arrived at another way.
+        var scoped = $"USB|{vidPid.ToUpperInvariant()}|{serial}";
+        var mac = HMACSHA256.HashData(InstallationKey, Encoding.UTF8.GetBytes(scoped));
         return Convert.ToHexString(mac)[..16].ToLowerInvariant();
     }
 
@@ -233,5 +249,5 @@ internal readonly record struct ResolvedIdentity(Identity? Value)
 
     public string? HostId => Value?.HostId;
 
-    public string? UnitKey(string? serial) => Value?.UnitKey(serial);
+    public string? UnitKey(string? vidPid, string? serial) => Value?.UnitKey(vidPid, serial);
 }

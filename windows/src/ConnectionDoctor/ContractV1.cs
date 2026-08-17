@@ -85,7 +85,7 @@ internal static class ContractV1
                 // Two identical docks are two units here and nothing anywhere
                 // else: the serial is keyed with a secret that stays on this
                 // machine, and is absent when the device reports no serial.
-                UnitKey = who.UnitKey(device.Serial),
+                UnitKey = who.UnitKey(device.VidPid, device.Serial),
                 // The producer's classification (dashboard-topology-controls):
                 // integrated panel/touch/HID and the internal buses they hang
                 // off are built-in; anything reached through an external bus
@@ -213,7 +213,7 @@ internal static class ContractV1
                 Protocol = ProtocolOf(kind, device.LinkSpeed),
                 LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
                 UsbClass = device.UsbClass,
-                UnitKey = who.UnitKey(device.Serial),
+                UnitKey = who.UnitKey(device.VidPid, device.Serial),
                 Platform = new Dictionary<string, string> { ["instanceId"] = device.InstanceId }
             };
         }).ToList();

@@ -46,6 +46,30 @@ public sealed class IdentityTests
         Assert.Equal(expected, SnapshotComparerTests.Device(instanceId, "USB", "Device").Serial);
 
     [Fact]
+    public void TwoProductsReportingTheSameSerialAreNotOneUnit()
+    {
+        var identity = Fresh();
+
+        // Placeholder serials are ordinary in the wild — "0001", "1.00", "0" —
+        // and hashing the serial alone made any two products reporting the
+        // same string collapse to one key. Consumers are told equal keys mean
+        // equal physical units, so that is a wrong answer, not a weak one.
+        foreach (var serial in new[] { "0001", "1.00", "0" })
+        {
+            Assert.NotEqual(identity.UnitKey("045E:0963", serial), identity.UnitKey("046D:C08A", serial));
+        }
+
+        // Same product, same reported serial: one unit as far as anything
+        // outside can tell. The scheme does not remove that limit, and case in
+        // the model is not identity either.
+        Assert.Equal(identity.UnitKey("045E:0963", "0001"), identity.UnitKey("045e:0963", "0001"));
+
+        // No model, no key: the promise cannot be met without one.
+        Assert.Null(identity.UnitKey(null, "SERIAL-A"));
+        Assert.Null(identity.UnitKey(string.Empty, "SERIAL-A"));
+    }
+
+    [Fact]
     public void UnrelatedNodesNeverShareAUnitKeyBecauseTheirInstanceSuffixMatches()
     {
         // The failure observed on hardware: a dual-role controller and two
@@ -62,7 +86,7 @@ public sealed class IdentityTests
         };
 
         var keys = lookalikes
-            .Select(id => identity.UnitKey(SnapshotComparerTests.Device(id, "USB", "Built-in").Serial))
+            .Select(id => identity.UnitKey(SnapshotComparerTests.Device(id, "USB", "Built-in").VidPid, SnapshotComparerTests.Device(id, "USB", "Built-in").Serial))
             .ToList();
 
         Assert.All(keys, key => Assert.Null(key));
@@ -72,25 +96,25 @@ public sealed class IdentityTests
     public void UnitKeyDistinguishesTwoUnitsOfTheSameModelAndIsAbsentWithoutASerial()
     {
         var identity = Fresh();
-        var first = identity.UnitKey("SERIAL-A");
+        var first = identity.UnitKey("045E:0963", "SERIAL-A");
 
         Assert.NotNull(first);
-        Assert.NotEqual(first, identity.UnitKey("SERIAL-B"));
+        Assert.NotEqual(first, identity.UnitKey("045E:0963", "SERIAL-B"));
         Assert.Equal(16, first!.Length);
         Assert.Matches("^[0-9a-f]{16}$", first);
-        Assert.Equal(first, identity.UnitKey("SERIAL-A"));   // stable within an installation
-        Assert.Null(identity.UnitKey(null));                 // "same model, unit unknown"
-        Assert.Null(identity.UnitKey(string.Empty));
+        Assert.Equal(first, identity.UnitKey("045E:0963", "SERIAL-A"));   // stable within an installation
+        Assert.Null(identity.UnitKey("045E:0963", null));                 // "same model, unit unknown"
+        Assert.Null(identity.UnitKey("045E:0963", string.Empty));
         // Keyed per installation: the same serial on another machine is a
         // different key, which is what stops it correlating across exports.
-        Assert.NotEqual(first, Fresh().UnitKey("SERIAL-A"));
+        Assert.NotEqual(first, Fresh().UnitKey("045E:0963", "SERIAL-A"));
     }
 
     [Fact]
     public void UnitKeyIsNotTheSerialAndNotAPlainHashOfIt()
     {
         const string serial = "0123456789AB";
-        var key = Fresh().UnitKey(serial)!;
+        var key = Fresh().UnitKey("045E:0963", serial)!;
 
         Assert.DoesNotContain(serial, key, StringComparison.OrdinalIgnoreCase);
         // A plain SHA-256 would be identical on every machine in the world;
@@ -127,7 +151,7 @@ public sealed class IdentityTests
 
         Assert.Equal(identity.HostId, json["host"]!["id"]!.GetValue<string>());
         var node = json["nodes"]!.AsArray().Single(n => n!["id"]!.GetValue<string>().Contains("DOCKSERIAL42"));
-        Assert.Equal(identity.UnitKey("DOCKSERIAL42"), node!["unitKey"]!.GetValue<string>());
+        Assert.Equal(identity.UnitKey("045E:0963", "DOCKSERIAL42"), node!["unitKey"]!.GetValue<string>());
         // The serial itself never appears anywhere in the document.
         Assert.DoesNotContain("DOCKSERIAL42", ContractV1.Serialize(ContractV1.ToEnvelope(
             SnapshotComparerTests.Snapshot(dock), identity: new ResolvedIdentity(identity)) with { Nodes = [] }));
