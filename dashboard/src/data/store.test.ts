@@ -203,4 +203,24 @@ describe('baseline availability is separate from history coverage (review of #57
     expect(env.analysis?.capabilities?.baseline).toBe('busy'); // …and the baseline is unknown
     expect(env.analysis?.baseline).toBeUndefined();
   });
+
+  it('rejects an unknown or wrong-typed capability instead of formatting it later', () => {
+    const withCapabilities = (capabilities: unknown) => () => parseEnvelope({
+      schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+      host: { name: 'surface', os: 'windows', arch: 'arm64' },
+      power: { source: 'dock', externalConnected: true, batteryPresent: true },
+      nodes: [{ id: 'host', kind: 'host', name: 'surface', protocol: 'power' }],
+      analysis: {
+        windowHours: 6, generatedAt: '2026-08-17T00:00:00Z',
+        coverage: { availableFrom: '2026-08-16T18:00:00Z', through: '2026-08-17T00:00:00Z', complete: true },
+        capabilities,
+      },
+    });
+
+    expect(withCapabilities({ baseline: 7 })).toThrow(/capabilities.baseline/);
+    expect(withCapabilities({ baseline: 'sort-of' })).toThrow(/capabilities.baseline/);
+    expect(withCapabilities({ linkEvents: 'psychic' })).toThrow(/capabilities.linkEvents/);
+    expect(withCapabilities('yes')).toThrow(/capabilities/);
+    expect(withCapabilities({})).not.toThrow();
+  });
 });

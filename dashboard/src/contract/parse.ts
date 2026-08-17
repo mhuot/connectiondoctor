@@ -125,9 +125,7 @@ export function parseAnalysis(json: unknown): ContractAnalysis {
         : asArray(coverage.reasons, 'analysis.coverage.reasons').map((r, i) => asString(r, `analysis.coverage.reasons[${i}]`)),
     },
     baseline,
-    capabilities: doc.capabilities && typeof doc.capabilities === 'object'
-      ? (doc.capabilities as ContractAnalysis['capabilities'])
-      : undefined,
+    capabilities: doc.capabilities === undefined ? undefined : parseCapabilities(doc.capabilities),
   };
 }
 
@@ -301,6 +299,27 @@ function asOptionalEventKind(v: unknown, label: string): ContractIncident['rootE
   if (typeof v !== 'string' || !EVENT_KINDS.has(v)) throw new ContractError(`${label} invalid: ${JSON.stringify(v)}`);
   return v as ContractIncident['rootEvent'];
 }
+const LINK_EVENT_CAPABILITIES = new Set(['kernel', 'notification', 'poll', 'unavailable']);
+const BASELINE_CAPABILITIES = new Set(['available', 'busy', 'unreadable', 'history-unreadable', 'history-unwritable']);
+
+/** Strict on known fields: a capability we cannot read is a producer bug the
+ *  reader should hear about, not a value the UI then formats and crashes on. */
+function parseCapabilities(json: unknown): ContractAnalysis['capabilities'] {
+  const doc = asObject(json, 'analysis.capabilities');
+  const linkEvents = doc.linkEvents;
+  if (linkEvents !== undefined && (typeof linkEvents !== 'string' || !LINK_EVENT_CAPABILITIES.has(linkEvents))) {
+    throw new ContractError(`analysis.capabilities.linkEvents invalid: ${JSON.stringify(linkEvents)}`);
+  }
+  const baseline = doc.baseline;
+  if (baseline !== undefined && (typeof baseline !== 'string' || !BASELINE_CAPABILITIES.has(baseline))) {
+    throw new ContractError(`analysis.capabilities.baseline invalid: ${JSON.stringify(baseline)}`);
+  }
+  return {
+    linkEvents: linkEvents as NonNullable<ContractAnalysis['capabilities']>['linkEvents'],
+    baseline: baseline as NonNullable<ContractAnalysis['capabilities']>['baseline'],
+  };
+}
+
 function optNumber(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
 }
