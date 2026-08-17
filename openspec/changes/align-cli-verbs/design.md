@@ -46,9 +46,27 @@ something is installed = `0` or `4`*.
 it — a machine that is already fully set up and a machine this run just set up
 are both correct, and reporting either as failure would break every idempotent
 script. It is answered in the output instead, one line per component with a
-fixed status word: **`installed`** (this run did it), **`already installed`**
-(found in the requested state, untouched), **`not installed: <reason>`**. The
-words are normative, not cosmetic — a script greps them.
+fixed status word. The words are normative, not cosmetic — a script greps them:
+
+| `install` | `uninstall` | means |
+|---|---|---|
+| `installed` | `removed` | this run changed it |
+| `already installed` | `already absent` | found in the requested state, untouched |
+| `not installed: <reason>` | `not removed: <reason>` | could not reach the requested state |
+
+`uninstall` gets its own three words rather than reusing install's. Reading
+"not installed" after an uninstall is genuinely ambiguous — it is the phrase
+for both the outcome we wanted and the failure to get there — and inverting
+install's vocabulary would leave a script to work out that success is spelled
+with a negation. The row a script cares about is the middle one: `removed`
+against `already absent` is the difference between "this machine had it" and
+"this machine never did", and both exit 0.
+
+One asymmetry is worth stating because it looks like a failure and is not:
+`uninstall --cli` on Windows reports `removed` when it deletes the exe even
+though it leaves a PATH entry the user added themselves. That entry was never
+ours (see below), so leaving it is the correct outcome, not a partial one —
+the line says which directory was removed from PATH and which was left alone.
 
 No elevation, ever — and the two platforms get there differently, so the text
 says both rather than one rule that is false on Windows:

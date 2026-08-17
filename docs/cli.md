@@ -35,9 +35,12 @@ does not silently omit the verb.
   requested state and others did not. For `install`/`uninstall` the code
   answers *is the desired state satisfied* — not *did anything change*: a
   component that was already installed exits `0` like one just installed. The
-  per-component line says which (`installed` / `already installed` /
-  `not installed: <reason>`) for scripts that need to tell them apart. The
-  codes are a set, not a scale — do not compare them with `<` or `>`.
+  per-component line says which, in each verb's own words: `installed` /
+  `already installed` / `not installed: <reason>` for `install`, and
+  `removed` / `already absent` / `not removed: <reason>` for `uninstall` —
+  "not installed" after an uninstall would otherwise name both the goal and
+  the failure to reach it. The codes are a set, not a scale — do not compare
+  them with `<` or `>`.
 - **Data directory:** `~/Library/Application Support/TBDoctor` (macOS),
   `%LOCALAPPDATA%\ConnectionDoctor` (Windows). Override with
   `CONNECTIONDOCTOR_DIR`; macOS also honours the older `TBDOCTOR_DIR`.

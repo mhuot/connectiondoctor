@@ -34,9 +34,21 @@
 - **WHEN** `install --cli` runs on a machine where this build's CLI is already on PATH
 - **THEN** nothing is written, the component line reads `already installed`, and the command exits **0** — the exit code answers whether the desired state is satisfied, not whether this run changed anything, so running `install` twice is not a failure
 
+#### Scenario: Uninstalling reports what it removed and what was already gone
+- **WHEN** `uninstall --recorder --mcp` runs on a machine where the recorder is installed and no MCP registration exists
+- **THEN** the recorder line reads `removed`, the MCP line reads `already absent`, and the command exits **0** — both components are in the requested state, and a script distinguishing "this machine had it" from "this machine never did" reads the words rather than the code
+
+#### Scenario: Some of it could not be removed
+- **WHEN** `uninstall --all` removes the recorder and dashboard but cannot remove the MCP registration because the agent's config is not writable
+- **THEN** the removed components stay removed, the failing line reads `not removed: <reason>` naming the file, and the command exits 4 (partial)
+
+#### Scenario: A PATH entry the user owns survives an uninstall
+- **WHEN** `uninstall --cli` runs on Windows where `%LOCALAPPDATA%\Programs\ConnectionDoctor` was added to the user PATH by the user rather than by `install`
+- **THEN** the exe is deleted, the PATH entry is left in place, the line reads `removed` rather than a partial or failed status — leaving a PATH we did not set is the correct outcome, not an incomplete one — and the output names both what was removed and what was deliberately left
+
 #### Scenario: A script asks whether anything is installed
 - **WHEN** a script needs to distinguish "everything I asked for", "none of it" and "some of it"
-- **THEN** it SHALL test the exit code as a set membership — `0` all, `1` none, `4` partial, `0` or `4` for "at least something" — and SHALL NOT order-compare the codes, and it SHALL read the per-component status words (`installed`, `already installed`, `not installed: <reason>`) when it needs to know what actually changed
+- **THEN** it SHALL test the exit code as a set membership — `0` all, `1` none, `4` partial, `0` or `4` for "at least something" — and SHALL NOT order-compare the codes, and it SHALL read the per-component status words when it needs to know what actually changed — `installed` / `already installed` / `not installed: <reason>` for `install`, and `removed` / `already absent` / `not removed: <reason>` for `uninstall`
 
 #### Scenario: Some of it worked
 - **WHEN** `install --all` installs the recorder, dashboard and CLI but cannot register with an agent
