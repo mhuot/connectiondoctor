@@ -1,9 +1,10 @@
 # MCP server
 
-> **Status: proposed** — introduced by `openspec/changes/define-interface-contracts`;
-> Windows implementation in `add-windows-mcp`; macOS renames in `align-cli-verbs`.
-> Today macOS serves the same tools under `tb_*` names via `--mcp`; Windows has
-> no MCP server yet.
+> **Status: partly implemented** — introduced by `openspec/changes/define-interface-contracts`.
+> **Windows serves this tool set** (`ConnectionDoctor.exe mcp`, `add-windows-mcp`),
+> with two interim behaviours noted below (`connection_diff` matching,
+> `connection_diagram`). macOS still serves the same tools under `tb_*` names via
+> `--mcp` until `align-cli-verbs` renames them.
 
 Both binaries are MCP servers over stdio (JSON-RPC 2.0, MCP `2024-11-05`
 protocol version or later). The server name is `connectiondoctor` on both
@@ -64,3 +65,14 @@ probe longer than 10 s; a slow enumeration returns what it has with a `note`.
 | `tb_incidents` | `connection_incidents` | same input; result gains the schema `Incident` shape |
 | `tb_diagram` | `connection_diagram` | same |
 | — | `connection_diff` | new on both; the Windows baseline story exposed to agents |
+
+## Interim behaviour on Windows
+
+Both are present in `tools/list` with the shared schema, so an agent's
+instructions do not change when they become real:
+
+- `connection_diff` matches devices by instance id today; the diff document's
+  `note` says so. vidPid+parent matching arrives with `contract-conformance`.
+- `connection_diagram` returns `isError: true` pointing at the dashboard's
+  Export… until the shared Excalidraw export is embedded in both collectors
+  (`contract-conformance`).

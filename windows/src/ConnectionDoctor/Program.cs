@@ -30,6 +30,7 @@ internal static class Program
                 "uninstall" => Uninstall(),
                 "ui" or "dashboard" => ContractServer.OpenDashboard(ContractServer.DefaultPort),
                 "tray" => TrayApplication.Run(ContractServer.DefaultPort),
+                "mcp" => McpServer.Run(),
                 "help" or "--help" or "-h" => Help(),
                 _ => Unknown(command)
             };
@@ -257,6 +258,10 @@ internal static class Program
               uninstall                Remove login startup registration
               ui                       Open the Connection Dashboard in a browser
               tray                     Notification-area status; serves the dashboard
+              mcp                      MCP server on stdio for coding agents (docs/mcp.md)
+
+            Register with Claude Code:
+              claude mcp add connectiondoctor -- ConnectionDoctor.exe mcp
             """);
         return 0;
     }

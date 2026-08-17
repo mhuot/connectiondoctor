@@ -7,7 +7,7 @@ problem — on macOS and Windows, with one dashboard for both.
 | | What | Where |
 |---|---|---|
 | **TBDoctor** | macOS collector: menu-bar app, CLI, MCP server (Swift, IOKit) | [`macos/`](macos/README.md) |
-| **ConnectionDoctor** | Windows collector: tray, CLI (C#, SetupAPI/CfgMgr32) | [`windows/`](windows/README.md) |
+| **ConnectionDoctor** | Windows collector: tray, CLI, MCP server (C#, SetupAPI/CfgMgr32) | [`windows/`](windows/README.md) |
 | **Connection Dashboard** | The UI for both — topology, timeline, fleet (React) | [`dashboard/`](dashboard/README.md) |
 | **Connection Contract v1** | The JSON shape both collectors emit and the dashboard reads | [`docs/schema-v1.md`](docs/schema-v1.md) |
 | **Embedding contract** | How a collector serves the dashboard bundle | [`docs/embedding.md`](docs/embedding.md) |
