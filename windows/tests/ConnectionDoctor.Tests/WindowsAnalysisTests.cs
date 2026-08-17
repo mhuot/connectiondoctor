@@ -251,19 +251,49 @@ public sealed class WindowsAnalysisIntegrityTests
     }
 
     [Fact]
-    public void RecorderEmitsADeepeningEntryOnlyWhenItMattered()
+    public void ADeficitSlidingDownInSmallStepsStillLeavesEvidence()
+    {
+        // The blocker: -3 W to -20 W in ~0.5 W steps. Comparing adjacent
+        // samples emits nothing; comparing against the deepest already
+        // recorded emits a line for each further watt.
+        var deviceless = SnapshotComparerTests.Snapshot();
+        ConnectionSnapshot WithPower(int rate) => deviceless with { CapturedAt = Now, Power = new PowerState(true, 90, rate) };
+        var tracker = new DeficitTracker();
+        var previous = WithPower(-3000);
+        tracker.ShouldRecord(previous.Power); // the deficitStarted entry's rate
+
+        var deepened = 0;
+        var deepest = -3000;
+        for (var rate = -3500; rate >= -20000; rate -= 500)
+        {
+            var current = WithPower(rate);
+            if (Recorder.DetectChanges(previous, current, tracker).Any(entry => entry.Kind == RecorderEntryKinds.DeficitDeepened))
+            {
+                deepened++;
+                deepest = rate;
+            }
+
+            previous = current;
+        }
+
+        Assert.True(deepened >= 15, $"expected the slide to be recorded repeatedly, got {deepened} entries");
+        Assert.Equal(-20000, deepest);
+    }
+
+    [Fact]
+    public void JitterAndRecoveryDoNotEmitDeepeningEntries()
     {
         var deviceless = SnapshotComparerTests.Snapshot();
         ConnectionSnapshot WithPower(int rate) => deviceless with { CapturedAt = Now, Power = new PowerState(true, 90, rate) };
+        var tracker = new DeficitTracker();
+        tracker.ShouldRecord(WithPower(-5000).Power);
 
-        // Deepened by 5 W: worth recording.
-        Assert.Contains(Recorder.DetectChanges(WithPower(-5000), WithPower(-10000)),
+        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5000), WithPower(-5200), tracker),
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
-        // Jitter of 200 mW: not worth a line.
-        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5000), WithPower(-5200)),
+        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5200), WithPower(-4000), tracker),
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
-        // Recovering, not deepening.
-        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-10000), WithPower(-5000)),
+        // …and after recovering, a new dive past the old extreme still counts.
+        Assert.Contains(Recorder.DetectChanges(WithPower(-4000), WithPower(-9000), tracker),
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
     }
 }
@@ -331,5 +361,54 @@ public sealed class BaselineFaultEvidenceTests
         var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
         Assert.Equal("healthy", result.Baseline.State);
         Assert.Empty(result.Findings);
+    }
+
+    [Fact]
+    public void AFreshInstallWithALiveFaultStillGetsAnalysisAndAFinding()
+    {
+        // Nothing recorded at all, but the power state in front of the user is
+        // a deficit: "no history" must not swallow the present.
+        var current = SnapshotComparerTests.Snapshot() with { CapturedAt = Now, Power = new PowerState(true, 88, -9000) };
+        var result = WindowsAnalysis.Run(new WindowsAnalysis.Inputs([], null, null, null, null), current, 6, Now)!;
+
+        Assert.Equal(["no-history"], result.Reasons);
+        Assert.False(result.Complete);
+        Assert.NotEmpty(result.Findings);
+        Assert.All(result.Findings, finding => Assert.NotEmpty(finding.Evidence));
+    }
+
+    [Fact]
+    public void AFreshInstallWithNothingWrongStillSaysNothing()
+    {
+        var quiet = SnapshotComparerTests.Snapshot() with { CapturedAt = Now, Power = new PowerState(true, 100, 0) };
+        Assert.Null(WindowsAnalysis.Run(new WindowsAnalysis.Inputs([], null, null, null, null), quiet, 6, Now));
+    }
+
+    [Fact]
+    public void AMissingHeartbeatCannotProduceCompleteCoverage()
+    {
+        var entries = new[]
+        {
+            new RecorderEntry(Now.AddHours(-6), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null),
+            new RecorderEntry(Now.AddSeconds(-1), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null)
+        };
+        var result = WindowsAnalysis.Run(new WindowsAnalysis.Inputs(entries, null, null, null, null),
+            SnapshotComparerTests.Snapshot() with { CapturedAt = Now }, 6, Now)!;
+
+        Assert.False(result.Complete);
+        Assert.Contains("no-heartbeat", result.Reasons);
+    }
+
+    [Fact]
+    public void UnreadableOutageEvidenceMakesCoverageIncomplete()
+    {
+        var inputs = new WindowsAnalysis.Inputs(
+            [new RecorderEntry(Now.AddHours(-1), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null)],
+            new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"),
+            null, null, null, 0, [], GapEvidenceUnreadable: true);
+        var result = WindowsAnalysis.Run(inputs, SnapshotComparerTests.Snapshot() with { CapturedAt = Now }, 6, Now)!;
+
+        Assert.False(result.Complete);
+        Assert.Contains("gap-evidence-unreadable", result.Reasons);
     }
 }

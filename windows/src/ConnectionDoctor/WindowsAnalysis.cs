@@ -55,7 +55,9 @@ internal static class WindowsAnalysis
         /// <summary>Lines of the event log that could not be parsed — corrupt evidence, not absence.</summary>
         int SkippedLines = 0,
         /// <summary>Durable outages recorded by the collector (failed probes, sleep, not running).</summary>
-        IReadOnlyList<CollectorGap>? Gaps = null);
+        IReadOnlyList<CollectorGap>? Gaps = null,
+        /// <summary>The gap log existed but could not be fully read — an unknown number of outages.</summary>
+        bool GapEvidenceUnreadable = false);
 
     public static Inputs ReadInputs(double windowHours = DefaultWindowHours, DateTimeOffset? now = null)
     {
@@ -84,7 +86,8 @@ internal static class WindowsAnalysis
             }
         }
 
-        return new Inputs(read.Entries, heartbeat, trimmedAt, baseline, BaselineStateFile.Read(), read.SkippedLines, gaps);
+        return new Inputs(read.Entries, heartbeat, trimmedAt, baseline, BaselineStateFile.Read(), read.SkippedLines,
+            gaps.Gaps, gaps.Unreadable);
     }
 
     /// <summary>
@@ -101,12 +104,30 @@ internal static class WindowsAnalysis
 
         if (all.Count == 0 && inputs.Heartbeat is null)
         {
-            return null;
+            // Never recorded. Still say what the present shows: a fresh install
+            // with a power deficit or a baseline mismatch has a real fault to
+            // explain, and "no history" must not swallow it. With nothing to
+            // say either, the envelope carries no analysis at all (absent ≠ empty).
+            var live = LiveFindings(inputs, current);
+            if (live.Count == 0)
+            {
+                return null;
+            }
+
+            return new Result(live.OrderBy(Rank).ToList(), [], windowHours, at, at, at, false, ["no-history"],
+                BaselineState(inputs, current, at, windowStart), LinkEventsCapability);
         }
 
         var reasons = new List<string>();
         var heartbeat = inputs.Heartbeat;
         var lastSample = heartbeat?.LastSampleAt ?? all.LastOrDefault()?.At ?? at;
+        // Missing or unreadable heartbeat: nothing proves the recorder was
+        // running, so the window cannot be called complete even if events
+        // happen to bracket it.
+        if (heartbeat is null && all.Count > 0)
+        {
+            reasons.Add("no-heartbeat");
+        }
 
         // Live diagnosis is about *now*: the power state in front of us and
         // the comparison against the known-good baseline. It does not depend on
@@ -158,6 +179,13 @@ internal static class WindowsAnalysis
         if ((inputs.Gaps ?? []).Any(gap => gap.To >= windowStart && gap.From <= at))
         {
             reasons.Add("gap");
+        }
+
+        // Outage evidence we could not read is itself a reason: we cannot rule
+        // out a gap we cannot see.
+        if (inputs.GapEvidenceUnreadable)
+        {
+            reasons.Add("gap-evidence-unreadable");
         }
 
         // Corrupt lines are missing evidence, not quiet: never claim complete.
@@ -360,17 +388,25 @@ internal static class WindowsAnalysis
 
         var report = SnapshotComparer.Compare(inputs.Baseline, current);
         var faulted = report.Findings.Count > 0 || report.Missing.Count > 0;
-        var history = inputs.BaselineHistory ?? new BaselineStateFile();
-        var previous = history;
-        var next = faulted
-            ? history with { FaultSince = history.FaultSince ?? now, RecoveredAt = null }
-            : history.FaultSince is not null
-                ? new BaselineStateFile(null, now, history.FaultSince)
-                : history;
-        if (next != previous)
+        // Read and update the history under the baseline lock: a replacement
+        // resets it, and an analysis that started before the replacement must
+        // not write the old fault back afterwards.
+        var next = inputs.BaselineHistory ?? new BaselineStateFile();
+        BaselineTransaction.WithLock(() =>
         {
-            BaselineStateFile.Write(next);
-        }
+            var history = BaselineStateFile.Read() ?? new BaselineStateFile();
+            var updated = faulted
+                ? history with { FaultSince = history.FaultSince ?? now, RecoveredAt = null }
+                : history.FaultSince is not null
+                    ? new BaselineStateFile(null, now, history.FaultSince)
+                    : history;
+            if (updated != history)
+            {
+                BaselineStateFile.Write(updated);
+            }
+
+            next = updated;
+        });
 
         var state = faulted ? "active-fault"
             : next.RecoveredAt is { } recoveredAt && recoveredAt >= windowStart ? "recovered"
@@ -446,19 +482,22 @@ internal sealed record BaselineStateFile(
         }
     }
 
-    public static void Write(BaselineStateFile state)
+    /// <summary>True when the state was persisted; callers that depend on it (a baseline replacement) fail loudly.</summary>
+    public static bool Write(BaselineStateFile state)
     {
         try
         {
             Directory.CreateDirectory(BackgroundCollector.DataDirectory);
             File.WriteAllText(Path, JsonSerializer.Serialize(state, Options));
+            return true;
         }
         catch (IOException)
         {
-            // Best effort: state is derivable again on the next call.
+            return false;
         }
         catch (UnauthorizedAccessException)
         {
+            return false;
         }
     }
 }

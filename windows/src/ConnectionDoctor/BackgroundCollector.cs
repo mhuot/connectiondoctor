@@ -64,6 +64,7 @@ internal static class BackgroundCollector
         }
 
         var lastSampleAt = startedAt;
+        var deficit = new DeficitTracker();
         Console.WriteLine($"ConnectionDoctor collector started. Events: {EventsPath}");
 
         while (!stopped.IsSet)
@@ -82,7 +83,7 @@ internal static class BackgroundCollector
                 var entries = new List<RecorderEntry>();
                 if (previous is not null)
                 {
-                    entries.AddRange(Recorder.DetectChanges(previous, snapshot));
+                    entries.AddRange(Recorder.DetectChanges(previous, snapshot, deficit));
                 }
 
                 if (snapshot.CapturedAt - lastFullSnapshotAt >= FullSnapshotInterval)
@@ -343,15 +344,21 @@ internal static class BackgroundCollector
         }
     }
 
-    /// <summary>Recorded outages overlapping [from, to]; unreadable lines are ignored but counted by the caller's integrity check.</summary>
-    public static IReadOnlyList<CollectorGap> ReadGaps(DateTimeOffset since)
+    /// <summary>
+    /// Recorded outages ending at or after <paramref name="since"/>, plus
+    /// whether any of that evidence was unreadable — an outage we cannot read
+    /// is an outage we cannot rule out, so the caller must not claim complete
+    /// coverage on the strength of what parsed.
+    /// </summary>
+    public static GapRead ReadGaps(DateTimeOffset since)
     {
         if (!File.Exists(GapsPath))
         {
-            return [];
+            return new GapRead([], false);
         }
 
         var gaps = new List<CollectorGap>();
+        var unreadable = false;
         try
         {
             foreach (var line in File.ReadLines(GapsPath))
@@ -364,21 +371,27 @@ internal static class BackgroundCollector
                 try
                 {
                     var gap = JsonSerializer.Deserialize<CollectorGap>(line, JsonOptions);
-                    if (gap is not null && gap.To >= since)
+                    if (gap is null)
+                    {
+                        unreadable = true;
+                    }
+                    else if (gap.To >= since)
                     {
                         gaps.Add(gap);
                     }
                 }
                 catch (JsonException)
                 {
+                    unreadable = true;
                 }
             }
         }
-        catch (IOException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
+            unreadable = true;
         }
 
-        return gaps;
+        return new GapRead(gaps, unreadable);
     }
 
     /// <summary>The collector's heartbeat, or null when none has been written or it is unreadable.</summary>
@@ -462,3 +475,6 @@ internal sealed record IncrementalEventRead(
 
 /// <summary>A stretch the collector was not sampling — durable, unlike the heartbeat.</summary>
 internal sealed record CollectorGap(DateTimeOffset From, DateTimeOffset To, string Reason);
+
+/// <summary>Recorded outages, and whether any outage evidence could not be read.</summary>
+internal sealed record GapRead(IReadOnlyList<CollectorGap> Gaps, bool Unreadable);
