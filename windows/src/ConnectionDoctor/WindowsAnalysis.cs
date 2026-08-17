@@ -50,50 +50,48 @@ internal static class WindowsAnalysis
         IReadOnlyList<RecorderEntry> Entries,
         CollectorHeartbeat? Heartbeat,
         DateTimeOffset? TrimmedAt,
-        ConnectionSnapshot? Baseline,
-        BaselineStateFile? BaselineHistory,
+        /// <summary>
+        /// Baseline and history are NOT read here: they are read inside the
+        /// lock, together with the comparison, so a replacement cannot land
+        /// between the read and the verdict (see EvaluateBaseline).
+        /// </summary>
+        IBaselineStore? Store,
         /// <summary>Lines of the event log that could not be parsed — corrupt evidence, not absence.</summary>
         int SkippedLines = 0,
         /// <summary>Durable outages recorded by the collector (failed probes, sleep, not running).</summary>
         IReadOnlyList<CollectorGap>? Gaps = null,
         /// <summary>The gap log existed but could not be fully read — an unknown number of outages.</summary>
         bool GapEvidenceUnreadable = false,
-        /// <summary>
-        /// Where the baseline fault history lives. Defaults to the file beside
-        /// the baseline, updated under the baseline lock; injectable so tests
-        /// (and any future caller with its own storage) do not touch it.
-        /// </summary>
-        IBaselineStateStore? StateStore = null);
+        /// <summary>Set when the events log or heartbeat could not be read at all.</summary>
+        bool HeartbeatUnreadable = false);
 
     public static Inputs ReadInputs(double windowHours = DefaultWindowHours, DateTimeOffset? now = null)
     {
         var read = File.Exists(BackgroundCollector.EventsPath)
             ? BackgroundCollector.ReadEntriesWithIntegrity()
             : new IncrementalEventRead([], false);
+        var heartbeatUnreadable = File.Exists(BackgroundCollector.HeartbeatPath);
         var heartbeat = BackgroundCollector.ReadHeartbeat();
+        heartbeatUnreadable = heartbeatUnreadable && heartbeat is null;
         var gaps = BackgroundCollector.ReadGaps((now ?? DateTimeOffset.Now).AddHours(-windowHours));
         DateTimeOffset? trimmedAt = null;
-        if (File.Exists(BackgroundCollector.TrimMarkerPath) &&
-            DateTimeOffset.TryParse(File.ReadAllText(BackgroundCollector.TrimMarkerPath).Trim(), out var t))
+        try
         {
-            trimmedAt = t;
-        }
-
-        ConnectionSnapshot? baseline = null;
-        if (File.Exists(SnapshotStore.DefaultBaselinePath))
-        {
-            try
+            if (File.Exists(BackgroundCollector.TrimMarkerPath) &&
+                DateTimeOffset.TryParse(File.ReadAllText(BackgroundCollector.TrimMarkerPath).Trim(), out var t))
             {
-                baseline = SnapshotStore.Load(SnapshotStore.DefaultBaselinePath);
-            }
-            catch (InvalidDataException)
-            {
-                baseline = null;
+                trimmedAt = t;
             }
         }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // Unknown whether a trim happened; treated below like other
+            // unreadable evidence rather than as "no trim".
+            trimmedAt = DateTimeOffset.MaxValue;
+        }
 
-        return new Inputs(read.Entries, heartbeat, trimmedAt, baseline, BaselineStateFile.Read(), read.SkippedLines,
-            gaps.Gaps, gaps.Unreadable);
+        return new Inputs(read.Entries, heartbeat, trimmedAt, FileBaselineStore.Shared, read.SkippedLines,
+            gaps.Gaps, gaps.Unreadable, heartbeatUnreadable);
     }
 
     /// <summary>
@@ -108,23 +106,41 @@ internal static class WindowsAnalysis
         var all = inputs.Entries;
         var inWindow = all.Where(entry => entry.At >= windowStart).ToList();
 
+        // The baseline verdict and the live findings first: they describe the
+        // present, which no amount of missing history can make unknowable.
+        var baseline = EvaluateBaseline(inputs, current, at, windowStart);
+        var liveFindings = LiveFindings(current, baseline);
+
+        // Integrity signals are about evidence we *have* but cannot trust.
+        // They are collected before the never-recorded shortcut, because a log
+        // full of corrupt lines is missing evidence, not an empty machine.
+        var integrityReasons = new List<string>();
+        if (inputs.SkippedLines > 0) integrityReasons.Add("corrupt-lines");
+        if (inputs.GapEvidenceUnreadable) integrityReasons.Add("gap-evidence-unreadable");
+        if (inputs.HeartbeatUnreadable) integrityReasons.Add("heartbeat-unreadable");
+        if (baseline.Unreadable) integrityReasons.Add("baseline-unreadable");
+        if (inputs.TrimmedAt == DateTimeOffset.MaxValue) integrityReasons.Add("trim-evidence-unreadable");
+        var recordedGaps = (inputs.Gaps ?? []).Where(gap => gap.To >= windowStart && gap.From <= at).ToList();
+
         if (all.Count == 0 && inputs.Heartbeat is null)
         {
-            // Never recorded. Still say what the present shows: a fresh install
-            // with a power deficit or a baseline mismatch has a real fault to
-            // explain, and "no history" must not swallow it. With nothing to
-            // say either, the envelope carries no analysis at all (absent ≠ empty).
-            var live = LiveFindings(inputs, current);
-            if (live.Count == 0)
+            // Never recorded — unless something unreadable says otherwise.
+            var reasonsWithoutHistory = integrityReasons.Count > 0 || recordedGaps.Count > 0
+                ? integrityReasons.Concat(recordedGaps.Count > 0 ? ["gap"] : []).Distinct().Order().ToList()
+                : ["no-history"];
+
+            // With nothing to say at all — no live fault, no unreadable
+            // evidence — the envelope carries no analysis (absent ≠ empty).
+            if (liveFindings.Count == 0 && integrityReasons.Count == 0 && recordedGaps.Count == 0)
             {
                 return null;
             }
 
-            return new Result(live.OrderBy(Rank).ToList(), [], windowHours, at, at, at, false, ["no-history"],
-                BaselineState(inputs, current, at, windowStart), LinkEventsCapability);
+            return new Result(liveFindings.OrderBy(Rank).ToList(), [], windowHours, at, at, at, false,
+                reasonsWithoutHistory, baseline.State, LinkEventsCapability);
         }
 
-        var reasons = new List<string>();
+        var reasons = new List<string>(integrityReasons);
         var heartbeat = inputs.Heartbeat;
         var lastSample = heartbeat?.LastSampleAt ?? all.LastOrDefault()?.At ?? at;
         // Missing or unreadable heartbeat: nothing proves the recorder was
@@ -135,13 +151,6 @@ internal static class WindowsAnalysis
             reasons.Add("no-heartbeat");
         }
 
-        // Live diagnosis is about *now*: the power state in front of us and
-        // the comparison against the known-good baseline. It does not depend on
-        // the recording, so it is computed before any coverage decision — a
-        // stale recorder must never suppress the fault the user is looking at
-        // (found on a real Surface: active-fault with findings: []).
-        var liveFindings = LiveFindings(inputs, current);
-
         // Ran, but not inside this window: say so, with the time of the last
         // evidence, so a consumer shows "unknown" for *history* — while the
         // live findings above still explain the present.
@@ -149,8 +158,8 @@ internal static class WindowsAnalysis
         {
             var last = all.LastOrDefault()?.At ?? lastSample;
             return new Result(liveFindings.OrderBy(Rank).ToList(), [], windowHours, at, last, last, false,
-                ["recorder-stopped-before-window"],
-                BaselineState(inputs, current, at, windowStart), LinkEventsCapability);
+                reasons.Append("recorder-stopped-before-window").Distinct().Order().ToList(),
+                baseline.State, LinkEventsCapability);
         }
 
         // Coverage: the recorder must have been running from the start of the
@@ -175,29 +184,16 @@ internal static class WindowsAnalysis
             reasons.Add("gap");
         }
 
-        if (inputs.TrimmedAt is { } trimmedAt && trimmedAt > windowStart)
+        if (inputs.TrimmedAt is { } trimmedAt && trimmedAt != DateTimeOffset.MaxValue && trimmedAt > windowStart)
         {
             reasons.Add("trimmed");
         }
 
         // Durable outages: any recorded stretch overlapping this window is a
         // hole, even if the heartbeat now looks healthy.
-        if ((inputs.Gaps ?? []).Any(gap => gap.To >= windowStart && gap.From <= at))
+        if (recordedGaps.Count > 0)
         {
             reasons.Add("gap");
-        }
-
-        // Outage evidence we could not read is itself a reason: we cannot rule
-        // out a gap we cannot see.
-        if (inputs.GapEvidenceUnreadable)
-        {
-            reasons.Add("gap-evidence-unreadable");
-        }
-
-        // Corrupt lines are missing evidence, not quiet: never claim complete.
-        if (inputs.SkippedLines > 0)
-        {
-            reasons.Add("corrupt-lines");
         }
 
         var through = lastSample > at ? at : lastSample;
@@ -211,12 +207,11 @@ internal static class WindowsAnalysis
         var findings = new List<Finding>();
         findings.AddRange(SustainedDeficit(inWindow, at));
         findings.AddRange(GroupedLoss(incidents, all));
-        var baselineState = BaselineState(inputs, current, at, windowStart);
         findings.AddRange(liveFindings.Where(finding => findings.All(existing => existing.Title != finding.Title)));
 
         var ranked = findings.OrderBy(Rank).ThenBy(finding => finding.Title, StringComparer.Ordinal).ToList();
         return new Result(ranked, incidents, windowHours, at, availableFrom, through,
-            reasons.Count == 0, reasons.Distinct().Order().ToList(), baselineState, LinkEventsCapability);
+            reasons.Count == 0, reasons.Distinct().Order().ToList(), baseline.State, LinkEventsCapability);
     }
 
     /// <summary>
@@ -335,73 +330,56 @@ internal static class WindowsAnalysis
     }
 
     /// <summary>
-    /// What can be said from the current state alone: the live power reading
-    /// and the known-good comparison. Every condition that makes the baseline
-    /// state `active-fault` produces a finding here, so a fault is never
-    /// reported without evidence and a recommendation.
+    /// What the live state alone says: the power reading now, plus the baseline
+    /// verdict passed in (evaluated once, under the lock).
     /// </summary>
-    public static IReadOnlyList<Finding> LiveFindings(Inputs inputs, ConnectionSnapshot current)
+    public static IReadOnlyList<Finding> LiveFindings(ConnectionSnapshot current, BaselineEvaluation baseline)
     {
         var findings = new List<Finding>(PowerDiagnosis.Analyze(current.Power));
-        if (inputs.Baseline is null)
-        {
-            return findings;
-        }
-
-        var report = SnapshotComparer.Compare(inputs.Baseline, current);
-        findings.AddRange(report.Findings.Where(finding => findings.All(existing => existing.Title != finding.Title)));
-
-        // The comparer raises specific findings for the signatures it knows
-        // (a display alive while its hub branch is gone). Anything else that
-        // is missing still has to be said, or the baseline state would claim a
-        // fault the panel cannot explain.
-        if (report.Missing.Count > 0 && report.Findings.Count == 0)
-        {
-            var names = report.Missing.Select(device => device.VidPid is null
-                ? device.FriendlyName
-                : $"{device.FriendlyName} [{device.VidPid}]").Take(6).ToList();
-            findings.Add(new Finding(
-                "warning",
-                "Devices from the known-good baseline are missing",
-                $"{report.Missing.Count} device(s) present when the baseline was captured " +
-                $"({inputs.Baseline.CapturedAt:yyyy-MM-dd HH:mm}) are not present now. That is the difference between " +
-                "this desk working and not working, whatever caused it.",
-                "Check the branch these sit behind — the cable, the hub, or the port they share — before suspecting the devices themselves.",
-                [
-                    $"Missing since the baseline: {string.Join(", ", names)}" + (report.Missing.Count > names.Count ? $" (+{report.Missing.Count - names.Count} more)" : string.Empty),
-                    $"Baseline captured {inputs.Baseline.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}",
-                    $"{report.Added.Count} device(s) present now that were not in the baseline"
-                ],
-                "high"));
-        }
-
+        findings.AddRange(baseline.Findings.Where(finding => findings.All(existing => existing.Title != finding.Title)));
         return findings;
     }
 
-    // MARK: - Baseline state
-
     /// <summary>
-    /// no-baseline / healthy / active-fault / recovered, with the transition
-    /// remembered on disk so "recovered since fault" survives across calls.
-    /// Absence of a baseline is never health.
+    /// The baseline verdict: the snapshot, the comparison against the current
+    /// state, the findings that explain it, and the state after the history
+    /// update — all decided inside ONE hold of the baseline lock. Reading the
+    /// baseline outside the lock and writing the history inside it was the bug
+    /// this shape removes: a replacement landing in between could have its
+    /// fresh history overwritten by a fault derived from the discarded baseline.
     /// </summary>
-    public static ContractBaselineState BaselineState(Inputs inputs, ConnectionSnapshot current, DateTimeOffset now, DateTimeOffset windowStart)
-    {
-        if (inputs.Baseline is null)
-        {
-            return new ContractBaselineState { State = "no-baseline" };
-        }
+    public sealed record BaselineEvaluation(
+        ContractBaselineState State,
+        IReadOnlyList<Finding> Findings,
+        bool Unreadable);
 
-        var report = SnapshotComparer.Compare(inputs.Baseline, current);
-        var faulted = report.Findings.Count > 0 || report.Missing.Count > 0;
-        // Read and update the history under the baseline lock: a replacement
-        // resets it, and an analysis that started before the replacement must
-        // not write the old fault back afterwards.
-        var store = inputs.StateStore ?? FileBaselineStateStore.Shared;
-        var next = inputs.BaselineHistory ?? new BaselineStateFile();
+    public static BaselineEvaluation EvaluateBaseline(Inputs inputs, ConnectionSnapshot current, DateTimeOffset now, DateTimeOffset windowStart)
+    {
+        var store = inputs.Store ?? FileBaselineStore.Shared;
+        var evaluation = new BaselineEvaluation(new ContractBaselineState { State = "no-baseline" }, [], false);
+
         store.WithLock(() =>
         {
-            var history = store.Read() ?? inputs.BaselineHistory ?? new BaselineStateFile();
+            var read = store.ReadBaseline();
+            if (read.Unreadable)
+            {
+                // Unknown, not healthy and not absent: say so and touch nothing.
+                evaluation = new BaselineEvaluation(
+                    new ContractBaselineState { State = "no-baseline" },
+                    [],
+                    Unreadable: true);
+                return;
+            }
+
+            if (read.Baseline is not { } baseline)
+            {
+                return;
+            }
+
+            var report = SnapshotComparer.Compare(baseline, current);
+            var faulted = report.Findings.Count > 0 || report.Missing.Count > 0;
+
+            var history = store.ReadHistory() ?? new BaselineStateFile();
             var updated = faulted
                 ? history with { FaultSince = history.FaultSince ?? now, RecoveredAt = null }
                 : history.FaultSince is not null
@@ -409,22 +387,57 @@ internal static class WindowsAnalysis
                     : history;
             if (updated != history)
             {
-                store.Write(updated);
+                store.WriteHistory(updated);
             }
 
-            next = updated;
+            var state = faulted ? "active-fault"
+                : updated.RecoveredAt is { } recoveredAt && recoveredAt >= windowStart ? "recovered"
+                : "healthy";
+
+            evaluation = new BaselineEvaluation(
+                new ContractBaselineState
+                {
+                    State = state,
+                    CapturedAt = baseline.CapturedAt,
+                    FaultSince = state == "active-fault" ? updated.FaultSince : state == "recovered" ? updated.LastFaultSince : null,
+                    RecoveredAt = state == "recovered" ? updated.RecoveredAt : null
+                },
+                BaselineFindings(baseline, report),
+                false);
         });
 
-        var state = faulted ? "active-fault"
-            : next.RecoveredAt is { } recoveredAt && recoveredAt >= windowStart ? "recovered"
-            : "healthy";
-        return new ContractBaselineState
+        return evaluation;
+    }
+
+    /// <summary>
+    /// Every condition that makes the state `active-fault` produces a finding,
+    /// so a fault is never reported without evidence and a recommendation.
+    /// </summary>
+    private static IReadOnlyList<Finding> BaselineFindings(ConnectionSnapshot baseline, ComparisonReport report)
+    {
+        var findings = new List<Finding>(report.Findings);
+        if (report.Missing.Count == 0 || report.Findings.Count > 0)
         {
-            State = state,
-            CapturedAt = inputs.Baseline.CapturedAt,
-            FaultSince = state == "active-fault" ? next.FaultSince : state == "recovered" ? next.LastFaultSince : null,
-            RecoveredAt = state == "recovered" ? next.RecoveredAt : null
-        };
+            return findings;
+        }
+
+        var names = report.Missing.Select(device => device.VidPid is null
+            ? device.FriendlyName
+            : $"{device.FriendlyName} [{device.VidPid}]").Take(6).ToList();
+        findings.Add(new Finding(
+            "warning",
+            "Devices from the known-good baseline are missing",
+            $"{report.Missing.Count} device(s) present when the baseline was captured " +
+            $"({baseline.CapturedAt:yyyy-MM-dd HH:mm}) are not present now. That is the difference between " +
+            "this desk working and not working, whatever caused it.",
+            "Check the branch these sit behind — the cable, the hub, or the port they share — before suspecting the devices themselves.",
+            [
+                $"Missing since the baseline: {string.Join(", ", names)}" + (report.Missing.Count > names.Count ? $" (+{report.Missing.Count - names.Count} more)" : string.Empty),
+                $"Baseline captured {baseline.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}",
+                $"{report.Added.Count} device(s) present now that were not in the baseline"
+            ],
+            "high"));
+        return findings;
     }
 
     // MARK: - Contract shapes
@@ -469,19 +482,50 @@ internal static class WindowsAnalysis
 /// consistent with the baseline itself. One implementation writes the file; a
 /// test can supply its own so analysis never touches the real machine's state.
 /// </summary>
-internal interface IBaselineStateStore
+/// <summary>
+/// The baseline and the fault history that describes it, behind one lock. They
+/// are one evidence boundary: comparing against a baseline that was replaced
+/// mid-analysis, or writing a fault derived from a discarded baseline, are the
+/// same bug. Injectable so tests never touch the machine's own state.
+/// </summary>
+internal interface IBaselineStore
 {
-    BaselineStateFile? Read();
-    bool Write(BaselineStateFile state);
+    /// <summary>The known-good snapshot, or a reason it could not be read.</summary>
+    BaselineRead ReadBaseline();
+    BaselineStateFile? ReadHistory();
+    bool WriteHistory(BaselineStateFile state);
     /// <summary>Runs <paramref name="work"/> holding the same lock a baseline replacement takes.</summary>
     void WithLock(Action work);
 }
 
-internal sealed class FileBaselineStateStore : IBaselineStateStore
+/// <summary>The baseline, or why it is unavailable. Unreadable is not absent.</summary>
+internal sealed record BaselineRead(ConnectionSnapshot? Baseline, bool Unreadable = false);
+
+internal sealed class FileBaselineStore : IBaselineStore
 {
-    public static readonly FileBaselineStateStore Shared = new();
-    public BaselineStateFile? Read() => BaselineStateFile.Read();
-    public bool Write(BaselineStateFile state) => BaselineStateFile.Write(state);
+    public static readonly FileBaselineStore Shared = new();
+
+    public BaselineRead ReadBaseline()
+    {
+        if (!File.Exists(SnapshotStore.DefaultBaselinePath))
+        {
+            return new BaselineRead(null);
+        }
+
+        try
+        {
+            return new BaselineRead(SnapshotStore.Load(SnapshotStore.DefaultBaselinePath));
+        }
+        catch (Exception exception) when (exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
+        {
+            // A baseline we cannot read is unknown, not absent — and never an
+            // exception out of a request handler.
+            return new BaselineRead(null, Unreadable: true);
+        }
+    }
+
+    public BaselineStateFile? ReadHistory() => BaselineStateFile.Read();
+    public bool WriteHistory(BaselineStateFile state) => BaselineStateFile.Write(state);
     public void WithLock(Action work) => BaselineTransaction.WithLock(work);
 }
 

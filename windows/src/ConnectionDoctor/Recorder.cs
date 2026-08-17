@@ -41,6 +41,12 @@ internal sealed class DeficitTracker
 {
     public int? DeepestRecorded { get; private set; }
 
+    /// <summary>A deficit ended (or power left deficit): the next episode starts fresh.</summary>
+    public void Reset() => DeepestRecorded = null;
+
+    /// <summary>A deficit began: this rate is already on the deficitStarted entry.</summary>
+    public void Begin(PowerState power) => DeepestRecorded = power.BatteryRateMilliwatts;
+
     public bool ShouldRecord(PowerState power)
     {
         if (!power.IsDeficit || power.BatteryRateMilliwatts is not { } rate)
@@ -52,7 +58,7 @@ internal sealed class DeficitTracker
         if (DeepestRecorded is not { } deepest)
         {
             DeepestRecorded = rate;
-            return false; // the deficitStarted entry already carries this rate
+            return false; // nothing recorded yet for this episode
         }
 
         if (rate > deepest - Recorder.DeficitDeepeningStepMilliwatts)
@@ -120,6 +126,19 @@ internal static class Recorder
 
         if (previous.Power.IsDeficit != current.Power.IsDeficit)
         {
+            // Episode boundaries own the tracker: a new deficit starts from its
+            // own rate, and the end clears it — otherwise a later, shallower
+            // episode would have to beat the deepest rate ever seen before it
+            // recorded anything.
+            if (current.Power.IsDeficit)
+            {
+                (deficit ?? FallbackTracker).Begin(current.Power);
+            }
+            else
+            {
+                (deficit ?? FallbackTracker).Reset();
+            }
+
             entries.Add(new RecorderEntry(
                 current.CapturedAt,
                 current.Power.IsDeficit ? RecorderEntryKinds.DeficitStarted : RecorderEntryKinds.DeficitEnded,

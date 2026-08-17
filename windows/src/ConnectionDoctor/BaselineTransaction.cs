@@ -14,6 +14,28 @@ namespace ConnectionDoctor;
 internal static class BaselineTransaction
 {
     private const string MutexName = @"Local\ConnectionDoctor.Baseline";
+
+    /// <summary>Put the previous baseline back (or remove a first capture) after a failed commit.</summary>
+    private static bool Restore(ConnectionSnapshot? previous, string path)
+    {
+        try
+        {
+            if (previous is null)
+            {
+                File.Delete(path);
+            }
+            else
+            {
+                SnapshotStore.SaveAtomic(previous, path);
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
 
     internal enum Outcome
@@ -147,12 +169,16 @@ internal static class BaselineTransaction
 
             // The fault/recovery history described the baseline we just
             // discarded; every writer resets it, not just the HTTP one. If the
-            // reset cannot be written, the replacement is a failure: keeping
-            // the old history against a new baseline would report a recovery
-            // from a fault that no longer has any meaning.
+            // reset cannot be written, the pair would be inconsistent — a new
+            // baseline carrying the old baseline's fault. Roll the baseline
+            // back so the caller's next attempt sees the state it expects
+            // (and its old ETag still matches).
             if (!BaselineStateFile.Write(new BaselineStateFile()))
             {
-                return new Result(Outcome.WriteFailed, Detail: "baseline saved but its fault history could not be reset");
+                var rolledBack = Restore(existing, path);
+                return new Result(Outcome.WriteFailed, Detail: rolledBack
+                    ? "the baseline's fault history could not be reset; the previous baseline was restored"
+                    : "the baseline's fault history could not be reset and the previous baseline could not be restored");
             }
 
             var nodes = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Count;
