@@ -7,7 +7,7 @@ The rename is only worth doing if it costs the person running it nothing, so:
 |---|---|
 | Recorded history and baseline in `~/Library/Application Support/TBDoctor` | Migrated on first run when the new directory is absent (a directory move, then a marker so it is never attempted twice). If both exist, the new one wins and the old is left untouched — never merged, never deleted. |
 | `TBDOCTOR_DIR` in a script | Still honoured; `CONNECTIONDOCTOR_DIR` takes precedence when both are set. |
-| `claude mcp add tbdoctor -- …/TBDoctor.app/Contents/MacOS/TBDoctor --mcp` | The old path is gone, so the registration must be updated — but a `tbdoctor` symlink beside the new binary keeps the *command* working, and `docs/mcp.md` already says the server is `connectiondoctor`. The README shows the new line. |
+| `claude mcp add tbdoctor -- …/TBDoctor.app/Contents/MacOS/TBDoctor --mcp` | **Breaks, deliberately.** The bundle is gone and no symlink inside the new one rescues an absolute path to it. A shim `TBDoctor.app` would need its own signing and would put two apps in the DMG — teaching the confusion this change removes. One line to re-register, in the release notes; `align-cli-verbs` requires re-registering regardless (`--mcp` → `mcp`). The `tbdoctor` **PATH** alias still covers scripts and shell history. |
 | Login Items entry | The bundle id changes, so macOS treats it as a new app: `install` re-registers, and `uninstall` on the old app is a one-liner in the release notes. |
 
 ## Bundle identifier

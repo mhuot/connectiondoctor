@@ -24,14 +24,22 @@ config makes the rename more expensive. This is the cheapest it will ever be.
 - macOS ships **`ConnectionDoctor.app`** (executable `ConnectionDoctor`, bundle
   id `net.mhuot.connectiondoctor`); the CLI is `connectiondoctor` on both
   platforms, so `docs/cli.md` stops naming two binaries.
-- **Compatibility, not a clean break** — the name goes, the user's setup does not:
+- **Compatibility where it is possible, honesty where it is not.** Preserved:
+  - recorded history and baselines — `~/Library/Application Support/TBDoctor`
+    is migrated to `…/ConnectionDoctor` on first run when the new directory
+    does not yet exist;
   - `TBDOCTOR_DIR` keeps working alongside `CONNECTIONDOCTOR_DIR`;
-  - on first run, `~/Library/Application Support/TBDoctor` is migrated to
-    `…/ConnectionDoctor` when the new directory does not yet exist, so recorded
-    history and baselines survive;
-  - a `tbdoctor` alias/symlink ships for one release so existing
-    `claude mcp add` lines and shell history keep working, printing a one-line
-    notice on stderr.
+  - a `tbdoctor` alias **on PATH** for one release, printing a one-line notice
+    on stderr, so scripts and shell history keep working.
+
+  **Broken deliberately:** any command naming the old bundle by absolute path
+  — `…/TBDoctor.app/Contents/MacOS/TBDoctor` — including an MCP registration
+  made from the README. `TBDoctor.app` no longer exists, and no symlink inside
+  the new bundle can rescue a path to a bundle that is gone. A shim
+  `TBDoctor.app` was considered and rejected: it would need its own signing and
+  notarization, and a DMG containing two apps teaches exactly the confusion
+  this change removes. The fix is one line, it is in the release notes, and
+  `align-cli-verbs` requires re-registering anyway (`--mcp` becomes `mcp`).
 - Release artifacts become `ConnectionDoctor-<version>.dmg` / `.zip`.
 - The Swift target and source directory become `ConnectionDoctor`;
   `macos/Sources/TBDoctor/ui` → `macos/Sources/ConnectionDoctor/ui`, with
