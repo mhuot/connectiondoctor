@@ -108,12 +108,21 @@ internal static class WindowsAnalysis
         var heartbeat = inputs.Heartbeat;
         var lastSample = heartbeat?.LastSampleAt ?? all.LastOrDefault()?.At ?? at;
 
+        // Live diagnosis is about *now*: the power state in front of us and
+        // the comparison against the known-good baseline. It does not depend on
+        // the recording, so it is computed before any coverage decision — a
+        // stale recorder must never suppress the fault the user is looking at
+        // (found on a real Surface: active-fault with findings: []).
+        var liveFindings = LiveFindings(inputs, current);
+
         // Ran, but not inside this window: say so, with the time of the last
-        // evidence, so a consumer shows "unknown", not "healthy".
+        // evidence, so a consumer shows "unknown" for *history* — while the
+        // live findings above still explain the present.
         if (inWindow.Count == 0 && (heartbeat is null || heartbeat.LastSampleAt < windowStart))
         {
             var last = all.LastOrDefault()?.At ?? lastSample;
-            return new Result([], [], windowHours, at, last, last, false, ["recorder-stopped-before-window"],
+            return new Result(liveFindings.OrderBy(Rank).ToList(), [], windowHours, at, last, last, false,
+                ["recorder-stopped-before-window"],
                 BaselineState(inputs, current, at, windowStart), LinkEventsCapability);
         }
 
@@ -168,13 +177,8 @@ internal static class WindowsAnalysis
         var findings = new List<Finding>();
         findings.AddRange(SustainedDeficit(inWindow, at));
         findings.AddRange(GroupedLoss(incidents, all));
-        findings.AddRange(PowerDiagnosis.Analyze(current.Power));
         var baselineState = BaselineState(inputs, current, at, windowStart);
-        if (inputs.Baseline is not null)
-        {
-            findings.AddRange(SnapshotComparer.Compare(inputs.Baseline, current).Findings
-                .Where(finding => findings.All(existing => existing.Title != finding.Title)));
-        }
+        findings.AddRange(liveFindings.Where(finding => findings.All(existing => existing.Title != finding.Title)));
 
         var ranked = findings.OrderBy(Rank).ThenBy(finding => finding.Title, StringComparer.Ordinal).ToList();
         return new Result(ranked, incidents, windowHours, at, availableFrom, through,
@@ -294,6 +298,50 @@ internal static class WindowsAnalysis
                 ],
                 "high")
         ];
+    }
+
+    /// <summary>
+    /// What can be said from the current state alone: the live power reading
+    /// and the known-good comparison. Every condition that makes the baseline
+    /// state `active-fault` produces a finding here, so a fault is never
+    /// reported without evidence and a recommendation.
+    /// </summary>
+    public static IReadOnlyList<Finding> LiveFindings(Inputs inputs, ConnectionSnapshot current)
+    {
+        var findings = new List<Finding>(PowerDiagnosis.Analyze(current.Power));
+        if (inputs.Baseline is null)
+        {
+            return findings;
+        }
+
+        var report = SnapshotComparer.Compare(inputs.Baseline, current);
+        findings.AddRange(report.Findings.Where(finding => findings.All(existing => existing.Title != finding.Title)));
+
+        // The comparer raises specific findings for the signatures it knows
+        // (a display alive while its hub branch is gone). Anything else that
+        // is missing still has to be said, or the baseline state would claim a
+        // fault the panel cannot explain.
+        if (report.Missing.Count > 0 && report.Findings.Count == 0)
+        {
+            var names = report.Missing.Select(device => device.VidPid is null
+                ? device.FriendlyName
+                : $"{device.FriendlyName} [{device.VidPid}]").Take(6).ToList();
+            findings.Add(new Finding(
+                "warning",
+                "Devices from the known-good baseline are missing",
+                $"{report.Missing.Count} device(s) present when the baseline was captured " +
+                $"({inputs.Baseline.CapturedAt:yyyy-MM-dd HH:mm}) are not present now. That is the difference between " +
+                "this desk working and not working, whatever caused it.",
+                "Check the branch these sit behind — the cable, the hub, or the port they share — before suspecting the devices themselves.",
+                [
+                    $"Missing since the baseline: {string.Join(", ", names)}" + (report.Missing.Count > names.Count ? $" (+{report.Missing.Count - names.Count} more)" : string.Empty),
+                    $"Baseline captured {inputs.Baseline.CapturedAt:yyyy-MM-dd HH:mm:ss zzz}",
+                    $"{report.Added.Count} device(s) present now that were not in the baseline"
+                ],
+                "high"));
+        }
+
+        return findings;
     }
 
     // MARK: - Baseline state

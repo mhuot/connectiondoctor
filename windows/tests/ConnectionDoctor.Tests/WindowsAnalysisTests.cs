@@ -267,3 +267,69 @@ public sealed class WindowsAnalysisIntegrityTests
             entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
     }
 }
+
+public sealed class BaselineFaultEvidenceTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+
+    /// <summary>A dock branch present in the baseline and gone now.</summary>
+    private static (ConnectionSnapshot Baseline, ConnectionSnapshot Current) DockMissing()
+    {
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub", dock.InstanceId);
+        var mouse = SnapshotComparerTests.Device(@"USB\VID_046D&PID_C08A\MOUSE", "Mouse", "MX Vertical", hub.InstanceId);
+        return (SnapshotComparerTests.Snapshot(dock, hub, mouse) with { CapturedAt = Now.AddDays(-1) },
+                SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now });
+    }
+
+    [Fact]
+    public void AStaleRecorderStillReportsTheLiveBaselineFaultWithEvidence()
+    {
+        // The real Surface case: the recorder stopped days ago, so history is
+        // unknown — but the baseline mismatch in front of the user must still
+        // be explained, not swallowed by the coverage early return.
+        var (baseline, current) = DockMissing();
+        var stale = new WindowsAnalysis.Inputs(
+            [new RecorderEntry(Now.AddDays(-2), RecorderEntryKinds.DeviceDisappeared, null, new PowerState(true, 100, 0), null)],
+            new CollectorHeartbeat(1, Now.AddDays(-2).AddHours(-1), Now.AddDays(-2), "events.jsonl"),
+            null, baseline, null);
+
+        var result = WindowsAnalysis.Run(stale, current, 6, Now)!;
+
+        Assert.Equal(["recorder-stopped-before-window"], result.Reasons);
+        Assert.False(result.Complete);
+        Assert.Equal("active-fault", result.Baseline.State);
+        var finding = Assert.Single(result.Findings);            // the fault is explained
+        Assert.NotEmpty(finding.Evidence);
+        Assert.NotEmpty(finding.Recommendation);
+    }
+
+    [Fact]
+    public void EveryActiveFaultCarriesAFinding()
+    {
+        var (baseline, current) = DockMissing();
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
+            null, baseline, null);
+
+        var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
+        Assert.Equal("active-fault", result.Baseline.State);
+        Assert.NotEmpty(result.Findings);
+        Assert.All(result.Findings, finding =>
+        {
+            Assert.NotEmpty(finding.Evidence);
+            Assert.NotEmpty(finding.Recommendation);
+        });
+    }
+
+    [Fact]
+    public void AMatchingBaselineIsHealthyAndSaysNothing()
+    {
+        var (baseline, _) = DockMissing();
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
+            null, baseline, null);
+
+        var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
+        Assert.Equal("healthy", result.Baseline.State);
+        Assert.Empty(result.Findings);
+    }
+}

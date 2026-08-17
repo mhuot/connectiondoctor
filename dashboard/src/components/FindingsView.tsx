@@ -88,6 +88,10 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
       {findings === undefined && (
         <p className="empty">This collector reported analysis but no <code>findings</code> field — findings are <b>not reported</b> for this host (unknown, not none), even though the window is {historyOk ? 'complete' : 'incomplete'}.</p>
       )}
+      {/* An incomplete window explains what is *unknown*; any findings above
+          are what is *known right now* (live power, baseline comparison), and
+          they are rendered regardless — a stale recorder must never hide the
+          fault in front of the user. */}
       {findings !== undefined && ranked.length === 0 && (
         historyOk
           ? <p className="empty">No findings in the last {analysis.windowHours} h — the recording covers the whole window.</p>
