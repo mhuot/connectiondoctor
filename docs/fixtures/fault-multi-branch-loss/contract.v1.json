@@ -1,0 +1,46 @@
+{
+  "schema": "connection-contract/v1",
+  "capturedAt": "2026-08-17T12:03:00-05:00",
+  "host": {
+    "id": "e1f2a3b4-c5d6-4e7f-8a9b-0c1d2e3f4a5b",
+    "name": "surface",
+    "os": "windows",
+    "arch": "arm64"
+  },
+  "power": {
+    "source": "battery",
+    "externalConnected": false,
+    "batteryPresent": true,
+    "batteryPercent": 95
+  },
+  "displaysKnown": true,
+  "nodes": [
+    {
+      "id": "host",
+      "kind": "host",
+      "name": "surface",
+      "protocol": "power"
+    },
+    {
+      "id": "usb:0x04000000",
+      "parentId": "host",
+      "kind": "device",
+      "name": "Surface Type Cover",
+      "vidPid": "045E:09C2",
+      "protocol": "usbLow",
+      "tunneled": false
+    }
+  ],
+  "analysis": {
+    "windowHours": 6,
+    "generatedAt": "2026-08-17T12:03:00-05:00",
+    "coverage": {
+      "availableFrom": "2026-08-17T12:00:00-05:00",
+      "through": "2026-08-17T12:03:00-05:00",
+      "complete": false,
+      "reasons": [
+        "recorder-started-inside-window"
+      ]
+    }
+  }
+}

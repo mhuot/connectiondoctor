@@ -1,0 +1,17 @@
+{
+  "kind": "fault",
+  "findings": [
+    {
+      "severity": "warning",
+      "title": "Six devices disappeared together and did not return"
+    }
+  ],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 6,
+      "sharedParent": null
+    }
+  ],
+  "notes": "One correlated disappearance, root unknown \u2014 the bounded diagnosis from the real observation in issue #37, where a live contract dropped from 103 nodes to 47. The losses span two host branches: the dock chain and two displays attached directly to the host. The only ancestor common to all of them is therefore the host itself, which is an ancestor of everything and explains nothing, so sharedParent is null rather than the host or the dock. The dock is the plausible suspect and the topology does not prove it; a consumer that named it would be inventing a root the graph does not support. No root event exists because coverage is incomplete across the transition, so the start and duration are unknown too."
+}

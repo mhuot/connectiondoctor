@@ -278,5 +278,18 @@ function sharedParent(
   const common = first.find((ancestor) => !lost.has(ancestor) && rest.every((c) => c.includes(ancestor)));
   if (!common) return undefined;
   const node = byId.get(common);
-  return node ? { id: node.id, name: node.name } : undefined;
+  if (!node) return undefined;
+
+  // The host root is an ancestor of everything, so finding it there means the
+  // losses span separate branches and the topology explains nothing about why
+  // they went together. Saying "all behind <host>" would render as one
+  // upstream failure — a claim about a machine that is plainly still running —
+  // and would train the engine to name a root the graph does not support.
+  // Real hardware made this concrete (issue #37): a live contract dropped from
+  // 103 nodes to 47, and the only ancestor common to all 56 losses was the
+  // host, because two of them were displays attached directly to it. The
+  // honest answer there is one correlated disappearance with the root unknown,
+  // which is the incident *without* a shared parent.
+  if (node.kind === 'host') return undefined;
+  return { id: node.id, name: node.name };
 }
