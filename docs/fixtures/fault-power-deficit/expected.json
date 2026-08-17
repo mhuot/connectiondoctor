@@ -6,6 +6,12 @@
       "title": "Power supply under-served"
     }
   ],
-  "incidents": [],
-  "notes": "The battery covered 14.5 W for two minutes while the machine reported AC power. Sustained and deep: this is the fault the tool was built for, and it must be critical with the measured watts in its evidence."
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 0,
+      "sharedParent": null
+    }
+  ],
+  "notes": "The battery covered 14.5 W for two minutes while the machine reported AC power. Sustained and deep: this is the fault the tool was built for. It must be a critical finding, and the deficit episode itself belongs on the timeline as an incident even though no device was lost - the timeline is where someone looks to see when it happened."
 }

@@ -13,6 +13,13 @@ import {
 } from '../contract/types';
 
 const GAP_MS = 30_000;
+/** A deficit long enough to be worth a mark on the timeline. The event log
+ *  records any dip past -2 W so the record is honest; a *finding* needs 10 W
+ *  sustained. Between those sits the question this constant answers: how long
+ *  must the supply be short before someone looking at the timeline should see
+ *  it at all. A five-second dip on a laptop at full charge is noise; a minute
+ *  is the supply failing to keep up. */
+const SUSTAINED_DEFICIT_MS = 60_000;
 
 export interface Incident {
   start: string;
@@ -49,11 +56,27 @@ export function stitchIncidents(
   const sorted = ordered.filter((e) => e.kind !== 'fullSnapshot');
   if (sorted.length === 0) return [];
 
+  // A deficit is one episode from its start to its end, however long that is.
+  // Grouping purely by gaps would split a two-minute deficit into two runs of
+  // one event each — and then neither run looks sustained, so the longer the
+  // fault, the quieter the timeline. Events inside an open episode stay with
+  // it regardless of the gap.
+  const openEpisodeAt = (index: number): boolean => {
+    let open = false;
+    for (let i = 0; i <= index; i++) {
+      if (sorted[i].kind === 'deficitStart') open = true;
+      if (sorted[i].kind === 'deficitEnd') open = false;
+    }
+    return open;
+  };
+
   const groups: ContractEvent[][] = [];
   let current: ContractEvent[] = [sorted[0]];
-  for (const event of sorted.slice(1)) {
+  for (let i = 1; i < sorted.length; i++) {
+    const event = sorted[i];
     const previous = current[current.length - 1];
-    if (Date.parse(event.t) - Date.parse(previous.t) <= GAP_MS) current.push(event);
+    const withinEpisode = openEpisodeAt(i - 1);
+    if (withinEpisode || Date.parse(event.t) - Date.parse(previous.t) <= GAP_MS) current.push(event);
     else {
       groups.push(current);
       current = [event];
@@ -62,13 +85,15 @@ export function stitchIncidents(
   groups.push(current);
 
   return groups
-    // An incident is a run of *trouble*, and trouble means something was lost:
-    // a device disappearing, a link dropping, a port erroring. A run made only
-    // of arrivals, power transitions or plug events is a desk being used —
-    // reporting it as an incident is the false alarm that teaches people to
-    // ignore the timeline. (The conformance controls in docs/fixtures exist to
-    // hold this line: normal unplug, shallow deficit, a device arriving.)
-    .filter((g) => g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)))
+    // An incident is a run of *trouble*. Trouble is something lost — a device
+    // disappearing, a link dropping, a port erroring — or a deficit that
+    // persisted: the supply failing to keep up is a fault even when nothing
+    // dropped off, and the timeline is where someone looks to see when it
+    // happened. A run made only of arrivals, plug events or a momentary dip is
+    // a desk being used, and reporting it is the false alarm that teaches
+    // people to ignore the timeline. (The controls in docs/fixtures hold this
+    // line from both sides: a five-second dip is silent, two minutes is not.)
+    .filter((g) => g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)) || sustainedDeficit(g))
     .map((group) => {
       const lost = group
         .filter((e) => e.kind === 'deviceRemoved')
@@ -90,6 +115,22 @@ export function stitchIncidents(
       }
       return incident;
     });
+}
+
+/** True when this run contains a deficit that lasted long enough to matter.
+ *  An episode still open at the end of the run counts from its start to the
+ *  last event we have: an unfinished deficit is not a reason to stay quiet. */
+function sustainedDeficit(group: ContractEvent[]): boolean {
+  let start: number | undefined;
+  for (const event of group) {
+    if (event.kind === 'deficitStart') start ??= Date.parse(event.t);
+    if (event.kind === 'deficitEnd' && start !== undefined) {
+      if (Date.parse(event.t) - start >= SUSTAINED_DEFICIT_MS) return true;
+      start = undefined;
+    }
+  }
+  if (start === undefined) return false;
+  return Date.parse(group[group.length - 1].t) - start >= SUSTAINED_DEFICIT_MS;
 }
 
 /** Deepest common ancestor of the removed nodes in the pre-incident tree —

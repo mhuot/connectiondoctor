@@ -8,5 +8,5 @@
       "sharedParent": null
     }
   ],
-  "notes": "Two identical mice on one desk. One was unplugged, the other plugged in. Matching by VID:PID alone would call this the same device moving; the unitKeys differ, so they are two units. No finding either way."
+  "notes": "Two identical mice on one desk, distinguished in the topology by different unitKeys (the event stream carries node ids, not unit keys, so this case exercises the envelope's disambiguation). One was unplugged and the other plugged in; matching by VID:PID alone would call that one device moving. No finding either way."
 }

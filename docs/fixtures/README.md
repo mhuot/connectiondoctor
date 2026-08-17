@@ -46,6 +46,22 @@ bug:
 - **Diagnostic quality** — the answer matches `expected.json`: the fault cases
   are detected, and *no control case produces a warning or critical finding*.
 
+### What runs today
+
+Neither suite is complete yet, and the corpus is worth exactly what its
+weakest claim is worth — so the state is written down rather than implied:
+
+| | Status |
+|---|---|
+| Incident stitching (TypeScript) | **Executed.** `dashboard/src/domain/conformance.test.ts` runs the real engine over every case and compares against `expected.json`. The shallow-vs-sustained deficit pair pins both edges of the rule that decides whether a power dip reaches the timeline. |
+| Fixture contract validity | **Executed.** `host.id` must be a UUIDv4, `unitKey` 16 hex characters, no corrupt event lines. |
+| Finding quality | **Asserted, not executed.** Findings come from the Swift and C# engines; nothing recomputes them in TypeScript. The tests check that each case *declares* a coherent answer (control → silence, fault → something loud) and that findings carried in a fixture envelope agree with it. A fixture whose expected findings were simply wrong would pass. |
+| Parity | **Not attempted.** Needs the other two engines reading contract data. |
+
+Both gaps close the same way: `contract-conformance` tasks 1.3 and 1.4, which
+point the macOS and Windows analysis at envelope + events so this corpus can be
+run through all three engines.
+
 ## Provenance
 
 Every case says where it came from. `recorded` cases are real captures from
