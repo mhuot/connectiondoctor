@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { HostData } from './data/store';
+import { emptyContact, hostContact, hostHistory, type HostData } from './data/store';
 import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
 import { TimelineView } from './components/TimelineView';
@@ -73,10 +73,11 @@ export function App() {
   }, [hosts]);
 
   const loadFixtures = () => {
+    const at = new Date().toISOString();
     setHosts([
-      { name: 'm3pro', envelope: parseEnvelope(surfaceChain), events: [], origin: 'fixture' },
-      { name: 'mini', events: parseEventStream(kvmMini).events, origin: 'fixture' },
-      { name: 'surface', events: parseEventStream(kvmSurface).events, origin: 'fixture' },
+      { name: 'm3pro', envelope: parseEnvelope(surfaceChain), events: [], origin: 'fixture', contact: { ...emptyContact(), contractAt: at }, historyReasons: [] },
+      { name: 'mini', events: parseEventStream(kvmMini).events, origin: 'fixture', contact: { ...emptyContact(), eventsAt: at }, historyReasons: [] },
+      { name: 'surface', events: parseEventStream(kvmSurface).events, origin: 'fixture', contact: { ...emptyContact(), eventsAt: at }, historyReasons: [] },
     ]);
     setError(undefined);
   };
@@ -98,6 +99,7 @@ export function App() {
             {hosts.map((h) => <option key={h.name}>{h.name}</option>)}
           </select>
         )}
+        {active && <HostStateChips host={active} />}
         <input placeholder="collector host:port" value={url}
           onChange={(e) => setUrl(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter') void addUrl(); }} />
@@ -127,15 +129,38 @@ export function App() {
           {tab === 'findings' && (
             <FindingsView findings={active?.envelope?.findings} analysis={active?.envelope?.analysis}
               hostName={active?.name} eventCount={active?.events.length ?? 0}
-              lastEventAt={active?.events.at(-1)?.t} />
+              lastEventAt={active?.events.at(-1)?.t}
+              history={active ? hostHistory(active) : undefined} />
           )}
           {tab === 'timeline' && (
             <TimelineView events={active?.events ?? []} snapshot={active?.envelope}
-              recordedLabel={active ? `recorded · ${active.origin}` : ''} />
+              recordedLabel={active ? `recorded · ${active.origin}` : ''}
+              history={active ? hostHistory(active) : undefined}
+              eventsError={active?.contact.eventsError} />
           )}
           {tab === 'fleet' && <FleetView hosts={hosts} />}
         </>
       )}
     </div>
+  );
+}
+
+/** Two independent axes, two chips: contact (live / stale / offline) and
+ *  history (complete / no-history / envelope-only / incomplete + reasons).
+ *  Polite live regions so a refresh that changes state is announced. */
+function HostStateChips({ host }: { host: HostData }) {
+  const contact = hostContact(host);
+  const history = hostHistory(host);
+  const contactTone = contact === 'live' ? 'ok' : contact === 'stale' ? 'warn' : 'crit';
+  const historyTone = history.state === 'complete' ? 'ok' : history.state === 'no-history' ? 'muted' : 'warn';
+  return (
+    <>
+      <span className={`chip ${contactTone}`} role="status" aria-live="polite" title={host.contact.contractError ?? host.contact.eventsError ?? ''}>
+        {contact}{host.contact.contractError ? ' · contract failed' : ''}
+      </span>
+      <span className={`chip ${historyTone}`} role="status" aria-live="polite" title={history.reasons.join('; ')}>
+        history: {history.state}{history.reasons.length > 0 ? ` (${history.reasons.slice(0, 2).join(', ')}${history.reasons.length > 2 ? ', …' : ''})` : ''}
+      </span>
+    </>
   );
 }

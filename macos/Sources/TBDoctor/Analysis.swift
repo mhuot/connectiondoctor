@@ -36,8 +36,9 @@ enum Analysis {
                     liveSample: Sample? = nil) -> Result? {
         let windowStart = now.addingTimeInterval(-windowHours * 3600)
         let sampleStore = Store(filename: "samples.jsonl")
+        let eventStore = Store(filename: "events.jsonl")
         var samples = sampleStore.load(Sample.self, since: windowStart) { $0.t }
-        let events = Store(filename: "events.jsonl").load(KernelEvent.self, since: windowStart) { $0.t }
+        let events = eventStore.load(KernelEvent.self, since: windowStart) { $0.t }
 
         if samples.isEmpty && events.isEmpty {
             // Nothing inside the window. Two very different situations: the
@@ -52,9 +53,12 @@ enum Analysis {
 
         // Coverage is judged on the recording alone. A live probe folded in
         // for the engines must not make a cold machine look continuously
-        // recorded, so measure first, then append.
+        // recorded, so measure first — and append only when the recording
+        // reaches up to now: a live sample after a long gap would sit next to
+        // a stale one and read as a sudden grouped loss that never happened.
         let recorded = samples
-        if let live = liveSample { samples.append(live) }
+        let recordingIsCurrent = recorded.last.map { now.timeIntervalSince($0.t) <= gapTolerance } ?? false
+        if let live = liveSample, recordingIsCurrent { samples.append(live) }
 
         let findings = Diagnosis.analyze(samples: samples, events: events)
         let incidents = Collector.deriveIncidents(samples: samples, events: events)
@@ -73,6 +77,12 @@ enum Analysis {
             reasons.append("gap")
         }
         if recorded.isEmpty { reasons.append("no-history") }
+        // Either store trimmed inside the window means the window is not
+        // whole — a complete sample stream cannot vouch for incidents whose
+        // kernel events were cut, and vice versa.
+        for store in [sampleStore, eventStore] {
+            if let trimmedAt = store.lastTrimmedAt, trimmedAt > windowStart { reasons.append("trimmed") }
+        }
 
         return Result(findings: findings,
                       incidents: incidents,
@@ -116,7 +126,10 @@ enum Analysis {
             ]
             if let end = incident.end { out["end"] = iso(end) }
             if incident.rootEventCount > 0 { out["rootEvent"] = "linkDown" }
-            if let parent = incident.sharedParentLocationID {
+            // Only when the common-prefix ancestor is a node that actually
+            // existed before the incident — a prefix alone is arithmetic, not
+            // a device (issue #47).
+            if let parent = incident.sharedParentLocationID, incident.sharedParentResolved {
                 out["sharedParent"] = String(format: "usb:0x%08X", parent)
             }
             if let mw = incident.peakDischargeMilliwatts {

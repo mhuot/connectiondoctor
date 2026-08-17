@@ -228,6 +228,10 @@ struct Incident: Codable, Identifiable {
     /// Common ancestor locationID of the lost devices when they collapse to
     /// one branch (the grouped-loss finding in data form); nil otherwise.
     var sharedParentLocationID: UInt32?
+    /// True when a device with exactly `sharedParentLocationID` was present in
+    /// the pre-incident sample — i.e. the shared parent is a real node, not
+    /// just a locationID prefix.
+    var sharedParentResolved: Bool = false
 
     var id: Double { start.timeIntervalSince1970 }
     var duration: TimeInterval? { end.map { $0.timeIntervalSince(start) } }

@@ -128,7 +128,12 @@ links to the node carrying the video when known.
 `kind`: `linkDown` | `linkUp` | `deviceAdded` | `deviceRemoved` |
 `adapterChanged` | `deficitStart` | `deficitEnd` | `portError` | `fullSnapshot`.
 `linkDown` from a kernel source is a **root** event; device add/remove are
-usually fallout. `fullSnapshot` events embed a complete envelope as a sync point.
+usually fallout. `fullSnapshot` events embed a **complete** envelope as a sync
+point — including the `findings` / `incidents` / `analysis` group whenever
+history exists (decided in #47: a sync point is the whole document, not a
+topology-only subset). Consumers anchor counting and state on the last
+`fullSnapshot` and apply only later deltas; they never replay all history
+forwards from the current envelope.
 
 ## Findings
 
@@ -162,7 +167,12 @@ you cannot audit is an opinion. `confidence` *(opt)*: freeform
 `rootEvent` *(opt)* names the originating event kind when one was identified;
 absent means "grouped change, origin unattributed". `sharedParent` *(opt)* is
 the common ancestor when the losses collapse to one — the grouped-loss finding
-in data form.
+in data form — and is asserted **only on evidence**: every lost device names
+the same parent, and that parent is a node that existed in the pre-incident
+topology (the last snapshot at or before the incident). A locationID prefix
+or an unresolved id is not a parent; anything unknown stays unattributed
+(#47, #48). `recommendation` on a Finding is **required** — a finding without a
+next step is half a finding.
 
 ## Documents
 

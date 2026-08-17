@@ -343,7 +343,7 @@ enum Diagnosis {
                 String(format: "Battery contributed up to %.1fW at peak (measured)", contribution),
                 String(format: "Still %.1fW below the %.0fW deficit threshold", deficitWattsThreshold - contribution, deficitWattsThreshold)
             ],
-            recommendation: nil)]
+            recommendation: "Nothing to fix yet. If the dock starts dropping under load, this margin is the first suspect: use a higher-rated adapter or a dock that supplies more power.")]
     }
 
     // MARK: - Negotiated speed

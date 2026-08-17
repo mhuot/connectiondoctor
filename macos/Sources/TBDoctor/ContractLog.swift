@@ -58,7 +58,10 @@ final class ContractLog {
         }
 
         if lastFullSnapshot.map({ sample.t.timeIntervalSince($0) >= fullSnapshotInterval }) ?? true {
-            lines.append(["t": stamp, "kind": "fullSnapshot", "snapshot": Contract.envelope(from: sample)])
+            // A sync point is a *complete* envelope (schema § Events), so it
+            // carries the analysis group whenever history exists; the
+            // dashboard anchors on it and replays only later deltas.
+            lines.append(["t": stamp, "kind": "fullSnapshot", "snapshot": Contract.envelope(from: sample, analysis: Analysis.run(now: sample.t))])
             lastFullSnapshot = sample.t
         }
 
