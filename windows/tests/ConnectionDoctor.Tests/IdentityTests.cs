@@ -28,8 +28,45 @@ public sealed class IdentityTests
     [InlineData(@"USB\ROOT_HUB30\4&2b8c1f2&0", null)]
     // Not enough segments to carry one.
     [InlineData(@"HID\VID_046D&PID_C08A", null)]
+    // Enumerators Windows does not document as carrying a device-reported
+    // serial in that segment. These end in short location tokens with no '&',
+    // so the '&' test alone let them through — and on a real Surface that
+    // produced one shared key across three unrelated built-in nodes. The
+    // exact instance ids from that host are not published; these reproduce
+    // the shape that broke it.
+    [InlineData(@"ACPI\VEN_QCOM&DEV_24AE\3", null)]
+    [InlineData(@"ACPI\USB4RTMR\0", null)]
+    [InlineData(@"ACPI\USB4RTMR\1", null)]
+    [InlineData(@"PCI\VEN_17CB&DEV_010E\0", null)]
+    [InlineData(@"USB4\RETIMER\0", null)]
+    [InlineData(@"SWD\MMDEVAPI\0", null)]
+    // VID/PID alone is not the licence — the enumerator has to be USB.
+    [InlineData(@"HID\VID_046D&PID_C08A\MX-VERT-0001", null)]
     public void SerialIsReadOnlyWhenTheDeviceActuallyReportedOne(string instanceId, string? expected) =>
         Assert.Equal(expected, SnapshotComparerTests.Device(instanceId, "USB", "Device").Serial);
+
+    [Fact]
+    public void UnrelatedNodesNeverShareAUnitKeyBecauseTheirInstanceSuffixMatches()
+    {
+        // The failure observed on hardware: a dual-role controller and two
+        // retimer ports whose instance ids happen to end the same way. HMAC
+        // turned that coincidence into a confident-looking unit identity and
+        // merged three unrelated nodes — worse than no key at all, because a
+        // consumer has no way to tell an invented identity from a real one.
+        var identity = Fresh();
+        var lookalikes = new[]
+        {
+            @"ACPI\VEN_SNPS&DEV_0001\0",
+            @"ACPI\USB4RTMR\0",
+            @"PCI\VEN_17CB&DEV_010E\0",
+        };
+
+        var keys = lookalikes
+            .Select(id => identity.UnitKey(SnapshotComparerTests.Device(id, "USB", "Built-in").Serial))
+            .ToList();
+
+        Assert.All(keys, key => Assert.Null(key));
+    }
 
     [Fact]
     public void UnitKeyDistinguishesTwoUnitsOfTheSameModelAndIsAbsentWithoutASerial()
