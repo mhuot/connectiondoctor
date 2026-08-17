@@ -1,0 +1,12 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 3,
+      "sharedParent": "usb:hub"
+    }
+  ],
+  "notes": "A KVM moved the monitor's hub and everything behind it to the other machine. From this host it is a grouped loss behind one parent \u2014 which is true \u2014 but it is not a fault, and the fleet view sees the same devices appear on the other host within seconds. A single-host engine may report an unattributed incident; it MUST NOT raise a critical finding."
+}

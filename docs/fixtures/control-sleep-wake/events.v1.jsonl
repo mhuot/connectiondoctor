@@ -1,0 +1,12 @@
+{"t": "2026-08-17T03:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:d0", "vidPid": "046D:C08A", "name": "Device 0"}
+{"t": "2026-08-17T03:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:d1", "vidPid": "046D:C08A", "name": "Device 1"}
+{"t": "2026-08-17T03:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:d2", "vidPid": "046D:C08A", "name": "Device 2"}
+{"t": "2026-08-17T03:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:d3", "vidPid": "046D:C08A", "name": "Device 3"}
+{"t": "2026-08-17T03:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:d4", "vidPid": "046D:C08A", "name": "Device 4"}
+{"t": "2026-08-17T03:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:d5", "vidPid": "046D:C08A", "name": "Device 5"}
+{"t": "2026-08-17T07:30:00-05:00", "kind": "deviceAdded", "nodeId": "usb:d0", "vidPid": "046D:C08A", "name": "Device 0"}
+{"t": "2026-08-17T07:30:00-05:00", "kind": "deviceAdded", "nodeId": "usb:d1", "vidPid": "046D:C08A", "name": "Device 1"}
+{"t": "2026-08-17T07:30:00-05:00", "kind": "deviceAdded", "nodeId": "usb:d2", "vidPid": "046D:C08A", "name": "Device 2"}
+{"t": "2026-08-17T07:30:00-05:00", "kind": "deviceAdded", "nodeId": "usb:d3", "vidPid": "046D:C08A", "name": "Device 3"}
+{"t": "2026-08-17T07:30:00-05:00", "kind": "deviceAdded", "nodeId": "usb:d4", "vidPid": "046D:C08A", "name": "Device 4"}
+{"t": "2026-08-17T07:30:00-05:00", "kind": "deviceAdded", "nodeId": "usb:d5", "vidPid": "046D:C08A", "name": "Device 5"}

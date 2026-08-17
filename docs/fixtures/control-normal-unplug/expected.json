@@ -1,0 +1,12 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 1,
+      "sharedParent": null
+    }
+  ],
+  "notes": "One device, removed and later returned by hand. An incident may be reported (something did change) but it must be unattributed and MUST NOT produce a warning or critical finding."
+}

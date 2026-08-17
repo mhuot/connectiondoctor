@@ -1,0 +1,2 @@
+{"t": "2026-08-17T11:00:00-05:00", "kind": "deviceRemoved", "nodeId": "usb:mouse-a", "vidPid": "046D:C08A", "name": "MX Vertical"}
+{"t": "2026-08-17T11:00:30-05:00", "kind": "deviceAdded", "nodeId": "usb:mouse-b", "vidPid": "046D:C08A", "name": "MX Vertical"}

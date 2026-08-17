@@ -1,0 +1,11 @@
+{
+  "kind": "fault",
+  "findings": [
+    {
+      "severity": "critical",
+      "title": "Power supply under-served"
+    }
+  ],
+  "incidents": [],
+  "notes": "The battery covered 14.5 W for two minutes while the machine reported AC power. Sustained and deep: this is the fault the tool was built for, and it must be critical with the measured watts in its evidence."
+}

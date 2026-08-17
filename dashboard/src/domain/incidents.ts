@@ -25,11 +25,28 @@ export interface Incident {
 
 export function stitchIncidents(
   events: ContractEvent[],
-  preIncidentSnapshot?: ContractEnvelope,
+  currentSnapshot?: ContractEnvelope,
 ): Incident[] {
-  const sorted = [...events]
-    .filter((e) => e.kind !== 'fullSnapshot')
-    .sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  const ordered = [...events].sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  // Sync points, kept aside: attributing a grouped loss needs the topology as
+  // it was *before* the devices vanished. The current envelope is "now" — the
+  // devices in question are exactly the ones missing from it — so a
+  // fullSnapshot recorded before the incident is the only evidence that can
+  // name their shared parent. The current envelope is the fallback for streams
+  // that carry no sync point.
+  const snapshots = ordered.filter(
+    (e): e is ContractEvent & { snapshot: ContractEnvelope } =>
+      e.kind === 'fullSnapshot' && e.snapshot !== undefined,
+  );
+  const topologyBefore = (t: string): ContractEnvelope | undefined => {
+    const at = Date.parse(t);
+    for (let i = snapshots.length - 1; i >= 0; i--) {
+      if (Date.parse(snapshots[i].t) <= at) return snapshots[i].snapshot;
+    }
+    return currentSnapshot;
+  };
+
+  const sorted = ordered.filter((e) => e.kind !== 'fullSnapshot');
   if (sorted.length === 0) return [];
 
   const groups: ContractEvent[][] = [];
@@ -45,7 +62,13 @@ export function stitchIncidents(
   groups.push(current);
 
   return groups
-    .filter((g) => !(g.length === 1 && g[0].kind === 'adapterChanged')) // a lone plug event is not a fault
+    // An incident is a run of *trouble*, and trouble means something was lost:
+    // a device disappearing, a link dropping, a port erroring. A run made only
+    // of arrivals, power transitions or plug events is a desk being used —
+    // reporting it as an incident is the false alarm that teaches people to
+    // ignore the timeline. (The conformance controls in docs/fixtures exist to
+    // hold this line: normal unplug, shallow deficit, a device arriving.)
+    .filter((g) => g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)))
     .map((group) => {
       const lost = group
         .filter((e) => e.kind === 'deviceRemoved')
@@ -57,10 +80,11 @@ export function stitchIncidents(
         rootEvent: group.find((e) => ROOT_EVENT_KINDS.has(e.kind))?.kind,
         devicesLost: lost,
       };
-      if (preIncidentSnapshot && lost.length >= 2) {
+      const before = topologyBefore(group[0].t);
+      if (before && lost.length >= 2) {
         const parent = sharedParent(
           group.filter((e) => e.kind === 'deviceRemoved').map((e) => e.nodeId),
-          preIncidentSnapshot,
+          before,
         );
         if (parent) incident.sharedParent = parent;
       }
@@ -90,10 +114,24 @@ function sharedParent(
     return out; // nearest ancestor first
   };
 
+  // When one of the lost devices is itself the ancestor of all the others,
+  // *it* is what failed — the rest are its downstream fallout, and naming its
+  // parent instead would send someone to investigate the dock when the hub
+  // hanging off it is the thing that stopped enumerating.
+  const lost = new Set(ids);
+  const ancestorOfTheRest = ids.find((candidate) =>
+    ids.every((other) => other === candidate || chain(other).includes(candidate)));
+  if (ancestorOfTheRest) {
+    const node = byId.get(ancestorOfTheRest);
+    if (node) return { id: node.id, name: node.name };
+  }
+
+  // Otherwise: the deepest ancestor common to everything that was lost, and
+  // not itself among the losses.
   const chains = ids.map(chain);
   if (chains.some((c) => c.length === 0)) return undefined;
   const [first, ...rest] = chains;
-  const common = first.find((ancestor) => rest.every((c) => c.includes(ancestor)));
+  const common = first.find((ancestor) => !lost.has(ancestor) && rest.every((c) => c.includes(ancestor)));
   if (!common) return undefined;
   const node = byId.get(common);
   return node ? { id: node.id, name: node.name } : undefined;

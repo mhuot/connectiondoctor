@@ -1,0 +1,12 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 1,
+      "sharedParent": null
+    }
+  ],
+  "notes": "Two identical mice on one desk. One was unplugged, the other plugged in. Matching by VID:PID alone would call this the same device moving; the unitKeys differ, so they are two units. No finding either way."
+}

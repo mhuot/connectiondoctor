@@ -1,6 +1,6 @@
 # Tasks: contract-conformance
 - [ ] 1.1 `docs/fixtures/` with three fault cases and `expected.json`; README in the folder
-- [ ] 1.1a Negative-control fixtures (unplug/replug, sleep/wake, KVM move, duplicate VID:PID, incomplete history) with expected "no finding"/"unattributed"; conformance test split into parity and diagnostic-quality — issue #31
+- [x] 1.1a Negative-control fixtures in `docs/fixtures/` — normal unplug, sleep/wake, KVM move, duplicate VID:PID, incomplete history, shallow deficit — each with `expected.json`, a README stating provenance (constructed vs recorded) and why the answer is right; paired fault cases (sustained deficit, hub branch lost); TS conformance runner asserts diagnostic quality and that **no control raises a warning or critical**. Parity across the three engines waits on 1.3/1.4 (analysis reading Contract v1) — issue #31
 - [ ] 1.1c Identity fixtures: hostname reuse, rename, two identical docks — issue #27
 - [ ] 1.1b `docs/schema/v1/{envelope,report,diff,bundle-manifest}.schema.json` (JSON Schema 2020-12) for the documents incl. Finding/Incident/Node (with explicit optional `nameRedacted`, `unitKey`, `host.id`); dashboard parser tests and every conformance test validate against them; manifest test asserts no scope token, installation key, original id/name or mapping appears — issue #20, review of #35
 - [ ] 1.2 `docs/schema-v1.md`: the nine rules with why-clauses; `acChanged`; `source` on link events; arch enum; `tb.route`; `host.id` and `node.unitKey` (proposed rows already present) — issue #27
