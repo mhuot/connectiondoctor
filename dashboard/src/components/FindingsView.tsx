@@ -6,18 +6,36 @@ const CONFIDENCE_RANK: Record<string, number> = { 'very high': 0, high: 1, moder
 /** Ranked findings with the evidence that produced them. Every finding shows
  *  its evidence without interaction — a verdict you cannot audit is an opinion.
  *  "None" is only claimed when the recording can vouch for the window. */
-export function FindingsView({ findings, analysis, hostName }: {
+export function FindingsView({ findings, analysis, hostName, eventCount = 0, lastEventAt }: {
   findings?: ContractFinding[];
   analysis?: ContractAnalysis;
   hostName?: string;
+  /** Recorded events loaded for this host, so an absent `analysis` can be
+   *  told apart from an empty machine (issue #36). */
+  eventCount?: number;
+  lastEventAt?: string;
 }) {
   if (!analysis) {
+    // Absent analysis means the collector did not report any — which is
+    // "never recorded" only when there is also no history to be seen. A
+    // producer that has events on file but does not emit analysis yet (the
+    // Windows collector, until its producer slice lands) must not read as
+    // a machine with nothing to say.
     return (
       <div className="findings">
-        <p className="empty">
-          No recording on {hostName ?? 'this collector'} yet — findings need history.
-          Run <code>install</code> so it records at login, or <code>collect</code> in a terminal.
-        </p>
+        {eventCount > 0 ? (
+          <p className="empty">
+            {hostName ?? 'This collector'} reported no analysis — its collector does not emit
+            findings yet — although it has {eventCount} recorded event{eventCount === 1 ? '' : 's'} on file
+            {lastEventAt ? `, the last at ${fmt(lastEventAt)}` : ''}. Findings, incidents and baseline state
+            are <b>unknown</b> for this host, not clear.
+          </p>
+        ) : (
+          <p className="empty">
+            No recording on {hostName ?? 'this collector'} yet — findings need history.
+            Run <code>install</code> so it records at login, or <code>collect</code> in a terminal.
+          </p>
+        )}
       </div>
     );
   }
