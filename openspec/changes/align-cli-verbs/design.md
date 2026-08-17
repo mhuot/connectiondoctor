@@ -22,6 +22,39 @@ Someone genuinely wants each alone: a headless Mac mini that only records; a
 laptop where the URL should always be there; an agent on a machine whose owner
 does not want a resident process at all; a scripted check on a build box.
 
+Exit status, because scripts cannot read prose:
+- `0` — every requested component was installed (or was already installed).
+- `1` — **nothing changed**: no requested component could be installed.
+  `install --mcp` on a machine with no writable agent config exits 1, having
+  printed the line to paste.
+- `4` — **partial**: some requested components installed and others did not.
+  `install --all` where the recorder, dashboard and CLI succeed but MCP finds
+  no agent exits 4, names which succeeded and which did not, and leaves the
+  successful ones installed. A script that wants all-or-nothing tests for 0; a
+  script that wants "did anything happen" tests for < 4.
+- `uninstall` uses the same codes for the same reasons.
+
+No elevation, ever:
+- `--cli` installs to a **writable per-user location**: `~/.local/bin` on
+  macOS (creating it if needed), `%LOCALAPPDATA%\Microsoft\WindowsApps` on
+  Windows — both conventionally on PATH for the user who ran the command.
+  `/usr/local/bin` and a Homebrew prefix are used only when they are already
+  writable without elevation.
+- The command never invokes `sudo`, `runas` or an elevation prompt. When the
+  chosen directory is not on the user's PATH it says so and prints the exact
+  line to add, rather than silently installing something unreachable.
+
+An agent's config is not ours to rewrite:
+- `--mcp` prefers the agent's own registration command (`claude mcp add …`)
+  when it is on PATH — that is the interface its owner supports.
+- Failing that, the config is edited **atomically** (temp file, validated
+  parse, replace) with a timestamped backup beside it, and only our own entry
+  is added. Unknown keys and unrelated servers are preserved byte-for-byte.
+  The command names the exact file it changed.
+- `uninstall --mcp` removes **only the registration this installation
+  created** — matched by server name and by the binary path pointing at this
+  build — and never touches another entry.
+
 Defaults and honesty:
 - bare `install` = `--recorder --dashboard` — what it does today — and it
   prints the components it installed. `--all` adds `--mcp --cli`.

@@ -27,10 +27,11 @@ does not silently omit the verb.
   snapshots.
 - **stdout is the answer, stderr is commentary.** Progress, deprecation notices
   and errors go to stderr, so `--json` output pipes cleanly.
-- **Exit codes:** `0` ok · `1` usage or runtime error · `2` a `critical`
-  finding was reported (`report`, `diff`) · `3` store-lock conflict — another
-  collector owns the data directory (`collect`, `status`). Scripts can act on
-  the code alone.
+- **Exit codes:** `0` ok · `1` usage or runtime error, or an `install`/`uninstall`
+  where **nothing changed** · `2` a `critical` finding was reported (`report`,
+  `diff`) · `3` store-lock conflict — another collector owns the data directory
+  (`collect`, `status`) · `4` **partial** install/uninstall: some requested
+  components succeeded and others did not. Scripts can act on the code alone.
 - **Data directory:** `~/Library/Application Support/TBDoctor` (macOS),
   `%LOCALAPPDATA%\ConnectionDoctor` (Windows). Override with
   `CONNECTIONDOCTOR_DIR`; macOS also honours the older `TBDOCTOR_DIR`.
