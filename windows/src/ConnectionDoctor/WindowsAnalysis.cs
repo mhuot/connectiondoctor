@@ -51,12 +51,19 @@ internal static class WindowsAnalysis
         CollectorHeartbeat? Heartbeat,
         DateTimeOffset? TrimmedAt,
         ConnectionSnapshot? Baseline,
-        BaselineStateFile? BaselineHistory);
+        BaselineStateFile? BaselineHistory,
+        /// <summary>Lines of the event log that could not be parsed — corrupt evidence, not absence.</summary>
+        int SkippedLines = 0,
+        /// <summary>Durable outages recorded by the collector (failed probes, sleep, not running).</summary>
+        IReadOnlyList<CollectorGap>? Gaps = null);
 
-    public static Inputs ReadInputs()
+    public static Inputs ReadInputs(double windowHours = DefaultWindowHours, DateTimeOffset? now = null)
     {
-        var entries = File.Exists(BackgroundCollector.EventsPath) ? BackgroundCollector.ReadEntries() : [];
+        var read = File.Exists(BackgroundCollector.EventsPath)
+            ? BackgroundCollector.ReadEntriesWithIntegrity()
+            : new IncrementalEventRead([], false);
         var heartbeat = BackgroundCollector.ReadHeartbeat();
+        var gaps = BackgroundCollector.ReadGaps((now ?? DateTimeOffset.Now).AddHours(-windowHours));
         DateTimeOffset? trimmedAt = null;
         if (File.Exists(BackgroundCollector.TrimMarkerPath) &&
             DateTimeOffset.TryParse(File.ReadAllText(BackgroundCollector.TrimMarkerPath).Trim(), out var t))
@@ -77,7 +84,7 @@ internal static class WindowsAnalysis
             }
         }
 
-        return new Inputs(entries, heartbeat, trimmedAt, baseline, BaselineStateFile.Read());
+        return new Inputs(read.Entries, heartbeat, trimmedAt, baseline, BaselineStateFile.Read(), read.SkippedLines, gaps);
     }
 
     /// <summary>
@@ -114,11 +121,16 @@ internal static class WindowsAnalysis
         // window to now. The heartbeat's StartedAt is this run's start; entries
         // before it belong to earlier runs, so a run that began inside the
         // window is a hole even if older entries exist.
-        var availableFrom = inWindow.FirstOrDefault()?.At ?? heartbeat?.StartedAt ?? windowStart;
-        if (heartbeat is not null && heartbeat.StartedAt > windowStart + GapTolerance)
+        // What the recorder can vouch for is the run boundary, not the first
+        // change it happened to write: a continuously running collector covers
+        // the whole window even if nothing changed for hours.
+        var runStart = heartbeat?.StartedAt;
+        var availableFrom = runStart is { } start && start > windowStart
+            ? start
+            : runStart is not null ? windowStart : inWindow.FirstOrDefault()?.At ?? windowStart;
+        if (runStart is { } inside && inside > windowStart + GapTolerance)
         {
             reasons.Add("recorder-started-inside-window");
-            availableFrom = heartbeat.StartedAt < availableFrom ? heartbeat.StartedAt : availableFrom;
         }
 
         if (at - lastSample > GapTolerance)
@@ -130,6 +142,19 @@ internal static class WindowsAnalysis
         if (inputs.TrimmedAt is { } trimmedAt && trimmedAt > windowStart)
         {
             reasons.Add("trimmed");
+        }
+
+        // Durable outages: any recorded stretch overlapping this window is a
+        // hole, even if the heartbeat now looks healthy.
+        if ((inputs.Gaps ?? []).Any(gap => gap.To >= windowStart && gap.From <= at))
+        {
+            reasons.Add("gap");
+        }
+
+        // Corrupt lines are missing evidence, not quiet: never claim complete.
+        if (inputs.SkippedLines > 0)
+        {
+            reasons.Add("corrupt-lines");
         }
 
         var through = lastSample > at ? at : lastSample;
@@ -222,6 +247,7 @@ internal static class WindowsAnalysis
                     if (rate is not null && rate < deepest) deepest = rate.Value;
                     Close(entry.At);
                     break;
+                case RecorderEntryKinds.DeficitDeepened:
                 default:
                     if (start is not null && rate is not null && rate < deepest) deepest = rate.Value;
                     break;

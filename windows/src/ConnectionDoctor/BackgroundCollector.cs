@@ -7,6 +7,8 @@ namespace ConnectionDoctor;
 internal static class BackgroundCollector
 {
     private const int SampleIntervalSeconds = 5;
+    /// <summary>Three missed samples is a hole, not jitter (matches WindowsAnalysis.GapTolerance).</summary>
+    private static readonly TimeSpan MaximumSampleInterval = TimeSpan.FromSeconds(SampleIntervalSeconds * 3);
     private const long MaximumEventBytes = 24 * 1024 * 1024;
     private static readonly TimeSpan FullSnapshotInterval = TimeSpan.FromHours(1);
     private const string MutexName = @"Local\ConnectionDoctor.Collector";
@@ -25,6 +27,13 @@ internal static class BackgroundCollector
     public static string ErrorPath => Path.Combine(DataDirectory, "collector-errors.log");
     /// <summary>ISO time of the last events trim, so coverage can say `trimmed` (Contract v1 coverage reasons).</summary>
     public static string TrimMarkerPath => Path.Combine(DataDirectory, "events.trimmed-at");
+    /// <summary>
+    /// Durable record of every stretch the collector was NOT sampling — a
+    /// failed probe, a stopped service, a sleeping machine. The heartbeat is
+    /// overwritten by the next success, so without this an outage would leave
+    /// no trace and a window containing it could claim to be complete.
+    /// </summary>
+    public static string GapsPath => Path.Combine(DataDirectory, "gaps.jsonl");
 
     public static int Run()
     {
@@ -46,6 +55,15 @@ internal static class BackgroundCollector
         var startedAt = DateTimeOffset.Now;
         var lastFullSnapshotAt = DateTimeOffset.MinValue;
         ConnectionSnapshot? previous = null;
+        // A previous run's last sample and this start bracket an outage: record
+        // it before the first sample overwrites the heartbeat.
+        var priorHeartbeat = ReadHeartbeat();
+        if (priorHeartbeat is not null && startedAt - priorHeartbeat.LastSampleAt > MaximumSampleInterval)
+        {
+            RecordGap(priorHeartbeat.LastSampleAt, startedAt, "collector-not-running");
+        }
+
+        var lastSampleAt = startedAt;
         Console.WriteLine($"ConnectionDoctor collector started. Events: {EventsPath}");
 
         while (!stopped.IsSet)
@@ -53,6 +71,14 @@ internal static class BackgroundCollector
             try
             {
                 var snapshot = DeviceProbe.Capture();
+                // Any interval longer than the promised cadence is a hole in
+                // the evidence, whatever caused it (failed probe, sleep, load).
+                if (snapshot.CapturedAt - lastSampleAt > MaximumSampleInterval)
+                {
+                    RecordGap(lastSampleAt, snapshot.CapturedAt, "sampling-interrupted");
+                }
+
+                lastSampleAt = snapshot.CapturedAt;
                 var entries = new List<RecorderEntry>();
                 if (previous is not null)
                 {
@@ -103,10 +129,17 @@ internal static class BackgroundCollector
         return 0;
     }
 
-    public static IReadOnlyList<RecorderEntry> ReadEntries()
+    public static IReadOnlyList<RecorderEntry> ReadEntries() => ReadEntriesWithIntegrity().Entries;
+
+    /// <summary>
+    /// Entries plus how many lines could not be parsed — corrupt evidence must
+    /// reach coverage, not be silently dropped (a stream of unreadable lines
+    /// would otherwise look like a quiet machine).
+    /// </summary>
+    public static IncrementalEventRead ReadEntriesWithIntegrity()
     {
         var cursor = new EventLogCursor();
-        return ReadEntriesIncremental(EventsPath, cursor).Entries;
+        return ReadEntriesIncremental(EventsPath, cursor);
     }
 
     public static IncrementalEventRead ReadEntriesIncremental(string path, EventLogCursor cursor)
@@ -115,7 +148,7 @@ internal static class BackgroundCollector
         {
             var resetMissing = cursor.Offset != 0 || cursor.PendingText.Length != 0;
             cursor.Reset();
-            return new IncrementalEventRead([], resetMissing);
+            return new IncrementalEventRead([], resetMissing, 0);
         }
 
         var file = new FileInfo(path);
@@ -127,7 +160,7 @@ internal static class BackgroundCollector
 
         if (file.Length == cursor.Offset)
         {
-            return new IncrementalEventRead([], reset);
+            return new IncrementalEventRead([], reset, 0);
         }
 
         using var stream = new FileStream(
@@ -146,6 +179,7 @@ internal static class BackgroundCollector
         cursor.PendingText = hasCompleteFinalLine ? string.Empty : lines[^1];
         var completeLineCount = hasCompleteFinalLine ? lines.Length : lines.Length - 1;
         var entries = new List<RecorderEntry>();
+        var skipped = 0;
         for (var index = 0; index < completeLineCount; index++)
         {
             var line = lines[index].TrimEnd('\r');
@@ -165,11 +199,12 @@ internal static class BackgroundCollector
             }
             catch (JsonException exception)
             {
+                skipped++;
                 RecordError(exception);
             }
         }
 
-        return new IncrementalEventRead(entries, reset);
+        return new IncrementalEventRead(entries, reset, skipped);
     }
 
     public static ConnectionSnapshot? ReadCurrentSnapshot(string? path = null)
@@ -292,6 +327,60 @@ internal static class BackgroundCollector
         File.WriteAllText(TrimMarkerPath, DateTimeOffset.Now.ToString("O"));
     }
 
+    /// <summary>Append one durable outage record; best effort, never fatal to collection.</summary>
+    public static void RecordGap(DateTimeOffset from, DateTimeOffset to, string reason)
+    {
+        try
+        {
+            Directory.CreateDirectory(DataDirectory);
+            File.AppendAllText(GapsPath, JsonSerializer.Serialize(new CollectorGap(from, to, reason), JsonOptions) + "\n");
+        }
+        catch (IOException)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+        }
+    }
+
+    /// <summary>Recorded outages overlapping [from, to]; unreadable lines are ignored but counted by the caller's integrity check.</summary>
+    public static IReadOnlyList<CollectorGap> ReadGaps(DateTimeOffset since)
+    {
+        if (!File.Exists(GapsPath))
+        {
+            return [];
+        }
+
+        var gaps = new List<CollectorGap>();
+        try
+        {
+            foreach (var line in File.ReadLines(GapsPath))
+            {
+                if (line.Length == 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var gap = JsonSerializer.Deserialize<CollectorGap>(line, JsonOptions);
+                    if (gap is not null && gap.To >= since)
+                    {
+                        gaps.Add(gap);
+                    }
+                }
+                catch (JsonException)
+                {
+                }
+            }
+        }
+        catch (IOException)
+        {
+        }
+
+        return gaps;
+    }
+
     /// <summary>The collector's heartbeat, or null when none has been written or it is unreadable.</summary>
     public static CollectorHeartbeat? ReadHeartbeat()
     {
@@ -368,4 +457,8 @@ internal sealed class EventLogCursor
 
 internal sealed record IncrementalEventRead(
     IReadOnlyList<RecorderEntry> Entries,
-    bool Reset);
+    bool Reset,
+    int SkippedLines = 0);
+
+/// <summary>A stretch the collector was not sampling — durable, unlike the heartbeat.</summary>
+internal sealed record CollectorGap(DateTimeOffset From, DateTimeOffset To, string Reason);

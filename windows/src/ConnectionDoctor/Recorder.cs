@@ -8,6 +8,8 @@ internal static class RecorderEntryKinds
     public const string PowerChanged = "power-changed";
     public const string DeficitStarted = "deficit-started";
     public const string DeficitEnded = "deficit-ended";
+    /// <summary>An active deficit got materially deeper — internal evidence, not a contract event kind.</summary>
+    public const string DeficitDeepened = "deficit-deepened";
 }
 
 internal sealed record RecorderEntry(
@@ -25,6 +27,9 @@ internal sealed record RecorderEntry(
 
 internal static class Recorder
 {
+    /// <summary>How much deeper a live deficit must get before it is worth another entry.</summary>
+    public const int DeficitDeepeningStepMilliwatts = 1000;
+
     public static IReadOnlyList<RecorderEntry> DetectChanges(
         ConnectionSnapshot previous,
         ConnectionSnapshot current)
@@ -51,6 +56,21 @@ internal static class Recorder
                 current.CapturedAt,
                 RecorderEntryKinds.DeviceAppeared,
                 device,
+                current.Power,
+                null));
+        }
+
+        // A deficit that deepens without any other transition would otherwise
+        // leave no sample deep enough to qualify: record the new extreme.
+        if (previous.Power.IsDeficit && current.Power.IsDeficit &&
+            current.Power.BatteryRateMilliwatts is { } now &&
+            previous.Power.BatteryRateMilliwatts is { } before &&
+            now <= before - DeficitDeepeningStepMilliwatts)
+        {
+            entries.Add(new RecorderEntry(
+                current.CapturedAt,
+                RecorderEntryKinds.DeficitDeepened,
+                null,
                 current.Power,
                 null));
         }

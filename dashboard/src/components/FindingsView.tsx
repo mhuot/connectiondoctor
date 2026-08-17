@@ -34,6 +34,12 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
     // a machine with nothing to say.
     return (
       <div className="findings">
+        {host && (
+          <div className="toolbar">
+            <strong>Baseline</strong>
+            <BaselineControl host={host} baseline={undefined} onChanged={onChanged} />
+          </div>
+        )}
         {eventCount > 0 ? (
           <p className="empty">
             {hostName ?? 'This collector'} reported no analysis — its collector does not emit
