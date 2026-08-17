@@ -33,7 +33,7 @@ public sealed class WindowsAnalysisTests
         Assert.True(result.Complete);
         Assert.Empty(result.Reasons);
         Assert.Equal("unavailable", result.LinkEvents); // no kernel link events on Windows yet
-        Assert.Equal("no-baseline", result.Baseline.State);
+        Assert.Equal("no-baseline", Assert.IsType<ContractBaselineState>(result.Baseline).State);
     }
 
     [Fact]
@@ -375,7 +375,7 @@ public sealed class BaselineFaultEvidenceTests
 
         Assert.Equal(["recorder-stopped-before-window"], result.Reasons);
         Assert.False(result.Complete);
-        Assert.Equal("active-fault", result.Baseline.State);
+        Assert.Equal("active-fault", Assert.IsType<ContractBaselineState>(result.Baseline).State);
         var finding = Assert.Single(result.Findings);            // the fault is explained
         Assert.NotEmpty(finding.Evidence);
         Assert.NotEmpty(finding.Recommendation);
@@ -389,7 +389,7 @@ public sealed class BaselineFaultEvidenceTests
             null, new MemoryBaselineStore(baseline));
 
         var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
-        Assert.Equal("active-fault", result.Baseline.State);
+        Assert.Equal("active-fault", Assert.IsType<ContractBaselineState>(result.Baseline).State);
         Assert.NotEmpty(result.Findings);
         Assert.All(result.Findings, finding =>
         {
@@ -406,7 +406,7 @@ public sealed class BaselineFaultEvidenceTests
             null, new MemoryBaselineStore(baseline));
 
         var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
-        Assert.Equal("healthy", result.Baseline.State);
+        Assert.Equal("healthy", Assert.IsType<ContractBaselineState>(result.Baseline).State);
         Assert.Empty(result.Findings);
     }
 
@@ -486,9 +486,9 @@ public sealed class BaselineHistoryRaceTests
 
         var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
 
-        Assert.Equal("active-fault", result.Baseline.State);
+        Assert.Equal("active-fault", Assert.IsType<ContractBaselineState>(result.Baseline).State);
         // The fault is dated from the reset state, not the stale five-hour-old one.
-        Assert.Equal(Now, result.Baseline.FaultSince);
+        Assert.Equal(Now, result.Baseline!.FaultSince);
         Assert.Equal(Now, store.ReadHistory()!.FaultSince);
     }
 }
@@ -507,7 +507,9 @@ public sealed class EvidenceBoundaryTests
 
         Assert.Contains("baseline-unreadable", result.Reasons);
         Assert.False(result.Complete);
-        Assert.Equal("no-baseline", result.Baseline.State);   // never "healthy"
+        // No state at all: unreadable is unknown. "no-baseline" would read as
+        // "nothing to compare against", which is a different claim.
+        Assert.Null(result.Baseline);
     }
 
     [Fact]
