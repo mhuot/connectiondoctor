@@ -43,8 +43,13 @@ internal static class ContractV1
     };
 
     /// <summary>Current state as a v1 envelope.</summary>
-    public static ContractEnvelope ToEnvelope(ConnectionSnapshot snapshot, bool includeBuiltIn = true)
+    public static ContractEnvelope ToEnvelope(
+        ConnectionSnapshot snapshot,
+        bool includeBuiltIn = true,
+        ResolvedIdentity? identity = null)
     {
+        // Once, here, for the whole document — never once per device.
+        var who = identity ?? ResolvedIdentity.ForThisProcess();
         var devices = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn);
         var included = new HashSet<string>(
             devices.Select(device => device.InstanceId),
@@ -80,7 +85,7 @@ internal static class ContractV1
                 // Two identical docks are two units here and nothing anywhere
                 // else: the serial is keyed with a secret that stays on this
                 // machine, and is absent when the device reports no serial.
-                UnitKey = Identity.UnitKey(device.Serial),
+                UnitKey = who.UnitKey(device.Serial),
                 // The producer's classification (dashboard-topology-controls):
                 // integrated panel/touch/HID and the internal buses they hang
                 // off are built-in; anything reached through an external bus
@@ -94,7 +99,7 @@ internal static class ContractV1
         return new ContractEnvelope
         {
             CapturedAt = snapshot.CapturedAt,
-            Host = ToHost(snapshot),
+            Host = ToHost(snapshot, who),
             Power = ToPower(snapshot.Power, nodes),
 
             // Native pixel sizes need QueryDisplayConfig (connectiondoctor#14).
@@ -169,13 +174,13 @@ internal static class ContractV1
     public static string SerializeDocument<T>(T document, bool indented = true) =>
         JsonSerializer.Serialize(document, indented ? IndentedOptions : CompactOptions);
 
-    public static ContractHost ToHost(ConnectionSnapshot snapshot) => new()
+    public static ContractHost ToHost(ConnectionSnapshot snapshot, ResolvedIdentity? identity = null) => new()
     {
         Name = snapshot.HostName,
         // Random and per-installation, and omitted entirely when there is no
         // durable identity: an id that changes between runs would split one
         // endpoint into many, so absent (fall back to the hostname) is honest.
-        Id = Identity.Current?.HostId,
+        Id = (identity ?? ResolvedIdentity.ForThisProcess()).HostId,
         Arch = snapshot.OperatingSystemArchitecture.ToLowerInvariant()
     };
 
@@ -186,8 +191,10 @@ internal static class ContractV1
     /// </summary>
     public static IReadOnlyList<ContractNode> ToNodes(
         ConnectionSnapshot snapshot,
-        IEnumerable<DeviceNode> devices)
+        IEnumerable<DeviceNode> devices,
+        ResolvedIdentity? identity = null)
     {
+        var who = identity ?? ResolvedIdentity.ForThisProcess();
         var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
         var included = new HashSet<string>(
             DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Select(device => device.InstanceId),
@@ -206,7 +213,7 @@ internal static class ContractV1
                 Protocol = ProtocolOf(kind, device.LinkSpeed),
                 LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
                 UsbClass = device.UsbClass,
-                UnitKey = Identity.UnitKey(device.Serial),
+                UnitKey = who.UnitKey(device.Serial),
                 Platform = new Dictionary<string, string> { ["instanceId"] = device.InstanceId }
             };
         }).ToList();

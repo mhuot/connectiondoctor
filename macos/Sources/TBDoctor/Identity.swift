@@ -79,8 +79,12 @@ struct Identity: Codable {
     /// the installation key, truncated. Nil when there is no durable identity
     /// or the device reports no serial — "same model, unit unknown" is a real
     /// answer, and so is "this machine has no identity to key it with".
-    static func unitKey(forSerial serial: String?) -> String? {
-        guard let serial, !serial.isEmpty, let identity = current else { return nil }
+    /// A device's identity within this installation: HMAC of its serial under
+    /// the installation key, truncated. An instance method, so a caller has to
+    /// have resolved the identity first — one document, one answer.
+    func unitKey(forSerial serial: String?) -> String? {
+        guard let serial, !serial.isEmpty else { return nil }
+        let identity = self
         let mac = HMAC<SHA256>.authenticationCode(
             for: Data(serial.utf8),
             using: SymmetricKey(data: identity.installationKey))

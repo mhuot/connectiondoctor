@@ -14,7 +14,23 @@ export async function loadFiles(files: File[], existing: HostData[]): Promise<Ho
     if (file.name.endsWith('.jsonl')) {
       const { events, skippedLines } = parseEventStream(text);
       const name = hostNameFromFile(file.name);
-      const host = hosts.get(`name:${name}`) ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
+      // A bare stream knows only a name, and the host it belongs to may already
+      // be here under its id — the ordinary order is envelope first, then its
+      // events. Looking only under `name:` would miss it and split one machine
+      // into two entries, one with topology and one with history.
+      const named = [...hosts.values()].filter((h) => h.name === name);
+      const host = named.length === 1
+        ? named[0]
+        : { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
+      // More than one host of that name is a question this file cannot answer,
+      // and guessing would attach one machine's history to another — the one
+      // mistake that makes a timeline lie. It stays unattributed and says why.
+      if (named.length > 1) {
+        host.historyReasons = [
+          ...host.historyReasons,
+          `${file.name}: ${named.length} hosts named "${name}" — events not attributed to any of them`,
+        ];
+      }
       host.events = [...host.events, ...events];
       host.origin = `${host.origin === file.name ? '' : `${host.origin}, `}${file.name}`;
       host.contact = { ...host.contact, eventsAt: new Date().toISOString(), skippedLines: host.contact.skippedLines + skippedLines };
@@ -25,10 +41,26 @@ export async function loadFiles(files: File[], existing: HostData[]): Promise<Ho
       const name = envelope.host.name;
       // An envelope carrying an id adopts any events already loaded under that
       // name — the same machine, now identified — and thereafter keys on the id.
+      // An envelope carrying an id adopts events already loaded under that
+      // name — the same machine, now identified. It may only do so while the
+      // name is unambiguous: once a second identified host shares it, adopting
+      // would be the same guess the stream branch above refuses to make.
+      const unattributed = hosts.get(`name:${name}`);
+      const contested = [...hosts.values()].some(
+        (h) => h.name === name && h.envelope !== undefined && h.envelope.host.id !== envelope.host.id,
+      );
       const host = hosts.get(envelope.host.id ?? `name:${name}`)
-        ?? hosts.get(`name:${name}`)
+        ?? (contested ? undefined : unattributed)
         ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
-      if (envelope.host.id) hosts.delete(`name:${host.name}`);
+      if (envelope.host.id && host === unattributed) hosts.delete(`name:${host.name}`);
+      if (envelope.host.id && contested && unattributed && unattributed !== host) {
+        unattributed.historyReasons = [
+          ...new Set([
+            ...unattributed.historyReasons,
+            `more than one host is named "${name}" — these events are not attributed to any of them`,
+          ]),
+        ];
+      }
       host.name = name;
       host.envelope = envelope;
       host.contact = { ...host.contact, contractAt: new Date().toISOString() };

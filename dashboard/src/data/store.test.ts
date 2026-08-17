@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { emptyContact, hostContact, hostHistory, hostKey, mergeRefresh, type HostData } from './store';
+import { emptyContact, hostContact, hostHistory, hostKey, hostOptions, mergeRefresh, type HostData } from './store';
 import { ifMatchHeader } from './baseline';
+import { loadFiles } from './sources';
 import { deviceCountSeries } from '../domain/series';
 import { parseEnvelope, parseEventStream, ContractError } from '../contract/parse';
 import type { ContractEnvelope, ContractEvent } from '../contract/types';
@@ -259,10 +260,10 @@ describe('host identity (issue #27)', () => {
   });
 
   it('a renamed machine is still one endpoint', () => {
-    const before = host({ name: 'mini', envelope: envelopeWith({ id: 'abc-123' }) });
+    const before = host({ name: 'mini', envelope: envelopeWith({ id: '3f9a1c2e-7b4d-4a61-9c8f-2e5b7d1a4c60' }) });
     const after = host({ name: 'mac-mini-office', envelope: parseEnvelope({
       schema: 'connection-contract/v1', capturedAt: '2026-08-17T01:00:00Z',
-      host: { name: 'mac-mini-office', os: 'macos', arch: 'arm64', id: 'abc-123' },
+      host: { name: 'mac-mini-office', os: 'macos', arch: 'arm64', id: '3f9a1c2e-7b4d-4a61-9c8f-2e5b7d1a4c60' },
       power: { source: 'mains', externalConnected: true, batteryPresent: false },
       nodes: [{ id: 'host', kind: 'host', name: 'mac-mini-office', protocol: 'power' }],
     }) });
@@ -270,8 +271,8 @@ describe('host identity (issue #27)', () => {
   });
 
   it('two machines that share a hostname stay two endpoints', () => {
-    const a = host({ name: 'surface', envelope: envelopeWith({ id: 'aaa' }) });
-    const b = host({ name: 'surface', envelope: envelopeWith({ id: 'bbb' }) });
+    const a = host({ name: 'surface', envelope: envelopeWith({ id: '11111111-2222-4333-8444-555555555555' }) });
+    const b = host({ name: 'surface', envelope: envelopeWith({ id: '66666666-7777-4888-9999-aaaaaaaaaaaa' }) });
     expect(hostKey(a)).not.toBe(hostKey(b));
   });
 
@@ -284,6 +285,15 @@ describe('host identity (issue #27)', () => {
   it('rejects a present-but-invalid identity rather than falling back to hostname correlation', () => {
     expect(() => envelopeWith({ id: 42 })).toThrow(/host\.id/);
     expect(() => envelopeWith({ id: '' })).toThrow(/host\.id/);
+    // A non-empty string is not enough. Two machines both reporting "x" would
+    // merge into one endpoint whose topology flickers between them — worse
+    // than no id at all — so the documented format is what is accepted.
+    expect(() => envelopeWith({ id: 'x' })).toThrow(/UUIDv4/);
+    expect(() => envelopeWith({ id: 'not-a-uuid-at-all' })).toThrow(/UUIDv4/);
+    expect(() => envelopeWith({ id: '3f9a1c2e-7b4d-1a61-9c8f-2e5b7d1a4c60' })).toThrow(/UUIDv4/);   // v1, not v4
+    // Case is not identity: the same id in two cases is one machine.
+    expect(envelopeWith({ id: '3F9A1C2E-7B4D-4A61-9C8F-2E5B7D1A4C60' }).host.id)
+      .toBe('3f9a1c2e-7b4d-4a61-9c8f-2e5b7d1a4c60');
     expect(() => parseEnvelope({
       schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
       host: { name: 'mini', os: 'macos', arch: 'arm64' },
@@ -293,9 +303,26 @@ describe('host identity (issue #27)', () => {
     })).toThrow(/unitKey/);
   });
 
+  it('a unitKey must be the documented 16 hex characters, not any string', () => {
+    const withUnitKey = (unitKey: unknown) => parseEnvelope({
+      schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+      host: { name: 'mini', os: 'macos', arch: 'arm64' },
+      power: { source: 'mains', externalConnected: true, batteryPresent: false },
+      nodes: [{ id: 'host', kind: 'host', name: 'mini', protocol: 'power' },
+              { id: 'usb:1', parentId: 'host', kind: 'device', name: 'Mouse', protocol: 'usb2', unitKey }],
+    });
+
+    expect(() => withUnitKey('x')).toThrow(/16 hex/);
+    expect(() => withUnitKey('a1b2c3d4e5f6071')).toThrow(/16 hex/);    // 15
+    expect(() => withUnitKey('a1b2c3d4e5f60718a')).toThrow(/16 hex/);  // 17
+    // A raw serial is exactly what this field exists to keep off the wire.
+    expect(() => withUnitKey('MX-VERT-0001')).toThrow(/16 hex/);
+    expect(withUnitKey('A1B2C3D4E5F60718').nodes[1].unitKey).toBe('a1b2c3d4e5f60718');
+  });
+
   it('parses host.id and node unitKey without requiring either', () => {
-    const env = envelopeWith({ id: 'abc-123' });
-    expect(env.host.id).toBe('abc-123');
+    const env = envelopeWith({ id: '3f9a1c2e-7b4d-4a61-9c8f-2e5b7d1a4c60' });
+    expect(env.host.id).toBe('3f9a1c2e-7b4d-4a61-9c8f-2e5b7d1a4c60');
     expect(envelopeWith({}).host.id).toBeUndefined();
   });
 });
@@ -309,8 +336,8 @@ describe('identity drives selection and file merging (review of #62)', () => {
   });
 
   it('two same-name machines stay two entries and are separately selectable', () => {
-    const a = host({ name: 'surface', envelope: envOf('surface', 'id-a') });
-    const b = host({ name: 'surface', envelope: envOf('surface', 'id-b') });
+    const a = host({ name: 'surface', envelope: envOf('surface', '0a1b2c3d-4e5f-4061-8273-8495a6b7c8d9') });
+    const b = host({ name: 'surface', envelope: envOf('surface', '9d8c7b6a-5e4f-4132-b021-3f4e5d6c7b8a') });
     const keys = new Set([hostKey(a), hostKey(b)]);
     expect(keys.size).toBe(2);
     // Selection by key finds exactly one of them.
@@ -318,12 +345,97 @@ describe('identity drives selection and file merging (review of #62)', () => {
     expect(hosts.filter((h) => hostKey(h) === hostKey(b))).toHaveLength(1);
   });
 
+  it('the picker\'s value is always one of its own options', () => {
+    const a = host({ name: 'surface', envelope: envOf('surface', '0a1b2c3d-4e5f-4061-8273-8495a6b7c8d9') });
+    const b = host({ name: 'surface', envelope: envOf('surface', '9d8c7b6a-5e4f-4132-b021-3f4e5d6c7b8a') });
+
+    for (const active of [a, b]) {
+      const { value, options } = hostOptions([a, b], active);
+      // A controlled select whose value matches no option shows whichever one
+      // the browser prefers — silently, and only when two hosts share a name.
+      expect(options.map((o) => o.value)).toContain(value);
+      expect(value).toBe(hostKey(active));
+    }
+
+    // And a reader can still tell them apart, which the key alone does not do.
+    expect(new Set(hostOptions([a, b], a).options.map((o) => o.label)).size).toBe(2);
+    expect(hostOptions([a], a).options[0].label).toBe('surface');   // no noise when unambiguous
+  });
+
   it('a machine that gains an id keeps the events already loaded under its name', () => {
     // This is the file-import path: events.jsonl first, envelope second.
     const eventsOnly = host({ name: 'mini', events: [{ t: '2026-08-17T00:00:00Z', kind: 'linkDown' }] });
     expect(hostKey(eventsOnly)).toBe('name:mini');
-    const identified = { ...eventsOnly, envelope: envOf('mini', 'id-mini') };
-    expect(hostKey(identified)).toBe('id-mini');
+    const identified = { ...eventsOnly, envelope: envOf('mini', 'c1d2e3f4-a5b6-4c78-9d0e-1f2a3b4c5d6e') };
+    expect(hostKey(identified)).toBe('c1d2e3f4-a5b6-4c78-9d0e-1f2a3b4c5d6e');
     expect(identified.events).toHaveLength(1);   // the history came along
+  });
+});
+
+describe('loadFiles attributes a bare event stream to the right machine (review of #62)', () => {
+  const ID = 'c1d2e3f4-a5b6-4c78-9d0e-1f2a3b4c5d6e';
+  const contract = (name: string, id?: string) => JSON.stringify({
+    schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+    host: { name, os: 'macos', arch: 'arm64', ...(id ? { id } : {}) },
+    power: { source: 'mains', externalConnected: true, batteryPresent: false },
+    nodes: [{ id: 'host', kind: 'host', name, protocol: 'power' }],
+  });
+  const stream = '{"t":"2026-08-17T00:00:00Z","kind":"linkDown"}\n';
+  const file = (name: string, body: string) => new File([body], name, { type: 'application/json' });
+
+  // The criterion that discriminates: the same two files in either order must
+  // produce the same store. Dropping an envelope and its events together gives
+  // no guarantee about which the browser hands over first, and the old loader
+  // only worked one way round — envelope second. The other order split one
+  // machine into a topology entry and a history entry that never met.
+  it('gives the same result whichever file arrives first', async () => {
+    const envelopeFile = file('mini.contract.v1.json', contract('mini', ID));
+    const eventsFile = file('mini.events.jsonl', stream);
+
+    const eventsFirst = await loadFiles([eventsFile, envelopeFile], []);
+    const envelopeFirst = await loadFiles([envelopeFile, eventsFile], []);
+
+    for (const hosts of [eventsFirst, envelopeFirst]) {
+      expect(hosts).toHaveLength(1);
+      expect(hostKey(hosts[0])).toBe(ID);
+      expect(hosts[0].events).toHaveLength(1);
+      expect(hosts[0].envelope).toBeDefined();
+    }
+  });
+
+  it('adds events to a host already loaded and identified', async () => {
+    const loaded = await loadFiles([file('mini.contract.v1.json', contract('mini', ID))], []);
+    const merged = await loadFiles([file('mini.events.jsonl', stream)], loaded);
+
+    expect(merged).toHaveLength(1);           // not a second, events-only "mini"
+    expect(merged[0].events).toHaveLength(1);
+  });
+
+  it('refuses to guess when two machines share the name, and says why', async () => {
+    const two = await loadFiles([
+      file('surface.contract.v1.json', contract('surface', '0a1b2c3d-4e5f-4061-8273-8495a6b7c8d9')),
+      file('surface.contract.v1.json', contract('surface', '9d8c7b6a-5e4f-4132-b021-3f4e5d6c7b8a')),
+    ], []);
+    expect(two).toHaveLength(2);
+
+    const withEvents = await loadFiles([file('surface.events.jsonl', stream)], two);
+
+    // Attaching one machine's history to another is the mistake that makes a
+    // timeline lie, so the events stay unattributed — and visible.
+    expect(withEvents).toHaveLength(3);
+    expect(two.every((h) => h.events.length === 0)).toBe(true);
+    const orphan = withEvents.find((h) => !h.envelope)!;
+    expect(orphan.events).toHaveLength(1);
+    expect(orphan.historyReasons.join(' ')).toMatch(/2 hosts named "surface"/);
+  });
+
+  it('a stream loaded before any envelope is adopted by the envelope that follows', async () => {
+    const first = await loadFiles([file('mini.events.jsonl', stream)], []);
+    expect(hostKey(first[0])).toBe('name:mini');
+
+    const then = await loadFiles([file('mini.contract.v1.json', contract('mini', ID))], first);
+    expect(then).toHaveLength(1);
+    expect(hostKey(then[0])).toBe(ID);
+    expect(then[0].events).toHaveLength(1);
   });
 });

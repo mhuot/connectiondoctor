@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { emptyContact, hostContact, hostHistory, hostKey, type HostData } from './data/store';
+import { emptyContact, hostContact, hostHistory, hostKey, hostOptions, type HostData } from './data/store';
 import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
 import { TimelineView } from './components/TimelineView';
@@ -101,14 +101,9 @@ export function App() {
         </nav>
         <span className="spacer" />
         {hosts.length > 1 && (
-          <select value={active?.name} onChange={(e) => setActiveHost(e.target.value)}>
-            {hosts.map((h) => (
-              <option key={hostKey(h)} value={hostKey(h)}>
-                {/* Same-name hosts are still distinguishable to a reader. */}
-                {hosts.filter((other) => other.name === h.name).length > 1
-                  ? `${h.name} (${hostKey(h).slice(0, 8)})`
-                  : h.name}
-              </option>
+          <select {...hostOptions(hosts, active)} onChange={(e) => setActiveHost(e.target.value)}>
+            {hostOptions(hosts, active).options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
             ))}
           </select>
         )}
