@@ -23,6 +23,25 @@
 - **WHEN** `tbdoctor install` returns 0
 - **THEN** a heartbeat newer than the install time exists — registration alone is not success
 
+### Requirement: Install composes the interfaces
+`install` and `uninstall` SHALL accept `--recorder`, `--dashboard`, `--mcp`, `--cli` and `--all`, acting on exactly the components named; bare `install` SHALL install the recorder and the dashboard, and bare `uninstall` SHALL remove every component this tool installed. `uninstall` SHALL NOT delete recorded history or a saved baseline. `status` SHALL report each component's state separately.
+
+#### Scenario: A headless recorder
+- **WHEN** `install --recorder` runs on a machine with no display session
+- **THEN** collection starts at login, nothing serves the dashboard, and `status` says recorder installed, dashboard not installed
+
+#### Scenario: An agent-only machine
+- **WHEN** `install --mcp` runs where an agent config exists
+- **THEN** the MCP server is registered as `connectiondoctor`, no resident process is installed, and `status` reflects both
+
+#### Scenario: No agent to register with
+- **WHEN** `install --mcp` runs where no agent config can be found or written
+- **THEN** the exact registration line is printed for the user to paste, and the command reports that nothing was installed rather than reporting success
+
+#### Scenario: Uninstalling one door
+- **WHEN** `uninstall --dashboard` runs on a machine with both installed
+- **THEN** the dashboard stops being served at login, the recorder keeps recording, and recorded history and any baseline are untouched
+
 ### Requirement: macOS gains baseline and diff
 `tbdoctor baseline save [path]` SHALL write a v1 envelope and `tbdoctor diff [baseline]` SHALL compare the current envelope against it by cross-platform identity (vidPid + parent), reporting findings, missing and added nodes.
 

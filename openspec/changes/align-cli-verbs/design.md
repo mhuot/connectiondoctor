@@ -6,6 +6,37 @@
 `--flag` → verb (printing "`--probe` is now `probe`" once on stderr). `--inspect`
 is removed (retired in `docs/cli.md`); running it prints the replacement.
 
+## Composable install
+The doors are already independent in the code — the recorder is a loop, the
+dashboard is an HTTP listener, MCP is a stdio server, the CLI is the binary —
+so the only thing missing is letting a person choose. Four components:
+
+| Component | Installing it means | Uninstalling it |
+|---|---|---|
+| `--recorder` | The collector runs at login (Run key / `SMAppService`), so history exists | Stop recording at login; recorded history is left alone — it is evidence, not configuration |
+| `--dashboard` | The resident process serves the dashboard for the whole session | Stop serving; `serve` still works on demand |
+| `--mcp` | Registers this binary with a detected agent (Claude Code today) as `connectiondoctor` | Removes that registration only |
+| `--cli` | A `connectiondoctor` symlink on PATH (`/usr/local/bin`, or the Homebrew prefix) | Removes the symlink |
+
+Someone genuinely wants each alone: a headless Mac mini that only records; a
+laptop where the URL should always be there; an agent on a machine whose owner
+does not want a resident process at all; a scripted check on a build box.
+
+Defaults and honesty:
+- bare `install` = `--recorder --dashboard` — what it does today — and it
+  prints the components it installed. `--all` adds `--mcp --cli`.
+- `--mcp` writes to *someone else's file* (an agent's config). It is never
+  implied by `--all` where no agent config is found, and when it cannot write
+  it prints the exact line to paste rather than failing.
+- Installing nothing (`install --mcp` with no agent present) is reported as
+  such, not as success.
+- `uninstall` with no flags removes everything this tool installed, and never
+  deletes recorded history or a baseline — those outlive the installation.
+- `status` reports per component: recorder (heartbeat), dashboard (the port
+  answering with our `Server:` header), MCP (registration present), CLI
+  (symlink present and pointing at this build), so "the dashboard is up but
+  nothing is recording" is visible rather than inferred.
+
 ## Heartbeat, lock and `install` on macOS (issue #18)
 macOS has no heartbeat today; Windows does (`BackgroundCollector.WriteHeartbeat`,
 `ReadStatus`). macOS adopts the same contract, now written down in
