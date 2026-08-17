@@ -55,7 +55,7 @@ enum Analysis {
             // recorder has never run here (no analysis at all — absent ≠ empty),
             // or it ran and stopped before the window (say so, with the time of
             // the last evidence, so a consumer shows "unknown", not "healthy").
-            guard let lastRecorded = sampleStore.load(Sample.self) { $0.t }.last?.t else { return nil }
+            guard let lastRecorded = sampleStore.load(Sample.self, dateKey: { $0.t }).last?.t else { return nil }
             return Result(findings: [], incidents: [], windowHours: windowHours, generatedAt: now,
                           availableFrom: lastRecorded, through: lastRecorded,
                           complete: false, reasons: ["recorder-stopped-before-window"])

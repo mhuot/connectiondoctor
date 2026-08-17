@@ -108,7 +108,7 @@ enum Diagram {
         let frames = Dictionary(layout.nodes.map { ($0.id, $0.frame) }, uniquingKeysWith: { first, _ in first })
         var extra: [DiagramEdge] = []
         var rightmost = layout.size.width
-        var lowest = layout.size.height
+        let lowest = layout.size.height
 
         for placed in layout.nodes
         where placed.node.carriesDisplay && placed.node.linkProtocol != .displayPort {

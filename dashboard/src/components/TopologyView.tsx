@@ -1,27 +1,9 @@
 import { useMemo, useState } from 'react';
-import type { ContractEnvelope, LinkProtocol, NodeKind } from '../contract/types';
+import type { ContractEnvelope } from '../contract/types';
 import { buildTopology, builtInChip, modeChip, type TopoMode, type ViewNode } from '../domain/topology';
 import { layoutDiagram, NODE_H, type DiagramStyle } from '../domain/layout';
 import { Inspector } from './Inspector';
-
-export const PROTOCOL_COLOR: Record<LinkProtocol, string> = {
-  power: '#e5c04b',
-  thunderbolt: '#b07cf0',
-  displayPort: '#f06292',
-  usb3: '#5a9cf8',
-  usb2: '#4cc2c4',
-  usbLow: '#8b8f98',
-  unknown: '#6f7078',
-};
-
-export const KIND_COLOR: Record<NodeKind, string> = {
-  power: '#e5c04b',
-  host: '#5a9cf8',
-  thunderbolt: '#b07cf0',
-  hub: '#f0913c',
-  device: '#4cc2c4',
-  display: '#f06292',
-};
+import { KIND_COLOR, PROTOCOL_COLOR } from '../domain/palette';
 
 const LEGEND: Array<[string, string]> = [
   ['power source', KIND_COLOR.power],
