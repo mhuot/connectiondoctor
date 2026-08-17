@@ -4,4 +4,4 @@
 - [x] 1.3 `docs/mcp.md` — server name, tool table, principles, `tb_*` compatibility table
 - [x] 1.4 `docs/mcp-tools.json` — names, descriptions (from `MCPServer.swift`), input schemas for the five tools
 - [x] 1.5 README front door links the three interface docs next to schema/embedding
-- [ ] 1.6 Review by a second reader (Copilot agent) — comments resolved or recorded as follow-ups in this change's `design.md`
+- [x] 1.6 Review by a second reader (Copilot agent) — comments resolved or recorded as follow-ups in this change's `design.md`

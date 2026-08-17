@@ -42,3 +42,21 @@ Windows `diff` already returns 2; generalised.
 ## Data directory
 `CONNECTIONDOCTOR_DIR` overrides on both. macOS keeps `TBDOCTOR_DIR` as an
 alias because fixtures and the MCP registration line in the README use it.
+
+## Second-reader review
+
+The 2026-08-16 code-and-proposal review accepted the interface direction and
+recorded implementation or specification gaps as follow-ups:
+
+- [#18](https://github.com/mhuot/connectiondoctor/issues/18) defines the macOS
+  install, heartbeat, status, and collector-lock lifecycle before CLI alignment.
+- [#19](https://github.com/mhuot/connectiondoctor/issues/19) assigns version
+  ownership once and sequences Windows MCP diff after contract conformance.
+- [#20](https://github.com/mhuot/connectiondoctor/issues/20) makes the CLI and
+  MCP wrapper document shapes normative and testable.
+- [#21](https://github.com/mhuot/connectiondoctor/issues/21) gives port reuse a
+  product identity check instead of accepting any HTTP success on port 8787.
+- [#22](https://github.com/mhuot/connectiondoctor/issues/22) prevents dashboard
+  version injection failures from being ignored by release builds.
+- [#23](https://github.com/mhuot/connectiondoctor/issues/23) reconciles the
+  documented macOS release architecture with the implemented build.
