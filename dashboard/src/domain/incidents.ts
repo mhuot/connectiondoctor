@@ -53,6 +53,19 @@ export function stitchIncidents(
     return currentSnapshot;
   };
 
+  // The latest moment this data can vouch for. An episode that never ended
+  // has to be measured against *something*, and it must not be the clock:
+  // reading a file from last month would otherwise report a month-long
+  // deficit. The last ordered evidence — a snapshot, an event, or the
+  // envelope's own capture time — is the honest ceiling, and it is the same
+  // answer whenever this file is read.
+  const evidenceThrough = Math.max(
+    ...[
+      ...ordered.map((e) => Date.parse(e.t)),
+      ...(currentSnapshot ? [Date.parse(currentSnapshot.capturedAt)] : []),
+    ].filter((t) => Number.isFinite(t)),
+  );
+
   const sorted = ordered.filter((e) => e.kind !== 'fullSnapshot');
   if (sorted.length === 0) return [];
 
@@ -93,7 +106,7 @@ export function stitchIncidents(
     // a desk being used, and reporting it is the false alarm that teaches
     // people to ignore the timeline. (The controls in docs/fixtures hold this
     // line from both sides: a five-second dip is silent, two minutes is not.)
-    .filter((g) => g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)) || sustainedDeficit(g))
+    .filter((g) => g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)) || sustainedDeficit(g, evidenceThrough))
     .map((group) => {
       const lost = group
         .filter((e) => e.kind === 'deviceRemoved')
@@ -118,9 +131,14 @@ export function stitchIncidents(
 }
 
 /** True when this run contains a deficit that lasted long enough to matter.
- *  An episode still open at the end of the run counts from its start to the
- *  last event we have: an unfinished deficit is not a reason to stay quiet. */
-function sustainedDeficit(group: ContractEvent[]): boolean {
+ *  An episode still open counts from its start to `evidenceThrough` — the
+ *  latest moment the data vouches for — not to the last event in the group.
+ *  A machine that is *still* short of power usually says so once and then
+ *  goes quiet: `deficitStart`, then nothing but snapshots and heartbeats for
+ *  hours. Measuring to the group's last event makes that episode zero
+ *  seconds long, so the longer the fault runs unresolved the more certain the
+ *  silence — the exact failure the sustained rule exists to prevent. */
+function sustainedDeficit(group: ContractEvent[], evidenceThrough: number): boolean {
   let start: number | undefined;
   for (const event of group) {
     if (event.kind === 'deficitStart') start ??= Date.parse(event.t);
@@ -130,7 +148,7 @@ function sustainedDeficit(group: ContractEvent[]): boolean {
     }
   }
   if (start === undefined) return false;
-  return Date.parse(group[group.length - 1].t) - start >= SUSTAINED_DEFICIT_MS;
+  return evidenceThrough - start >= SUSTAINED_DEFICIT_MS;
 }
 
 /** Deepest common ancestor of the removed nodes in the pre-incident tree —

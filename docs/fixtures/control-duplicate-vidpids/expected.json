@@ -8,5 +8,5 @@
       "sharedParent": null
     }
   ],
-  "notes": "Two identical mice on one desk, distinguished in the topology by different unitKeys (the event stream carries node ids, not unit keys, so this case exercises the envelope's disambiguation). One was unplugged and the other plugged in; matching by VID:PID alone would call that one device moving. No finding either way."
+  "notes": "Two identical mice on one desk, separate node ids and separate unitKeys. One was unplugged and the other plugged in; matching by VID:PID alone would call that one device moving. What is executed today is the duplicate VID:PID / distinct node id case \u2014 stitching correlates on node id and no consumer reads unitKey yet, so this is not a unitKey disambiguation test until #27/#62 land the consumer side (see README). No finding either way."
 }

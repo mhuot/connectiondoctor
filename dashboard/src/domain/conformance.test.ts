@@ -144,6 +144,32 @@ describe('conformance corpus', () => {
     expect(stitchIncidents(sustained.events.events, sustained.envelope).length).toBe(1);
   });
 
+  // The case that is *not* in the corpus as a file, because it is about what
+  // is absent: a deficit that started and never ended. A machine still short
+  // of power says so once and then goes quiet, so the stream is a start
+  // followed by nothing but snapshots — and measuring the episode to the last
+  // ordinary event makes it zero seconds long. The longer the fault runs
+  // unresolved, the more certain the silence would be.
+  it('a deficit that never ended is measured against the latest evidence, not the last event', () => {
+    const { envelope } = load('fault-power-deficit');
+    const at = (minutes: number) => new Date(Date.UTC(2026, 6, 4, 9, minutes)).toISOString();
+    const snapshotEvent = { t: at(20), kind: 'fullSnapshot' as const, snapshot: envelope };
+
+    // Start, then only a snapshot: still open, and it has been open 20 minutes.
+    expect(stitchIncidents([{ t: at(0), kind: 'deficitStart' }, snapshotEvent], envelope).length).toBe(1);
+
+    // The envelope's own capture time is evidence too, so a lone start with a
+    // later envelope raises just the same — that is the live case, where the
+    // deficit is happening right now and the stream holds one event.
+    expect(stitchIncidents([{ t: at(0), kind: 'deficitStart' }], { ...envelope, capturedAt: at(20) }).length).toBe(1);
+
+    // The ceiling is the data's own last moment and never the clock: an
+    // envelope captured at the same instant the deficit began vouches for
+    // nothing after it, so reading this file next year gives today's answer.
+    expect(stitchIncidents([{ t: at(0), kind: 'deficitStart' }], { ...envelope, capturedAt: at(0) })).toEqual([]);
+    expect(stitchIncidents([{ t: at(0), kind: 'deficitStart' }])).toEqual([]);
+  });
+
   it('an incomplete window is never reported as health', () => {
     const { envelope, expected } = load('control-incomplete-history');
     expect(envelope.analysis?.coverage.complete).toBe(false);
