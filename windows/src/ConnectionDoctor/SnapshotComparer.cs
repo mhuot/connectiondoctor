@@ -9,8 +9,9 @@ internal static class SnapshotComparer
         var missing = Difference(baselineDevices, currentDevices);
         var added = Difference(currentDevices, baselineDevices);
         var findings = new List<Finding>();
+        var explained = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        findings.AddRange(MonitorHubFindings(baseline, currentDevices, missing));
+        findings.AddRange(MonitorHubFindings(baseline, currentDevices, missing, explained));
 
         var missingInputDevices = missing.Where(IsInputDevice).ToList();
         if (missingInputDevices.Count >= 2)
@@ -24,16 +25,23 @@ internal static class SnapshotComparer
                     .Select(device => $"Missing: {device.FriendlyName} [{device.VidPid ?? device.ClassName}]")
                     .Take(8)
                     .ToList()));
+            foreach (var device in missingInputDevices)
+            {
+                explained.Add(device.InstanceId);
+            }
         }
 
+        // Power findings describe the supply, not any missing device: they are
+        // deliberately not added to `explained`.
         findings.AddRange(PowerDiagnosis.Analyze(current.Power));
-        return new ComparisonReport(missing, added, findings);
+        return new ComparisonReport(missing, added, findings, explained);
     }
 
     private static IEnumerable<Finding> MonitorHubFindings(
         ConnectionSnapshot baseline,
         IReadOnlyList<DeviceNode> currentDevices,
-        IReadOnlyList<DeviceNode> missing)
+        IReadOnlyList<DeviceNode> missing,
+        HashSet<string> explained)
     {
         var currentStableIds = currentDevices.Select(device => device.StableId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var monitorSurvived = baseline.Devices.Any(device =>
@@ -74,6 +82,12 @@ internal static class SnapshotComparer
                 .Select(device => $"Stranded behind it: {device.FriendlyName} [{device.VidPid ?? device.ClassName}]")
                 .Distinct()
                 .Take(6));
+            explained.Add(hub.InstanceId);
+            foreach (var stranded in strandedInputs)
+            {
+                explained.Add(stranded.InstanceId);
+            }
+
             yield return new Finding(
                 "critical",
                 "Display is active but a baseline USB hub branch is missing",

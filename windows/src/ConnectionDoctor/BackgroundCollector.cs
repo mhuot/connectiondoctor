@@ -140,7 +140,17 @@ internal static class BackgroundCollector
     public static IncrementalEventRead ReadEntriesWithIntegrity()
     {
         var cursor = new EventLogCursor();
-        return ReadEntriesIncremental(EventsPath, cursor);
+        try
+        {
+            return ReadEntriesIncremental(EventsPath, cursor);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The log exists but cannot be read: unknown evidence, never an
+            // exception out of a request handler and never "nothing recorded".
+            RecordError(exception);
+            return new IncrementalEventRead([], false, SkippedLines: 1);
+        }
     }
 
     public static IncrementalEventRead ReadEntriesIncremental(string path, EventLogCursor cursor)
@@ -196,6 +206,12 @@ internal static class BackgroundCollector
                 {
                     entries.Add(entry);
                     cursor.ParsedLineCount++;
+                }
+                else
+                {
+                    // A line that parses to null (literal `null`) yielded no
+                    // entry: corrupt evidence, not an absent one.
+                    skipped++;
                 }
             }
             catch (JsonException exception)
@@ -406,12 +422,9 @@ internal static class BackgroundCollector
         {
             return JsonSerializer.Deserialize<CollectorHeartbeat>(File.ReadAllText(HeartbeatPath), JsonOptions);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
-            return null;
-        }
-        catch (IOException)
-        {
+            // Exists but unreadable — the caller distinguishes this from absent.
             return null;
         }
     }
@@ -425,12 +438,30 @@ internal static class BackgroundCollector
         }
     }
 
+    /// <summary>
+    /// Best effort, and never throwing: this is called from evidence readers
+    /// serving live requests, and a full or unwritable data directory must not
+    /// turn a fail-closed read into a crashed request.
+    /// </summary>
     private static void RecordError(Exception exception)
     {
-        Directory.CreateDirectory(DataDirectory);
         var entry = $"{DateTimeOffset.Now:O} {exception.GetType().Name}: {exception.Message}{Environment.NewLine}";
-        File.AppendAllText(ErrorPath, entry);
-        Console.Error.Write(entry);
+        try
+        {
+            Directory.CreateDirectory(DataDirectory);
+            File.AppendAllText(ErrorPath, entry);
+        }
+        catch (Exception logFailure) when (logFailure is IOException or UnauthorizedAccessException)
+        {
+        }
+
+        try
+        {
+            Console.Error.Write(entry);
+        }
+        catch (IOException)
+        {
+        }
     }
 
     private static bool IsProcessRunning(int processId)

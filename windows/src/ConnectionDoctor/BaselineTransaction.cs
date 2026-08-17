@@ -14,6 +14,28 @@ namespace ConnectionDoctor;
 internal static class BaselineTransaction
 {
     private const string MutexName = @"Local\ConnectionDoctor.Baseline";
+
+    /// <summary>Put the previous baseline back (or remove a first capture) after a failed commit.</summary>
+    private static bool Restore(ConnectionSnapshot? previous, string path)
+    {
+        try
+        {
+            if (previous is null)
+            {
+                File.Delete(path);
+            }
+            else
+            {
+                SnapshotStore.SaveAtomic(previous, path);
+            }
+
+            return true;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
     private static readonly TimeSpan LockTimeout = TimeSpan.FromSeconds(5);
 
     internal enum Outcome
@@ -135,6 +157,10 @@ internal static class BaselineTransaction
                 }
             }
 
+            // Keep the history as it was, so a failed commit can put the pair
+            // back exactly as it was found.
+            var previousHistory = BaselineStateFile.Read();
+
             var snapshot = capture();
             try
             {
@@ -147,12 +173,22 @@ internal static class BaselineTransaction
 
             // The fault/recovery history described the baseline we just
             // discarded; every writer resets it, not just the HTTP one. If the
-            // reset cannot be written, the replacement is a failure: keeping
-            // the old history against a new baseline would report a recovery
-            // from a fault that no longer has any meaning.
-            if (!BaselineStateFile.Write(new BaselineStateFile()))
+            // reset cannot be written, the pair would be inconsistent — a new
+            // baseline carrying the old baseline's fault. Roll the baseline
+            // back so the caller's next attempt sees the state it expects
+            // (and its old ETag still matches).
+            // The history names the baseline it belongs to, so a crash between
+            // these two writes leaves a recognisably stale pair rather than a
+            // silently mismatched one (the reader discards it).
+            if (!BaselineStateFile.Write(new BaselineStateFile(BaselineCapturedAt: snapshot.CapturedAt)))
             {
-                return new Result(Outcome.WriteFailed, Detail: "baseline saved but its fault history could not be reset");
+                var baselineRestored = Restore(existing, path);
+                var historyRestored = previousHistory is null || BaselineStateFile.Write(previousHistory);
+                return new Result(Outcome.WriteFailed, Detail: baselineRestored && historyRestored
+                    ? "the baseline's fault history could not be reset; nothing was changed"
+                    : $"the baseline's fault history could not be reset, and the previous state could not be fully restored " +
+                      $"(baseline {(baselineRestored ? "restored" : "MAY HAVE CHANGED")}, " +
+                      $"history {(historyRestored ? "restored" : "MAY HAVE CHANGED")}) — check `connectiondoctor diff` before relying on it");
             }
 
             var nodes = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Count;
