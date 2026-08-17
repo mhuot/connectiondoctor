@@ -6,3 +6,4 @@
 - [x] 1.5 `connection_diagram` present; returns `isError` + note until the dashboard export exists (see design)
 - [~] 1.6 Tests: protocol round trip over in-memory streams, embedded-json parity, document serialization over synthetic snapshots (McpServerTests.cs); golden files over the shared fixtures follow when contract-conformance adds docs/fixtures/
 - [x] 1.7 README + `docs/mcp.md` status flip; `claude mcp add` line
+- [x] 1.8 Hardening from review (#48): -32700/-32600 answered and served through; explicit `id: null` answered; bad-typed method survives; protocol version negotiated from a supported list; `sharedParent` only on resolvable common ancestry (pre-incident snapshot); `incidents[].power.peakDischargeMilliwatts`; diagnose `note` never success-shaped
