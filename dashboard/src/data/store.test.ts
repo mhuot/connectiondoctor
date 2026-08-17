@@ -224,3 +224,28 @@ describe('baseline availability is separate from history coverage (review of #57
     expect(withCapabilities({})).not.toThrow();
   });
 });
+
+describe('coverage reason vocabulary is extensible (review of #58)', () => {
+  it('an unrecognised reason keeps the host incomplete and is shown, not rejected', () => {
+    const env = parseEnvelope({
+      schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+      host: { name: 'surface', os: 'windows', arch: 'arm64' },
+      power: { source: 'dock', externalConnected: true, batteryPresent: true },
+      nodes: [{ id: 'host', kind: 'host', name: 'surface', protocol: 'power' }],
+      analysis: {
+        windowHours: 6, generatedAt: '2026-08-17T00:00:00Z',
+        coverage: {
+          availableFrom: '2026-08-16T18:00:00Z', through: '2026-08-17T00:00:00Z', complete: false,
+          reasons: ['solar-flare', 'corrupt-lines'],
+        },
+      },
+      findings: [],
+    });
+    expect(env.analysis?.coverage.reasons).toEqual(['solar-flare', 'corrupt-lines']);
+
+    const h = host({ envelope: env, contact: { ...emptyContact(), contractAt: 'x', eventsAt: 'x' } });
+    const state = hostHistory(h);
+    expect(state.state).toBe('incomplete');
+    expect(state.reasons).toEqual(expect.arrayContaining(['solar-flare', 'corrupt-lines']));
+  });
+});
