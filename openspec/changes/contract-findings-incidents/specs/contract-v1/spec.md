@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Envelope carries findings and incidents
-Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}, baseline?: {state: "no-baseline"|"healthy"|"active-fault"|"recovered", capturedAt?, faultSince?, recoveredAt?}, capabilities?: {linkEvents: "kernel"|"notification"|"poll"|"unavailable"}}` in the v1 envelope when recorded history exists, and SHALL omit all three when it does not. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why, using temporal reasons only (`recorder-started-inside-window`, `trimmed`, `gap`, `no-history`) — attribution limits such as missing link events go in `capabilities`, never in coverage. This is additive within v1.
+Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}, baseline?: {state: "no-baseline"|"healthy"|"active-fault"|"recovered", capturedAt?, faultSince?, recoveredAt?}, capabilities?: {linkEvents: "kernel"|"notification"|"poll"|"unavailable", baseline?: "available"|"busy"|"unreadable"|"history-unreadable"|"history-unwritable"}}` in the v1 envelope whenever they have something to report — recorded history, a live finding, or a baseline that could not be evaluated — and SHALL omit all three only when there is none of those. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why, using temporal reasons only (`recorder-started-inside-window`, `trimmed`, `gap`, `no-history`) — attribution limits such as missing link events go in `capabilities`, never in coverage. This is additive within v1.
 
 #### Scenario: Baseline state is explicit
 - **WHEN** no baseline has been captured
@@ -15,9 +15,13 @@ Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` 
 - **WHEN** `GET /contract` (or `probe --json`, or `connection_probe`) is served on a machine whose recorder has run
 - **THEN** the envelope contains `analysis` and the arrays (possibly empty), and the same content is returned by all three doors
 
-#### Scenario: Fresh machine
-- **WHEN** the recorder has never run
+#### Scenario: Fresh machine with nothing wrong
+- **WHEN** the recorder has never run, nothing is wrong live, and the baseline is readably absent
 - **THEN** `findings`, `incidents` and `analysis` are absent — not empty — so a consumer can tell "nothing found" from "nothing recorded"
+
+#### Scenario: Fresh machine with a live fault
+- **WHEN** the recorder has never run but the machine is in a power deficit now, or its baseline could not be evaluated
+- **THEN** `analysis` is present with `coverage.reasons` containing `no-history`, and the live findings and baseline availability are reported — "no history" must never swallow the present
 
 ### Requirement: Finding shape
 `Finding.severity` SHALL be one of `info | warning | critical` (string); `evidence` SHALL be a non-empty string array; `title`, `explanation`, `recommendation` strings; `confidence` optional string.
