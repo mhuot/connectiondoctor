@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Envelope carries findings and incidents
-Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}}` in the v1 envelope when recorded history exists, and SHALL omit all three when it does not. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why. This is additive within v1.
+Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}, baseline?: {state: "no-baseline"|"healthy"|"active-fault"|"recovered", capturedAt?, faultSince?, recoveredAt?}, capabilities?: {linkEvents: "kernel"|"notification"|"poll"|"unavailable"}}` in the v1 envelope when recorded history exists, and SHALL omit all three when it does not. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why, using temporal reasons only (`recorder-started-inside-window`, `trimmed`, `gap`, `no-history`) — attribution limits such as missing link events go in `capabilities`, never in coverage. This is additive within v1.
 
 #### Scenario: Baseline state is explicit
 - **WHEN** no baseline has been captured

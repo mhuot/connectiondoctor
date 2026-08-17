@@ -23,8 +23,9 @@ USBHUB3/USBXHCI/UCX carry port reset, connect/disconnect and error events with
 port and device context — the root event when a hub resets. Consuming ETW
 needs a real-time session (`TraceEventSession`, admin for some providers) —
 so phase 2 is opt-in and degrades honestly: without the session, `linkDown`
-is still absent on Windows and the report says so, rather than being faked
-from device loss.
+is still absent on Windows and `analysis.capabilities.linkEvents` says
+`unavailable` (not a coverage reason — coverage is temporal), rather than
+being faked from device loss.
 
 ## Ambiguity stays ambiguous
 A `deviceRemoved` burst with no kernel event remains an unattributed incident

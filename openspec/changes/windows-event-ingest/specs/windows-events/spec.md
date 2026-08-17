@@ -15,8 +15,8 @@ Notification-derived and poll-derived events for the same node and kind within o
 - **THEN** exactly one `deviceRemoved` exists for that node in that interval
 
 ### Requirement: Root events only on evidence
-The collector SHALL emit `linkDown`, `linkUp` and `portError` with `source: "kernel"` only when an ETW provider event supports them, and SHALL leave device loss unattributed otherwise; when no ETW session is available it SHALL say so in `analysis.coverage.reasons` rather than deriving link events from device loss.
+The collector SHALL emit `linkDown`, `linkUp` and `portError` with `source: "kernel"` only when an ETW provider event supports them, and SHALL leave device loss unattributed otherwise; when no ETW session is available it SHALL say so in `analysis.capabilities.linkEvents: "unavailable"` — a separate axis from temporal coverage, so a gap-free history stays `complete` — rather than deriving link events from device loss.
 
 #### Scenario: No ETW session
 - **WHEN** the collector runs without the opt-in ETW session
-- **THEN** incidents have no `rootEvent`, and the report notes `link-events-unavailable`
+- **THEN** incidents have no `rootEvent`, `analysis.capabilities.linkEvents` is `unavailable`, and `coverage.complete` is unaffected — the report can still say "no device findings" while noting that link events were not observable
