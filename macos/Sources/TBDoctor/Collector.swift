@@ -74,6 +74,18 @@ final class Store {
         let lines = text.split(separator: "\n")
         let kept = lines.suffix(lines.count / 2).joined(separator: "\n") + "\n"
         try? kept.write(to: url, atomically: true, encoding: .utf8)
+        // Remember that history was cut here, so coverage can say `trimmed`
+        // instead of the window silently looking short (issue #47).
+        try? ISO8601DateFormatter().string(from: Date()).write(to: Store.trimMarker(for: url), atomically: true, encoding: .utf8)
+    }
+
+    /// Sidecar recording when this store was last trimmed; nil if never.
+    static func trimMarker(for storeURL: URL) -> URL {
+        storeURL.deletingPathExtension().appendingPathExtension("trimmed-at")
+    }
+    var lastTrimmedAt: Date? {
+        guard let text = try? String(contentsOf: Store.trimMarker(for: url), encoding: .utf8) else { return nil }
+        return ISO8601DateFormatter().date(from: text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 }
 
@@ -259,11 +271,15 @@ final class Collector: ObservableObject {
             let peakMilliwatts = peakSample.map { Int(Double($0.amperageMilliAmps) * $0.voltage) }
 
             var lost: [LostDevice] = []
+            var preIncident: Sample?
             if let before = samples.last(where: { $0.t < first.t }), let during = window.min(by: { $0.usb.count < $1.usb.count }) {
+                preIncident = before
                 let after = Set(during.usb.map { $0.locationID })
                 lost = before.usb.filter { !after.contains($0.locationID) }
                     .map { LostDevice(name: $0.name, vidPid: $0.vidPid, locationID: $0.locationID) }
             }
+            let ancestor = lost.count > 1 ? Diagnosis.commonAncestor(lost.map(\.locationID)) : nil
+            let ancestorResolved = ancestor.map { a in preIncident?.usb.contains { $0.locationID == a } ?? false } ?? false
 
             return Incident(
                 start: first.t,
@@ -275,7 +291,8 @@ final class Collector: ObservableObject {
                 adapterAtStart: samples.last(where: { $0.t <= first.t })?.adapter,
                 devicesLost: lost.map(\.name),
                 lostDevices: lost,
-                sharedParentLocationID: lost.count > 1 ? Diagnosis.commonAncestor(lost.map(\.locationID)) : nil)
+                sharedParentLocationID: ancestor,
+                sharedParentResolved: ancestorResolved)
         }.reversed()
     }
 

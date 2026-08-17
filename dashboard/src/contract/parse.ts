@@ -59,18 +59,18 @@ export function parseEnvelope(json: unknown): ContractEnvelope {
     // absent — that is the "no recording" signal — but present-and-invalid
     // is an error, not silently dropped: a finding without evidence, or an
     // unknown severity, is a producer bug the reader should hear about.
-    findings: Array.isArray(doc.findings)
-      ? doc.findings.map((f, i) => {
+    findings: doc.findings === undefined
+      ? undefined
+      : asArray(doc.findings, 'findings').map((f, i) => {
           try {
             return parseFinding(f);
           } catch (cause) {
             throw new ContractError(`findings[${i}]: ${(cause as Error).message}`);
           }
-        })
-      : undefined,
-    incidents: Array.isArray(doc.incidents)
-      ? doc.incidents.map((inc, i) => parseIncident(inc, i))
-      : undefined,
+        }),
+    incidents: doc.incidents === undefined
+      ? undefined
+      : asArray(doc.incidents, 'incidents').map((inc, i) => parseIncident(inc, i)),
     analysis: doc.analysis === undefined ? undefined : parseAnalysis(doc.analysis),
   };
 }
@@ -90,7 +90,7 @@ export function parseIncident(json: unknown, index = 0): ContractIncident {
   return {
     start: asString(doc.start, `incidents[${index}].start`),
     end: optString(doc.end),
-    rootEvent: optString(doc.rootEvent) as ContractIncident['rootEvent'],
+    rootEvent: asOptionalEventKind(doc.rootEvent, `incidents[${index}].rootEvent`),
     devicesLost: lost,
     sharedParent: optString(doc.sharedParent),
     power,
@@ -103,16 +103,26 @@ export function parseAnalysis(json: unknown): ContractAnalysis {
   const baseline = doc.baseline && typeof doc.baseline === 'object'
     ? (doc.baseline as ContractAnalysis['baseline'])
     : undefined;
+  if (typeof coverage.complete !== 'boolean') {
+    // "false" would be truthy — the one field that must never be coerced.
+    throw new ContractError('analysis.coverage.complete must be a boolean');
+  }
+  if (typeof doc.windowHours !== 'number' || !Number.isFinite(doc.windowHours)) {
+    throw new ContractError('analysis.windowHours must be a number');
+  }
+  if (baseline && !['no-baseline', 'healthy', 'active-fault', 'recovered'].includes(String(baseline.state))) {
+    throw new ContractError(`analysis.baseline.state invalid: ${JSON.stringify(baseline.state)}`);
+  }
   return {
-    windowHours: typeof doc.windowHours === 'number' ? doc.windowHours : 0,
+    windowHours: doc.windowHours,
     generatedAt: asString(doc.generatedAt, 'analysis.generatedAt'),
     coverage: {
       availableFrom: asString(coverage.availableFrom, 'analysis.coverage.availableFrom'),
       through: asString(coverage.through, 'analysis.coverage.through'),
-      complete: Boolean(coverage.complete),
-      reasons: Array.isArray(coverage.reasons)
-        ? coverage.reasons.filter((r): r is string => typeof r === 'string')
-        : undefined,
+      complete: coverage.complete,
+      reasons: coverage.reasons === undefined
+        ? undefined
+        : asArray(coverage.reasons, 'analysis.coverage.reasons').map((r, i) => asString(r, `analysis.coverage.reasons[${i}]`)),
     },
     baseline,
     capabilities: doc.capabilities && typeof doc.capabilities === 'object'
@@ -221,7 +231,9 @@ export function parseFinding(json: unknown): ContractFinding {
     title: asString(doc.title, 'finding.title'),
     explanation: asString(doc.explanation, 'finding.explanation'),
     evidence,
-    recommendation: optString(doc.recommendation),
+    // A finding without a recommendation tells the reader what is wrong and
+    // leaves them there; the contract makes it required.
+    recommendation: asString(doc.recommendation, 'finding.recommendation'),
     confidence: optString(doc.confidence),
   };
 }
@@ -276,6 +288,11 @@ function asString(v: unknown, label: string): string {
 }
 function optString(v: unknown): string | undefined {
   return typeof v === 'string' && v !== '' ? v : undefined;
+}
+function asOptionalEventKind(v: unknown, label: string): ContractIncident['rootEvent'] {
+  if (v === undefined) return undefined;
+  if (typeof v !== 'string' || !EVENT_KINDS.has(v)) throw new ContractError(`${label} invalid: ${JSON.stringify(v)}`);
+  return v as ContractIncident['rootEvent'];
 }
 function optNumber(v: unknown): number | undefined {
   return typeof v === 'number' && Number.isFinite(v) ? v : undefined;

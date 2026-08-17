@@ -160,7 +160,8 @@ export interface ContractFinding {
   explanation: string;
   /** Mandatory and non-empty: a verdict you cannot audit is an opinion. */
   evidence: string[];
-  recommendation?: string;
+  /** Mandatory: a finding that leaves the reader without a next step is half a finding. */
+  recommendation: string;
   confidence?: string;
 }
 

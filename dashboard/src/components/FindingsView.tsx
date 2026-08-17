@@ -1,4 +1,5 @@
 import type { ContractAnalysis, ContractFinding } from '../contract/types';
+import type { HistoryState } from '../data/store';
 
 const SEVERITY_RANK = { critical: 0, warning: 1, info: 2 } as const;
 const CONFIDENCE_RANK: Record<string, number> = { 'very high': 0, high: 1, moderate: 2 };
@@ -6,7 +7,7 @@ const CONFIDENCE_RANK: Record<string, number> = { 'very high': 0, high: 1, moder
 /** Ranked findings with the evidence that produced them. Every finding shows
  *  its evidence without interaction — a verdict you cannot audit is an opinion.
  *  "None" is only claimed when the recording can vouch for the window. */
-export function FindingsView({ findings, analysis, hostName, eventCount = 0, lastEventAt }: {
+export function FindingsView({ findings, analysis, hostName, eventCount = 0, lastEventAt, history }: {
   findings?: ContractFinding[];
   analysis?: ContractAnalysis;
   hostName?: string;
@@ -14,6 +15,10 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
    *  told apart from an empty machine (issue #36). */
   eventCount?: number;
   lastEventAt?: string;
+  /** Per-host history quality (durable reasons, events-fetch state). When it
+   *  says incomplete, "no findings" is not a claim this panel may make even
+   *  if the producer's own coverage looked complete at the time. */
+  history?: { state: HistoryState; reasons: string[] };
 }) {
   if (!analysis) {
     // Absent analysis means the collector did not report any — which is
@@ -47,6 +52,8 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
 
   const cov = analysis.coverage;
   const window = `last ${analysis.windowHours} h · generated ${fmt(analysis.generatedAt)}`;
+  const historyOk = cov.complete && (history === undefined || history.state === 'complete');
+  const whyIncomplete = [...(cov.complete ? [] : (cov.reasons ?? ['unknown'])), ...(history?.reasons ?? [])];
 
   return (
     <div className="findings">
@@ -54,18 +61,21 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
         <strong>Findings</strong>
         <span className="recorded">{window}</span>
         <span className="spacer" />
-        <span className={`chip ${cov.complete ? 'ok' : 'warn'}`}>
-          {cov.complete ? 'window complete' : `history incomplete: ${(cov.reasons ?? ['unknown']).join(', ')}`}
+        <span className={`chip ${historyOk ? 'ok' : 'warn'}`} role="status" aria-live="polite">
+          {historyOk ? 'window complete' : `history incomplete: ${[...new Set(whyIncomplete)].join(', ')}`}
         </span>
         {analysis.baseline && (
           <span className={`chip ${baselineTone(analysis.baseline.state)}`}>baseline: {analysis.baseline.state}</span>
         )}
       </div>
 
-      {ranked.length === 0 && (
-        cov.complete
+      {findings === undefined && (
+        <p className="empty">This collector reported analysis but no <code>findings</code> field — findings are <b>not reported</b> for this host (unknown, not none), even though the window is {historyOk ? 'complete' : 'incomplete'}.</p>
+      )}
+      {findings !== undefined && ranked.length === 0 && (
+        historyOk
           ? <p className="empty">No findings in the last {analysis.windowHours} h — the recording covers the whole window.</p>
-          : <p className="empty">Unknown — history is incomplete ({(cov.reasons ?? []).join(', ') || 'no reason given'}), covering {fmt(cov.availableFrom)} → {fmt(cov.through)}. "No findings" cannot be claimed for this window.</p>
+          : <p className="empty">Unknown — history is incomplete ({[...new Set(whyIncomplete)].join(', ') || 'no reason given'}), covering {fmt(cov.availableFrom)} → {fmt(cov.through)}. "No findings" cannot be claimed for this window.</p>
       )}
 
       {ranked.map((f, i) => (
