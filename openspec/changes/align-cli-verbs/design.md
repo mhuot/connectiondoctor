@@ -22,27 +22,58 @@ Someone genuinely wants each alone: a headless Mac mini that only records; a
 laptop where the URL should always be there; an agent on a machine whose owner
 does not want a resident process at all; a scripted check on a build box.
 
-Exit status, because scripts cannot read prose:
-- `0` — every requested component was installed (or was already installed).
-- `1` — **nothing changed**: no requested component could be installed.
-  `install --mcp` on a machine with no writable agent config exits 1, having
-  printed the line to paste.
-- `4` — **partial**: some requested components installed and others did not.
-  `install --all` where the recorder, dashboard and CLI succeed but MCP finds
-  no agent exits 4, names which succeeded and which did not, and leaves the
-  successful ones installed. A script that wants all-or-nothing tests for 0; a
-  script that wants "did anything happen" tests for < 4.
-- `uninstall` uses the same codes for the same reasons.
+Exit status, because scripts cannot read prose. The code answers exactly one
+question — **is the desired state satisfied?** — and deliberately not "did
+anything change", because those two answers disagree in the ordinary case of
+running `install` twice:
+- `0` — every requested component is in the requested state, whether this run
+  put it there or found it already there.
+- `1` — **none** of them is. `install --mcp` on a machine with no writable
+  agent config exits 1, having printed the line to paste.
+- `4` — **partial**: some are, some are not. `install --all` where the
+  recorder, dashboard and CLI succeed but MCP finds no agent exits 4, names
+  both sides, and leaves the successful ones installed.
+- `uninstall` uses the same codes for the same reasons: 0 = none of the
+  requested components remains installed.
 
-No elevation, ever:
-- `--cli` installs to a **writable per-user location**: `~/.local/bin` on
-  macOS (creating it if needed), `%LOCALAPPDATA%\Microsoft\WindowsApps` on
-  Windows — both conventionally on PATH for the user who ran the command.
-  `/usr/local/bin` and a Homebrew prefix are used only when they are already
-  writable without elevation.
+These are a **set, not a scale**. `< 4` is not "did anything happen" — 1 is
+less than 4 and means nothing happened at all, while 4 means some of it did.
+The predicates worth writing down, because getting them backwards is silent:
+*everything I asked for = `0`*; *nothing = `1`*; *partial = `4`*; *at least
+something is installed = `0` or `4`*.
+
+"Did anything change" is a different question and the exit code cannot carry
+it — a machine that is already fully set up and a machine this run just set up
+are both correct, and reporting either as failure would break every idempotent
+script. It is answered in the output instead, one line per component with a
+fixed status word: **`installed`** (this run did it), **`already installed`**
+(found in the requested state, untouched), **`not installed: <reason>`**. The
+words are normative, not cosmetic — a script greps them.
+
+No elevation, ever — and the two platforms get there differently, so the text
+says both rather than one rule that is false on Windows:
+- **macOS** — a symlink in `~/.local/bin` (created if needed). POSIX symlinks
+  need no privilege. `/usr/local/bin` and a Homebrew prefix are used only when
+  they are already writable without elevation.
+- **Windows** — the single exe is **copied** to
+  `%LOCALAPPDATA%\Programs\ConnectionDoctor`, and that directory is appended
+  to the **user** PATH (`HKCU\Environment`, broadcasting `WM_SETTINGCHANGE`),
+  which needs no elevation. A copy, not a link: creating a symlink on Windows
+  ordinarily requires Developer Mode or `SeCreateSymbolicLinkPrivilege`, so an
+  install built on one would fail on exactly the standard non-admin account
+  this promise is for. `%LOCALAPPDATA%\Microsoft\WindowsApps` is not the
+  target either — it is the App Execution Alias directory, not a general
+  drop-point for arbitrary binaries. The output names the directory it wrote
+  and says the PATH change takes effect in a **new** shell.
+- `uninstall --cli` removes the copy, and removes the PATH entry **only if
+  this installation added it** — the same rule as the agent config: a PATH the
+  user set up is not ours to edit.
 - The command never invokes `sudo`, `runas` or an elevation prompt. When the
   chosen directory is not on the user's PATH it says so and prints the exact
   line to add, rather than silently installing something unreachable.
+- This is the claim most likely to be wrong in a way no reviewer can see, so
+  it is verified where it is made: on a standard non-admin Windows account,
+  with `align-cli-verbs`' implementation.
 
 An agent's config is not ours to rewrite:
 - `--mcp` prefers the agent's own registration command (`claude mcp add …`)
@@ -67,7 +98,8 @@ Defaults and honesty:
   deletes recorded history or a baseline — those outlive the installation.
 - `status` reports per component: recorder (heartbeat), dashboard (the port
   answering with our `Server:` header), MCP (registration present), CLI
-  (symlink present and pointing at this build), so "the dashboard is up but
+  (the CLI on PATH resolves to this build — symlink target on macOS, file
+  identity on Windows), so "the dashboard is up but
   nothing is recording" is visible rather than inferred.
 
 ## Heartbeat, lock and `install` on macOS (issue #18)

@@ -30,13 +30,29 @@
 - **WHEN** `install --mcp` runs where no agent registration command and no writable agent config exist
 - **THEN** the exact registration line is printed, nothing is changed, and the command exits 1 — a script must not read "nothing happened" as success
 
+#### Scenario: Already installed is success, and says so
+- **WHEN** `install --cli` runs on a machine where this build's CLI is already on PATH
+- **THEN** nothing is written, the component line reads `already installed`, and the command exits **0** — the exit code answers whether the desired state is satisfied, not whether this run changed anything, so running `install` twice is not a failure
+
+#### Scenario: A script asks whether anything is installed
+- **WHEN** a script needs to distinguish "everything I asked for", "none of it" and "some of it"
+- **THEN** it SHALL test the exit code as a set membership — `0` all, `1` none, `4` partial, `0` or `4` for "at least something" — and SHALL NOT order-compare the codes, and it SHALL read the per-component status words (`installed`, `already installed`, `not installed: <reason>`) when it needs to know what actually changed
+
 #### Scenario: Some of it worked
 - **WHEN** `install --all` installs the recorder, dashboard and CLI but cannot register with an agent
 - **THEN** the successful components remain installed, the output names what did and did not happen, and the command exits 4 (partial), distinct from both success and total failure
 
-#### Scenario: No writable system PATH, and no elevation
-- **WHEN** `install --cli` runs where `/usr/local/bin` is not writable
-- **THEN** the command installs to a per-user location on PATH (`~/.local/bin`, `%LOCALAPPDATA%\Microsoft\WindowsApps`), never prompts for elevation, exits 0, and — if that directory is not on the user's PATH — prints the exact line to add it
+#### Scenario: No writable system PATH, and no elevation (macOS)
+- **WHEN** `install --cli` runs on macOS where `/usr/local/bin` is not writable
+- **THEN** the command creates a symlink in `~/.local/bin`, never prompts for elevation, exits 0, and — if that directory is not on the user's PATH — prints the exact line to add it
+
+#### Scenario: A standard non-admin Windows account
+- **WHEN** `install --cli` runs on Windows as a standard user with no Developer Mode and no `SeCreateSymbolicLinkPrivilege`
+- **THEN** the exe is **copied** to `%LOCALAPPDATA%\Programs\ConnectionDoctor` and that directory is appended to the user PATH under `HKCU\Environment`, no symlink is attempted, nothing is written to `%LOCALAPPDATA%\Microsoft\WindowsApps` (an App Execution Alias location, not a general binary target), no elevation is requested, and the output names the directory and states that the PATH change applies to a new shell
+
+#### Scenario: Uninstalling does not edit a PATH we did not set
+- **WHEN** `uninstall --cli` runs on Windows
+- **THEN** the copied exe is removed, and the user PATH entry is removed **only if this installation added it** — a PATH entry the user configured is left untouched
 
 #### Scenario: An agent config that is not ours
 - **WHEN** `--mcp` edits an agent's configuration file directly because no registration command exists
