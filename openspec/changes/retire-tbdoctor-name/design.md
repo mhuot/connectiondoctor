@@ -1,7 +1,22 @@
 # Design: retire-tbdoctor-name
 
-## What the user actually has to do: nothing
-The rename is only worth doing if it costs the person running it nothing, so:
+## What the user has to do: two things, both one-liners
+The rename is only worth doing if the data survives untouched and the required
+actions are few, named, and in the release notes. They are:
+
+1. **Re-register the MCP server** if it was registered against the old bundle
+   path (`claude mcp remove tbdoctor` then the new `claude mcp add` line —
+   `align-cli-verbs` requires this anyway when `--mcp` becomes `mcp`).
+2. **Remove the old Login Item**, if the old app was registered at login.
+
+Everything else is preserved, and the second action is automated where it can
+be: when the migration runs and finds a login-item registration for
+`net.mhuot.tbdoctor`, it unregisters it via `SMAppService` before registering
+the new one, and says so on stderr. It cannot do that if the old app bundle has
+already been deleted, in which case the stale entry is harmless (macOS drops a
+login item whose bundle is gone) and the release notes say where to look.
+
+Everything below is what is preserved without any action:
 
 | Thing they have | What happens |
 |---|---|

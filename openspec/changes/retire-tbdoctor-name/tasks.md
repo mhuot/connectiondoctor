@@ -4,5 +4,7 @@
 - [ ] 1.3 `tbdoctor` compatibility symlink beside the binary; deprecation notice on stderr when invoked through it
 - [ ] 1.4 `scripts/build-ui.{sh,ps1}` stage into `macos/Sources/ConnectionDoctor/ui`; `.github/workflows/build.yml` paths and artifact names (`ConnectionDoctor-<v>.dmg`/`.zip`), `lipo` assertion path
 - [ ] 1.4b macOS MCP `serverInfo.name` → `connectiondoctor` (tool renames and `tb_*` aliases belong to `align-cli-verbs`; coordinate so neither leaves the server advertising an undocumented name)
+- [ ] 1.4c `producer.name` emits `connectiondoctor` on macOS; schema and consumers keep accepting `tbdoctor` from older recordings (coordinate with `release-pipeline`)
+- [ ] 1.4d Migration unregisters an existing `net.mhuot.tbdoctor` login item via `SMAppService` when it can, and says so; release notes name the manual fallback
 - [ ] 1.5 Docs: `cli.md` names one binary; `mcp.md`, `distribution.md`, `architecture.md`, both READMEs, dashboard copy; one "formerly TBDoctor" line
 - [ ] 1.6 Verify: build, serve, `/contract` on macOS; migration from a populated old directory; `tbdoctor` alias still runs

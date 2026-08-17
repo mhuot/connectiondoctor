@@ -22,6 +22,14 @@ The collector SHALL migrate an existing `~/Library/Application Support/TBDoctor`
 - **WHEN** a script invokes `tbdoctor` from PATH
 - **THEN** it runs, prints a one-line notice naming the new command, and behaves identically
 
+#### Scenario: A login item left by the old app
+- **WHEN** the migration runs on a machine where the old app was registered at login
+- **THEN** that registration is removed before the new one is added, and the change is stated on stderr; if the old bundle is already gone the stale entry is left to macOS and the release notes say where to find it
+
+#### Scenario: A recording made before the rename
+- **WHEN** an envelope recorded by the old build carries `producer.name: "tbdoctor"`
+- **THEN** consumers still read it — a stored recording is a historical fact, and only *new* envelopes emit `connectiondoctor`
+
 #### Scenario: An MCP registration against the old bundle path
 - **WHEN** a registration points at `…/TBDoctor.app/Contents/MacOS/TBDoctor`
 - **THEN** it fails because that bundle is gone — an intentional break, stated in the release notes with its one-line fix, not something the PATH alias pretends to cover

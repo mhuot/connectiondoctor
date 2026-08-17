@@ -46,6 +46,11 @@ config makes the rename more expensive. This is the cheapest it will ever be.
   `scripts/build-ui.{sh,ps1}` following.
 - READMEs keep the origin story and screenshots; one "formerly TBDoctor" line
   appears in the README and the v0.2.0 notes, then goes away.
+- **`producer.name` moves too.** `release-pipeline` allows
+  `producer: {name: "tbdoctor" | "connectiondoctor", …}`; after this change new
+  macOS envelopes SHALL emit `connectiondoctor`, while consumers and the schema
+  SHALL keep accepting `tbdoctor` in recordings made before it — a stored
+  recording is a historical fact and must not become unreadable.
 - **The macOS MCP server's advertised identity moves with the rest.** It still
   reports `serverInfo.name: "tbdoctor"` and `tb_*` tools while `docs/mcp.md`
   says `connectiondoctor` and `connection_*` — a doc-vs-code drift that this
