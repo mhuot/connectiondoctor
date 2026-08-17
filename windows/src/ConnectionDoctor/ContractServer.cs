@@ -48,7 +48,11 @@ internal static class ContractServer
             return 1;
         }
 
-        var address = $"http://{(lan ? "0.0.0.0" : "127.0.0.1")}:{port}";
+        // Advertise a URL that the registered prefix actually answers: the
+        // loopback prefix is "localhost", and HTTP.sys matches on the Host
+        // header, so http://127.0.0.1 would 400 (issue #39). LAN mode binds
+        // every interface, so any of the machine's addresses works.
+        var address = $"http://{(lan ? "0.0.0.0" : "localhost")}:{port}";
         Console.WriteLine(EmbeddedUi.IsPresent
             ? $"ConnectionDoctor serving the dashboard on {address}"
             : $"ConnectionDoctor serving on {address}  (GET /contract, GET /events)");
