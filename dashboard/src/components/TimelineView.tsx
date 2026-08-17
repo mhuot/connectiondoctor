@@ -89,6 +89,23 @@ export function TimelineView({ events, snapshot, recordedLabel, history, eventsE
             {inc.eventCount > 0 ? `${inc.eventCount} events` : (inc.end !== inc.start ? `until ${inc.end}` : 'single event')}
             {inc.devicesLost.length > 0 && ` · lost ${inc.devicesLost.length}: ${inc.devicesLost.map((d) => d.name).slice(0, 4).join(', ')}`}
           </span>
+          {inc.deficit && (
+            <em>
+              {inc.deficit.durationProven
+                ? (inc.deficit.until
+                    ? `power deficit from ${inc.deficit.since} to ${inc.deficit.until}`
+                    : `power deficit since ${inc.deficit.since}, never reported resolved`)
+                /* An unlocated gap could hold the missing end, or an end and a
+                   later restart, so the transitions are evidence and the span
+                   between them is not: saying "short of power for three hours"
+                   over a hole in the recording would be inventing the hours.
+                   "In this window" rather than "since" because nothing here
+                   locates the incompleteness at the start. */
+                : (inc.deficit.until
+                    ? `power deficit recorded ${inc.deficit.since} → ${inc.deficit.until}; history incomplete in this window, so the duration between them is unproven`
+                    : `power deficit began ${inc.deficit.since}; history incomplete in this window, so whether it resolved is unknown`)}
+            </em>
+          )}
           {inc.sharedParent && (
             <em>all behind {inc.sharedParent.name} — one upstream failure, not {inc.devicesLost.length} device failures</em>
           )}

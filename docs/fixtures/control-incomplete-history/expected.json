@@ -1,0 +1,6 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [],
+  "notes": "Half an hour of a six-hour window, and it was trimmed. The correct answer is not 'no findings' but 'unknown': every consumer must report the window as incomplete and refuse to claim health. This fixture exists to catch a consumer that renders empty findings as reassurance."
+}

@@ -1,0 +1,12 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 1,
+      "sharedParent": null
+    }
+  ],
+  "notes": "Two identical mice on one desk, separate node ids and separate unitKeys. One was unplugged and the other plugged in; matching by VID:PID alone would call that one device moving. What is executed today is the duplicate VID:PID / distinct node id case \u2014 stitching correlates on node id and no consumer reads unitKey yet, so this is not a unitKey disambiguation test until #27/#62 land the consumer side (see README). No finding either way."
+}

@@ -1,0 +1,94 @@
+{
+  "schema": "connection-contract/v1",
+  "capturedAt": "2026-08-17T12:00:00-05:00",
+  "host": {
+    "name": "surface",
+    "id": "be617fc5-9283-4da6-a4cc-5f6071829304",
+    "os": "windows",
+    "arch": "arm64"
+  },
+  "power": {
+    "source": "dock",
+    "externalConnected": true,
+    "batteryPresent": true,
+    "batteryPercent": 100,
+    "batteryRateMilliwatts": 0,
+    "adapter": {
+      "watts": 96,
+      "identifiesItself": false
+    }
+  },
+  "displaysKnown": false,
+  "nodes": [
+    {
+      "id": "host",
+      "kind": "host",
+      "name": "surface",
+      "protocol": "power"
+    },
+    {
+      "id": "tb:dock",
+      "kind": "thunderbolt",
+      "name": "Surface Thunderbolt(TM) 4 Dock",
+      "protocol": "thunderbolt",
+      "parentId": "host",
+      "vidPid": "045E:0963"
+    },
+    {
+      "id": "usb:hub",
+      "kind": "hub",
+      "name": "4-Port USB 2.0 Hub",
+      "protocol": "usb2",
+      "parentId": "tb:dock",
+      "vidPid": "043E:9C04"
+    },
+    {
+      "id": "usb:d0",
+      "kind": "device",
+      "name": "Device 0",
+      "protocol": "usb2",
+      "parentId": "usb:hub",
+      "vidPid": "046D:C08A"
+    },
+    {
+      "id": "usb:d1",
+      "kind": "device",
+      "name": "Device 1",
+      "protocol": "usb2",
+      "parentId": "usb:hub",
+      "vidPid": "046D:C08A"
+    },
+    {
+      "id": "usb:d2",
+      "kind": "device",
+      "name": "Device 2",
+      "protocol": "usb2",
+      "parentId": "usb:hub",
+      "vidPid": "046D:C08A"
+    },
+    {
+      "id": "usb:d3",
+      "kind": "device",
+      "name": "Device 3",
+      "protocol": "usb2",
+      "parentId": "usb:hub",
+      "vidPid": "046D:C08A"
+    },
+    {
+      "id": "usb:d4",
+      "kind": "device",
+      "name": "Device 4",
+      "protocol": "usb2",
+      "parentId": "usb:hub",
+      "vidPid": "046D:C08A"
+    },
+    {
+      "id": "usb:d5",
+      "kind": "device",
+      "name": "Device 5",
+      "protocol": "usb2",
+      "parentId": "usb:hub",
+      "vidPid": "046D:C08A"
+    }
+  ]
+}

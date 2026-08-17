@@ -1,0 +1,12 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 6,
+      "sharedParent": "usb:hub"
+    }
+  ],
+  "notes": "Every device went away at once overnight and every one came back at the same instant hours later, with no power deficit and no link event. That is a machine that slept. The grouped-loss finding MUST NOT fire: its whole claim is that one upstream component failed, and here nothing did."
+}

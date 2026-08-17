@@ -1,0 +1,6 @@
+{
+  "kind": "control",
+  "findings": [],
+  "incidents": [],
+  "notes": "2.4 W for five seconds: over the event threshold (-2 W, which is why the events exist) and nowhere near the finding threshold (10 W sustained). A machine at 99% trickles like this constantly. No finding."
+}

@@ -1,0 +1,17 @@
+{
+  "kind": "fault",
+  "findings": [
+    {
+      "severity": "warning",
+      "title": "Devices lost as a group"
+    }
+  ],
+  "incidents": [
+    {
+      "rootEvent": null,
+      "devicesLost": 4,
+      "sharedParent": "usb:hub"
+    }
+  ],
+  "notes": "Four devices gone at one instant, all behind one hub, and they did not come back \u2014 while the display on the same dock is still present. That asymmetry is the signature: video survives, the hub branch is wedged. One upstream failure, not four device failures."
+}
