@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { emptyContact, hostContact, hostHistory, mergeRefresh, type HostData } from './store';
 import { deviceCountSeries } from '../domain/series';
-import { parseEnvelope, ContractError } from '../contract/parse';
+import { parseEnvelope, parseEventStream, ContractError } from '../contract/parse';
 import type { ContractEnvelope, ContractEvent } from '../contract/types';
 
 const envelope = (extra: Record<string, unknown> = {}): ContractEnvelope => parseEnvelope({
@@ -136,5 +136,44 @@ describe('device-count series anchoring (issue #47)', () => {
     expect(s.anchoredAt).toBeUndefined();
     expect(s.points[0].count).toBe(4);
     expect(s.points.at(-1)?.count).toBe(2);
+  });
+});
+
+describe('post-merge honesty follow-ups (review of #53)', () => {
+  it('a stream whose every line is corrupt is incomplete, not "never recorded"', () => {
+    const h = host({ events: [], contact: { ...emptyContact(), contractAt: 'x', eventsAt: 'x', skippedLines: 12 }, historyReasons: ['12 skipped lines'] });
+    const state = hostHistory(h);
+    expect(state.state).toBe('incomplete');
+    expect(state.reasons.join()).toMatch(/12 skipped lines/);
+  });
+
+  it('still reports no-history when there is genuinely nothing to explain', () => {
+    expect(hostHistory(host({ events: [], contact: { ...emptyContact(), contractAt: 'x', eventsAt: 'x' } })).state).toBe('no-history');
+  });
+
+  it('a series that contradicts the current envelope is unknown, not clamped', () => {
+    // Four net additions, but the current envelope has only 2 countable nodes:
+    // the start would have to be negative, so history is missing (Copilot's
+    // "current=1 with three net additions ends at 3" case).
+    const events: ContractEvent[] = [
+      { t: '2026-08-16T21:00:00Z', kind: 'deviceAdded' },
+      { t: '2026-08-16T21:01:00Z', kind: 'deviceAdded' },
+      { t: '2026-08-16T21:02:00Z', kind: 'deviceAdded' },
+      { t: '2026-08-16T21:03:00Z', kind: 'deviceAdded' },
+    ];
+    const s = deviceCountSeries(events, envelope()); // envelope() has 2 countable nodes
+    expect(s.points).toEqual([]);
+    expect(s.contradiction).toMatch(/more device/);
+  });
+
+  it('a fullSnapshot without an envelope is a skipped line, not a silent anchor loss', () => {
+    const stream = [
+      JSON.stringify({ t: '2026-08-16T21:00:00Z', kind: 'fullSnapshot' }),           // no snapshot
+      JSON.stringify({ t: '2026-08-16T21:01:00Z', kind: 'deviceRemoved' }),
+    ].join('\n');
+    const { events, skippedLines, lastSnapshotIndex } = parseEventStream(stream);
+    expect(skippedLines).toBe(1);
+    expect(events).toHaveLength(1);
+    expect(lastSnapshotIndex).toBeNull();
   });
 });

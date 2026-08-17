@@ -130,7 +130,8 @@ export function App() {
             <FindingsView findings={active?.envelope?.findings} analysis={active?.envelope?.analysis}
               hostName={active?.name} eventCount={active?.events.length ?? 0}
               lastEventAt={active?.events.at(-1)?.t}
-              history={active ? hostHistory(active) : undefined} />
+              history={active ? hostHistory(active) : undefined}
+              host={active} onChanged={() => void refresh()} />
           )}
           {tab === 'timeline' && (
             <TimelineView events={active?.events ?? []} snapshot={active?.envelope}

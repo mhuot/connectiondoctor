@@ -199,7 +199,14 @@ export function parseEventStream(jsonl: string): EventStreamResult {
       continue;
     }
     const event = obj as unknown as ContractEvent;
-    if (event.kind === 'fullSnapshot' && event.snapshot) {
+    if (event.kind === 'fullSnapshot') {
+      // A sync point is a *complete* envelope. One without a snapshot, or with
+      // an invalid one, is not a sync point — count it as skipped so the host
+      // reads as history-incomplete instead of silently losing its anchor.
+      if (!event.snapshot) {
+        skippedLines += 1;
+        continue;
+      }
       try {
         event.snapshot = parseEnvelope(event.snapshot);
         lastSnapshotIndex = events.length;

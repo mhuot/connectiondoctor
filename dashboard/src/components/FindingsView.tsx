@@ -1,5 +1,7 @@
 import type { ContractAnalysis, ContractFinding } from '../contract/types';
-import type { HistoryState } from '../data/store';
+import { useState } from 'react';
+import type { HistoryState, HostData } from '../data/store';
+import { canMutate, captureBaseline } from '../data/baseline';
 
 const SEVERITY_RANK = { critical: 0, warning: 1, info: 2 } as const;
 const CONFIDENCE_RANK: Record<string, number> = { 'very high': 0, high: 1, moderate: 2 };
@@ -7,7 +9,7 @@ const CONFIDENCE_RANK: Record<string, number> = { 'very high': 0, high: 1, moder
 /** Ranked findings with the evidence that produced them. Every finding shows
  *  its evidence without interaction — a verdict you cannot audit is an opinion.
  *  "None" is only claimed when the recording can vouch for the window. */
-export function FindingsView({ findings, analysis, hostName, eventCount = 0, lastEventAt, history }: {
+export function FindingsView({ findings, analysis, hostName, eventCount = 0, lastEventAt, history, host, onChanged }: {
   findings?: ContractFinding[];
   analysis?: ContractAnalysis;
   hostName?: string;
@@ -19,6 +21,10 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
    *  says incomplete, "no findings" is not a claim this panel may make even
    *  if the producer's own coverage looked complete at the time. */
   history?: { state: HistoryState; reasons: string[] };
+  /** The active host, for the baseline control (only offered on the collector
+   *  serving this page — mutations are loopback and same-origin). */
+  host?: HostData;
+  onChanged?: () => void;
 }) {
   if (!analysis) {
     // Absent analysis means the collector did not report any — which is
@@ -65,8 +71,12 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
           {historyOk ? 'window complete' : `history incomplete: ${[...new Set(whyIncomplete)].join(', ')}`}
         </span>
         {analysis.baseline && (
-          <span className={`chip ${baselineTone(analysis.baseline.state)}`}>baseline: {analysis.baseline.state}</span>
+          <span className={`chip ${baselineTone(analysis.baseline.state)}`} role="status" aria-live="polite">
+            baseline: {analysis.baseline.state}
+            {analysis.baseline.state === 'recovered' && analysis.baseline.recoveredAt ? ` at ${fmt(analysis.baseline.recoveredAt)}` : ''}
+          </span>
         )}
+        {host && <BaselineControl host={host} baseline={analysis.baseline} onChanged={onChanged} />}
       </div>
 
       {findings === undefined && (
@@ -103,4 +113,45 @@ function baselineTone(state: string): string {
 function fmt(iso: string): string {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { hour12: false });
+}
+
+/** Capture / replace the known-good baseline. Only shown for the collector
+ *  serving this page; replacement is destructive, so it names the capture time
+ *  it is about to discard and sends that time as If-Match — if another tab
+ *  already replaced it, the server refuses and we say so. */
+function BaselineControl({ host, baseline, onChanged }: {
+  host: HostData;
+  baseline?: { state: string; capturedAt?: string };
+  onChanged?: () => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string>();
+  if (!canMutate(host)) {
+    return <span className="muted" title="Mutations are loopback and same-origin only (docs/embedding.md § Mutations)">baseline actions: on the collector's own page only</span>;
+  }
+
+  const run = async (replace: boolean) => {
+    if (replace && baseline?.capturedAt &&
+      !window.confirm(`Replace the known-good baseline captured ${fmt(baseline.capturedAt)}? The old one is discarded.`)) return;
+    setBusy(true);
+    const result = await captureBaseline(host, { replace, ifMatch: replace ? baseline?.capturedAt : undefined });
+    setBusy(false);
+    setMessage(result.ok
+      ? `Baseline ${result.replaced ? 'replaced' : 'captured'} at ${fmt(result.capturedAt ?? '')}`
+      : result.error === 'stale'
+        ? `Not replaced — another tab already saved one at ${fmt(result.current?.capturedAt ?? '')}. Refresh and try again.`
+        : result.error === 'read-only-binding'
+          ? 'Refused: this collector is bound to the LAN, where it stays read-only.'
+          : `Not saved: ${result.error}`);
+    if (result.ok) onChanged?.();
+  };
+
+  return (
+    <>
+      <button disabled={busy} onClick={() => void run(Boolean(baseline?.capturedAt))}>
+        {baseline?.capturedAt ? 'Replace baseline…' : 'Capture baseline'}
+      </button>
+      {message && <span className="muted" role="status" aria-live="polite">{message}</span>}
+    </>
+  );
 }

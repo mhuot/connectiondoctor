@@ -120,7 +120,16 @@ internal static class ContractV1
             NodeId = entry.Device is null ? null : NodeId(entry.Device),
             VidPid = entry.Device?.VidPid,
             Name = entry.Device?.FriendlyName,
-            Snapshot = entry.Snapshot is null ? null : ToEnvelope(entry.Snapshot)
+            // A sync point is a complete envelope: the analysis group computed
+            // when the snapshot was written rides along (schema § Events).
+            Snapshot = entry.Snapshot is null ? null : entry.Analysis is null
+                ? ToEnvelope(entry.Snapshot)
+                : ToEnvelope(entry.Snapshot) with
+                {
+                    Findings = entry.Analysis.Findings,
+                    Incidents = entry.Analysis.Incidents,
+                    Analysis = entry.Analysis.Analysis
+                }
         };
     }
 
@@ -139,6 +148,18 @@ internal static class ContractV1
         }
 
         return builder.ToString();
+    }
+
+    /// <summary>
+    /// The live envelope plus findings/incidents/analysis over the recorded
+    /// history when there is any — what /contract, `contract`, `probe --json`
+    /// and connection_probe all return (three doors, one document).
+    /// </summary>
+    public static ContractEnvelope ToEnvelopeWithAnalysis(ConnectionSnapshot snapshot, double windowHours = WindowsAnalysis.DefaultWindowHours)
+    {
+        var envelope = ToEnvelope(snapshot);
+        WindowsAnalysis.Attach(envelope, WindowsAnalysis.Run(WindowsAnalysis.ReadInputs(), snapshot, windowHours), out var withAnalysis);
+        return withAnalysis;
     }
 
     public static string Serialize(ContractEnvelope envelope, bool indented = true) =>
@@ -428,6 +449,41 @@ internal sealed record ContractEnvelope
     public IReadOnlyList<ContractDisplay>? Displays { get; init; }
     public bool DisplaysKnown { get; init; }
     public required IReadOnlyList<ContractNode> Nodes { get; init; }
+    /// <summary>Present only when recorded history exists (absent ≠ empty). See WindowsAnalysis.</summary>
+    public IReadOnlyList<ContractFinding>? Findings { get; init; }
+    public IReadOnlyList<ContractIncident>? Incidents { get; init; }
+    public ContractAnalysis? Analysis { get; init; }
+}
+
+/// <summary>schema-v1.md § Envelope — analysis{}: window, coverage, baseline state, capabilities.</summary>
+internal sealed record ContractAnalysis
+{
+    public required double WindowHours { get; init; }
+    public required DateTimeOffset GeneratedAt { get; init; }
+    public required ContractCoverage Coverage { get; init; }
+    public ContractBaselineState? Baseline { get; init; }
+    public ContractCapabilities? Capabilities { get; init; }
+}
+
+internal sealed record ContractCoverage
+{
+    public required DateTimeOffset AvailableFrom { get; init; }
+    public required DateTimeOffset Through { get; init; }
+    public required bool Complete { get; init; }
+    public IReadOnlyList<string>? Reasons { get; init; }
+}
+
+internal sealed record ContractBaselineState
+{
+    public required string State { get; init; }
+    public DateTimeOffset? CapturedAt { get; init; }
+    public DateTimeOffset? FaultSince { get; init; }
+    public DateTimeOffset? RecoveredAt { get; init; }
+}
+
+internal sealed record ContractCapabilities
+{
+    public required string LinkEvents { get; init; }
 }
 
 internal sealed record ContractHost

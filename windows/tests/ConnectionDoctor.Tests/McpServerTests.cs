@@ -150,11 +150,28 @@ public sealed class McpServerTests
     }
 
     [Fact]
-    public void DiagnoseNoteNeverReadsAsASuccessShapedHistoryAnalysis()
+    public void DiagnoseNoteAlwaysStatesWhatWasNotObserved()
     {
-        Assert.Contains("NOT evaluated yet", DeviceToolHost.DiagnoseNote(hasRecording: true, hours: 6));
-        Assert.Contains("6 h", DeviceToolHost.DiagnoseNote(hasRecording: true, hours: 6));
-        Assert.Contains("has not run", DeviceToolHost.DiagnoseNote(hasRecording: false, hours: 6));
+        // No recording at all.
+        var none = DeviceToolHost.DiagnoseNote(null, 6);
+        Assert.Contains("has not run", none);
+
+        // Recording, but the window is incomplete: the note must say so before
+        // anyone reads "no findings" as "clear".
+        var incomplete = new WindowsAnalysis.Result([], [], 6, DateTimeOffset.Now, DateTimeOffset.Now.AddHours(-1),
+            DateTimeOffset.Now, false, ["gap", "trimmed"], new ContractBaselineState { State = "no-baseline" },
+            WindowsAnalysis.LinkEventsCapability);
+        var note = DeviceToolHost.DiagnoseNote(incomplete, 6);
+        Assert.Contains("incomplete", note!);
+        Assert.Contains("gap", note);
+        Assert.Contains("unknown, not clear", note);
+
+        // Complete window: no false alarm about coverage, but the one real
+        // attribution limit is still stated.
+        var complete = incomplete with { Complete = true, Reasons = [] };
+        var clean = DeviceToolHost.DiagnoseNote(complete, 6)!;
+        Assert.DoesNotContain("incomplete", clean);
+        Assert.Contains("Link drops are not observable", clean);
     }
 
     [Fact]

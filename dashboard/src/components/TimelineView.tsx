@@ -32,6 +32,9 @@ export function TimelineView({ events, snapshot, recordedLabel, history, eventsE
   const series = useMemo(() => deviceCountSeries(events, snapshot), [events, snapshot]);
   const roots = events.filter((e) => ROOT_EVENT_KINDS.has(e.kind));
 
+  if (series.contradiction) {
+    return <p className="empty">Device count unknown — {series.contradiction}. The topology view still shows what is attached now.</p>;
+  }
   if (eventsError && events.length === 0) {
     return <p className="empty">History unavailable — the events stream could not be fetched ({eventsError}). Nothing here can be called quiet.</p>;
   }

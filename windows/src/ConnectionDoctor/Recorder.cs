@@ -15,10 +15,12 @@ internal sealed record RecorderEntry(
     string Kind,
     DeviceNode? Device,
     PowerState? Power,
-    ConnectionSnapshot? Snapshot)
+    ConnectionSnapshot? Snapshot,
+    /// <summary>On full snapshots: the analysis group computed when the snapshot was written, so the sync point is a complete envelope. Additive in the on-disk format.</summary>
+    EmbeddedAnalysis? Analysis = null)
 {
-    public static RecorderEntry FullSnapshot(ConnectionSnapshot snapshot) =>
-        new(snapshot.CapturedAt, RecorderEntryKinds.Snapshot, null, snapshot.Power, snapshot);
+    public static RecorderEntry FullSnapshot(ConnectionSnapshot snapshot, EmbeddedAnalysis? analysis = null) =>
+        new(snapshot.CapturedAt, RecorderEntryKinds.Snapshot, null, snapshot.Power, snapshot, analysis);
 }
 
 internal static class Recorder
@@ -75,6 +77,12 @@ internal static class Recorder
         return entries;
     }
 }
+
+/// <summary>Contract findings/incidents/analysis as stored beside a full snapshot.</summary>
+internal sealed record EmbeddedAnalysis(
+    IReadOnlyList<ContractFinding> Findings,
+    IReadOnlyList<ContractIncident> Incidents,
+    ContractAnalysis Analysis);
 
 internal sealed record ConnectionIncident(
     DateTimeOffset Start,

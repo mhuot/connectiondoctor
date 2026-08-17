@@ -87,7 +87,7 @@ internal static class Program
 
     private static int Contract(string? path)
     {
-        var json = ContractV1.Serialize(ContractV1.ToEnvelope(DeviceProbe.Capture()));
+        var json = ContractV1.Serialize(ContractV1.ToEnvelopeWithAnalysis(DeviceProbe.Capture()));
         if (path is null)
         {
             Console.WriteLine(json);

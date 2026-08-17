@@ -43,7 +43,7 @@ does not silently omit the verb.
 | `probe [--json]` | Current state, once: power, Thunderbolt/USB4, USB tree with negotiated speeds and VID:PID | text table; `--json` = v1 envelope | ✓ (mac `--probe`) |
 | `tree [--full] [--json]` | Topology as an indented tree; `--full` includes internal hubs and controller silicon | text; `--json` = envelope | ✓ (mac `--tree`) |
 | `contract [path]` | The v1 envelope, to stdout or a file | JSON | ✓ (mac `--contract`) |
-| `report [--hours N] [--json]` | Ranked findings with evidence, then incidents newest-first, from recorded history (default 6 h) | text; `--json` = **report** document | mac ✓ (`--report`); win: incidents only, no ranked findings — closed by `contract-findings-incidents` |
+| `report [--hours N] [--json]` | Ranked findings with evidence, then incidents newest-first, from recorded history (default 6 h) | text; `--json` = **report** document | ✓ both (Windows: sustained deficit + grouped loss + baseline diff; link drops not observable yet) |
 | `baseline save [path]` | Save the current state as the known-good reference | writes a v1 envelope | win ✓; **mac to add** |
 | `diff [baseline] [--json]` | Compare now against the known-good: findings, missing, added | text; `--json` = **diff** document | win ✓; **mac to add** |
 | `watch` | Live one-line-per-sample table until interrupted | text | ✓ |

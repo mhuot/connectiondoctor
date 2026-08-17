@@ -23,6 +23,8 @@ internal static class BackgroundCollector
     public static string CurrentSnapshotPath => Path.Combine(DataDirectory, "current.json");
     public static string HeartbeatPath => Path.Combine(DataDirectory, "heartbeat.json");
     public static string ErrorPath => Path.Combine(DataDirectory, "collector-errors.log");
+    /// <summary>ISO time of the last events trim, so coverage can say `trimmed` (Contract v1 coverage reasons).</summary>
+    public static string TrimMarkerPath => Path.Combine(DataDirectory, "events.trimmed-at");
 
     public static int Run()
     {
@@ -59,7 +61,20 @@ internal static class BackgroundCollector
 
                 if (snapshot.CapturedAt - lastFullSnapshotAt >= FullSnapshotInterval)
                 {
-                    entries.Add(RecorderEntry.FullSnapshot(snapshot));
+                    // A sync point is a complete envelope: compute the analysis
+                    // group now (hourly, over the log we are writing) and store
+                    // it with the snapshot so readers do not have to.
+                    EmbeddedAnalysis? embedded = null;
+                    var analysis = WindowsAnalysis.Run(WindowsAnalysis.ReadInputs(), snapshot, now: snapshot.CapturedAt);
+                    if (analysis is not null)
+                    {
+                        embedded = new EmbeddedAnalysis(
+                            analysis.Findings.Select(ContractV1.ToFinding).ToList(),
+                            analysis.Incidents,
+                            WindowsAnalysis.ToAnalysis(analysis));
+                    }
+
+                    entries.Add(RecorderEntry.FullSnapshot(snapshot, embedded));
                     lastFullSnapshotAt = snapshot.CapturedAt;
                 }
 
@@ -272,6 +287,31 @@ internal static class BackgroundCollector
         }
 
         File.WriteAllBytes(EventsPath, bytes[start..]);
+        // Remember that history was cut here, so coverage can say `trimmed`
+        // instead of the window silently looking short.
+        File.WriteAllText(TrimMarkerPath, DateTimeOffset.Now.ToString("O"));
+    }
+
+    /// <summary>The collector's heartbeat, or null when none has been written or it is unreadable.</summary>
+    public static CollectorHeartbeat? ReadHeartbeat()
+    {
+        if (!File.Exists(HeartbeatPath))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<CollectorHeartbeat>(File.ReadAllText(HeartbeatPath), JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
     }
 
     private static void PrintChanges(IEnumerable<RecorderEntry> entries)

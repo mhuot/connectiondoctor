@@ -300,16 +300,28 @@ internal sealed class DeviceToolHost : IMcpToolHost
         "matched by instance id; vidPid+parent matching arrives with contract-conformance";
 
     /// <summary>
-    /// What connection_diagnose can honestly say on Windows today. The tool
-    /// metadata advertises recorded-history analysis (link drops, grouped
-    /// loss, power correlation); until the history engine lands
-    /// (contract-findings-incidents), a success-shaped report would be a lie —
-    /// so the note says exactly what was and was not analysed, always.
+    /// What connection_diagnose can honestly say about its own report. With
+    /// the history engine in place (WindowsAnalysis) the note carries the
+    /// coverage caveats — an incomplete window, a stopped recorder — and the
+    /// one attribution limit Windows still has: no kernel link events, so
+    /// link drops are not observable and their absence is unknown, not clear.
     /// </summary>
-    public static string DiagnoseNote(bool hasRecording, double hours) =>
-        (hasRecording
-            ? $"Recorded history exists on this machine but is not yet analysed on Windows: findings below are the live power state and the known-good baseline comparison only. Link drops, grouped device loss and power correlation over the last {hours:0.#} h are NOT evaluated yet (contract-findings-incidents); treat their absence as unknown, not clear."
-            : NoRecordingNote + " Findings below are the live power state and the known-good baseline comparison only.");
+    public static string? DiagnoseNote(WindowsAnalysis.Result? analysis, double hours)
+    {
+        if (analysis is null)
+        {
+            return NoRecordingNote + " Findings below are the live power state and the known-good baseline comparison only.";
+        }
+
+        var parts = new List<string>();
+        if (!analysis.Complete)
+        {
+            parts.Add($"History over the last {hours:0.#} h is incomplete ({string.Join(", ", analysis.Reasons)}); treat the absence of findings as unknown, not clear.");
+        }
+
+        parts.Add("Link drops are not observable on Windows yet (no kernel link events); grouped device loss and sustained power deficits are evaluated from the recording.");
+        return string.Join(' ', parts);
+    }
 
     public McpToolResult Call(string tool, JsonElement? arguments) => tool switch
     {
@@ -328,21 +340,20 @@ internal sealed class DeviceToolHost : IMcpToolHost
     };
 
     private static McpToolResult Probe() =>
-        McpToolResult.Ok(ContractV1.Serialize(ContractV1.ToEnvelope(DeviceProbe.Capture())));
+        McpToolResult.Ok(ContractV1.Serialize(ContractV1.ToEnvelopeWithAnalysis(DeviceProbe.Capture())));
 
     private static McpToolResult Diagnose(double hours)
     {
         var current = DeviceProbe.Capture();
-        var findings = new List<Finding>(PowerDiagnosis.Analyze(current.Power));
+        var analysis = WindowsAnalysis.Run(WindowsAnalysis.ReadInputs(), current, hours);
 
-        // Baseline comparison is the Windows analysis that already exists; the
-        // ranked history engine arrives with contract-findings-incidents.
-        var baselinePath = SnapshotStore.DefaultBaselinePath;
-        if (File.Exists(baselinePath))
+        // No history at all: still say what the live state shows.
+        var findings = analysis?.Findings.ToList() ?? new List<Finding>(PowerDiagnosis.Analyze(current.Power));
+        if (analysis is null && File.Exists(SnapshotStore.DefaultBaselinePath))
         {
-            var baseline = SnapshotStore.Load(baselinePath);
+            var baseline = SnapshotStore.Load(SnapshotStore.DefaultBaselinePath);
             findings.AddRange(SnapshotComparer.Compare(baseline, current).Findings
-                .Where(finding => !findings.Any(existing => existing.Title == finding.Title)));
+                .Where(finding => findings.All(existing => existing.Title != finding.Title)));
         }
 
         var report = new ContractReport
@@ -351,7 +362,8 @@ internal sealed class DeviceToolHost : IMcpToolHost
             GeneratedAt = DateTimeOffset.Now,
             WindowHours = hours,
             Findings = findings.OrderBy(Rank).Select(ContractV1.ToFinding).ToList(),
-            Note = DiagnoseNote(File.Exists(BackgroundCollector.EventsPath), hours)
+            Incidents = analysis?.Incidents,
+            Note = DiagnoseNote(analysis, hours)
         };
         return McpToolResult.Ok(ContractV1.SerializeDocument(report));
     }

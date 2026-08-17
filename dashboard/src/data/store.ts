@@ -55,7 +55,10 @@ export function hostHistory(host: HostData): { state: HistoryState; reasons: str
   if (host.contact.skippedLines > 0) reasons.push(`${host.contact.skippedLines} skipped lines`);
   if (analysis && !analysis.coverage.complete) reasons.push(...(analysis.coverage.reasons ?? ['coverage-incomplete']));
 
-  if (!analysis && host.events.length === 0 && !host.contact.eventsError) {
+  // "Never recorded" is only claimable when there is nothing to explain: a
+  // stream whose every line was corrupt has zero events *and* a reason, and
+  // must not look like a machine that has never run the recorder.
+  if (!analysis && host.events.length === 0 && !host.contact.eventsError && reasons.length === 0) {
     return { state: 'no-history', reasons: [] };
   }
   if (host.contact.eventsError && host.events.length === 0) {
