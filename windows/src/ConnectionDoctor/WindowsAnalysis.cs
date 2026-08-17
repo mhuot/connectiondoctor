@@ -57,7 +57,13 @@ internal static class WindowsAnalysis
         /// <summary>Durable outages recorded by the collector (failed probes, sleep, not running).</summary>
         IReadOnlyList<CollectorGap>? Gaps = null,
         /// <summary>The gap log existed but could not be fully read — an unknown number of outages.</summary>
-        bool GapEvidenceUnreadable = false);
+        bool GapEvidenceUnreadable = false,
+        /// <summary>
+        /// Where the baseline fault history lives. Defaults to the file beside
+        /// the baseline, updated under the baseline lock; injectable so tests
+        /// (and any future caller with its own storage) do not touch it.
+        /// </summary>
+        IBaselineStateStore? StateStore = null);
 
     public static Inputs ReadInputs(double windowHours = DefaultWindowHours, DateTimeOffset? now = null)
     {
@@ -391,10 +397,11 @@ internal static class WindowsAnalysis
         // Read and update the history under the baseline lock: a replacement
         // resets it, and an analysis that started before the replacement must
         // not write the old fault back afterwards.
+        var store = inputs.StateStore ?? FileBaselineStateStore.Shared;
         var next = inputs.BaselineHistory ?? new BaselineStateFile();
-        BaselineTransaction.WithLock(() =>
+        store.WithLock(() =>
         {
-            var history = BaselineStateFile.Read() ?? new BaselineStateFile();
+            var history = store.Read() ?? inputs.BaselineHistory ?? new BaselineStateFile();
             var updated = faulted
                 ? history with { FaultSince = history.FaultSince ?? now, RecoveredAt = null }
                 : history.FaultSince is not null
@@ -402,7 +409,7 @@ internal static class WindowsAnalysis
                     : history;
             if (updated != history)
             {
-                BaselineStateFile.Write(updated);
+                store.Write(updated);
             }
 
             next = updated;
@@ -455,6 +462,27 @@ internal static class WindowsAnalysis
         "warning" => 1,
         _ => 2
     };
+}
+
+/// <summary>
+/// Where the baseline fault history is kept, and the lock that keeps it
+/// consistent with the baseline itself. One implementation writes the file; a
+/// test can supply its own so analysis never touches the real machine's state.
+/// </summary>
+internal interface IBaselineStateStore
+{
+    BaselineStateFile? Read();
+    bool Write(BaselineStateFile state);
+    /// <summary>Runs <paramref name="work"/> holding the same lock a baseline replacement takes.</summary>
+    void WithLock(Action work);
+}
+
+internal sealed class FileBaselineStateStore : IBaselineStateStore
+{
+    public static readonly FileBaselineStateStore Shared = new();
+    public BaselineStateFile? Read() => BaselineStateFile.Read();
+    public bool Write(BaselineStateFile state) => BaselineStateFile.Write(state);
+    public void WithLock(Action work) => BaselineTransaction.WithLock(work);
 }
 
 /// <summary>

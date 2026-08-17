@@ -13,7 +13,7 @@ public sealed class WindowsAnalysisTests
     private static CollectorHeartbeat Beat(DateTimeOffset started, DateTimeOffset lastSample) =>
         new(1234, started, lastSample, "events.jsonl");
     private static WindowsAnalysis.Inputs Inputs(IReadOnlyList<RecorderEntry> entries, CollectorHeartbeat? beat, DateTimeOffset? trimmed = null) =>
-        new(entries, beat, trimmed, null, null);
+        new(entries, beat, trimmed, null, null, StateStore: new MemoryBaselineStateStore());
 
     [Fact]
     public void NoRecordingAtAllProducesNoAnalysisAtAll()
@@ -298,6 +298,16 @@ public sealed class WindowsAnalysisIntegrityTests
     }
 }
 
+/// <summary>A baseline history that lives in the test, not on the machine.</summary>
+internal sealed class MemoryBaselineStateStore : IBaselineStateStore
+{
+    private BaselineStateFile? state;
+    public MemoryBaselineStateStore(BaselineStateFile? initial = null) => state = initial;
+    public BaselineStateFile? Read() => state;
+    public bool Write(BaselineStateFile value) { state = value; return true; }
+    public void WithLock(Action work) => work();
+}
+
 public sealed class BaselineFaultEvidenceTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
@@ -322,7 +332,7 @@ public sealed class BaselineFaultEvidenceTests
         var stale = new WindowsAnalysis.Inputs(
             [new RecorderEntry(Now.AddDays(-2), RecorderEntryKinds.DeviceDisappeared, null, new PowerState(true, 100, 0), null)],
             new CollectorHeartbeat(1, Now.AddDays(-2).AddHours(-1), Now.AddDays(-2), "events.jsonl"),
-            null, baseline, null);
+            null, baseline, null, StateStore: new MemoryBaselineStateStore());
 
         var result = WindowsAnalysis.Run(stale, current, 6, Now)!;
 
@@ -339,7 +349,7 @@ public sealed class BaselineFaultEvidenceTests
     {
         var (baseline, current) = DockMissing();
         var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
-            null, baseline, null);
+            null, baseline, null, StateStore: new MemoryBaselineStateStore());
 
         var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
         Assert.Equal("active-fault", result.Baseline.State);
@@ -356,7 +366,7 @@ public sealed class BaselineFaultEvidenceTests
     {
         var (baseline, _) = DockMissing();
         var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
-            null, baseline, null);
+            null, baseline, null, StateStore: new MemoryBaselineStateStore());
 
         var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
         Assert.Equal("healthy", result.Baseline.State);
@@ -410,5 +420,36 @@ public sealed class BaselineFaultEvidenceTests
 
         Assert.False(result.Complete);
         Assert.Contains("gap-evidence-unreadable", result.Reasons);
+    }
+}
+
+public sealed class BaselineHistoryRaceTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+
+    [Fact]
+    public void HistoryIsReadAndWrittenUnderTheLockSoAReplacementCannotBeUndone()
+    {
+        // A replacement resets the history while an analysis is in flight. The
+        // analysis re-reads inside the lock, so it updates the *new* state
+        // rather than writing the old fault back over it.
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub", dock.InstanceId);
+        var baseline = SnapshotComparerTests.Snapshot(dock, hub) with { CapturedAt = Now.AddDays(-1) };
+        var current = SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now };
+
+        // Inputs were read when a fault was already recorded…
+        var staleHistory = new BaselineStateFile(FaultSince: Now.AddHours(-5));
+        // …but by the time we take the lock, a replacement has reset it.
+        var store = new MemoryBaselineStateStore(new BaselineStateFile());
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"),
+            null, baseline, staleHistory, StateStore: store);
+
+        var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
+
+        Assert.Equal("active-fault", result.Baseline.State);
+        // The fault is dated from the reset state, not the stale five-hour-old one.
+        Assert.Equal(Now, result.Baseline.FaultSince);
+        Assert.Equal(Now, store.Read()!.FaultSince);
     }
 }
