@@ -1,11 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: Envelope carries findings and incidents
-Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}, baseline?: {state: "no-baseline"|"healthy"|"active-fault"|"recovered", capturedAt?, faultSince?, recoveredAt?}, capabilities?: {linkEvents: "kernel"|"notification"|"poll"|"unavailable", baseline?: "available"|"busy"|"unreadable"|"history-unreadable"|"history-unwritable"}}` in the v1 envelope whenever they have something to report — recorded history, a live finding, or a baseline that could not be evaluated — and SHALL omit all three only when there is none of those. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why, using temporal reasons only (`recorder-started-inside-window`, `trimmed`, `gap`, `no-history`) — attribution limits such as missing link events go in `capabilities`, never in coverage. This is additive within v1.
+Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}, baseline?: {state: "no-baseline"|"healthy"|"active-fault"|"recovered", capturedAt?, faultSince?, recoveredAt?}, capabilities?: {linkEvents: "kernel"|"notification"|"poll"|"unavailable", baseline?: "available"|"busy"|"unreadable"|"history-unreadable"|"history-unwritable"}}` in the v1 envelope whenever they have something to report — recorded history, a live finding, or a baseline that could not be evaluated — and SHALL omit all three only when there is none of those. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why, drawn from the evidence vocabulary in `docs/schema-v1.md` — temporal (`no-history`, `recorder-started-inside-window`, `recorder-stopped-before-window`, `gap`, `trimmed`) or integrity (`corrupt-lines`, `gap-evidence-unreadable`, `heartbeat-unreadable`, `trim-evidence-unreadable`, `no-heartbeat`) — and never attribution or evaluation limits, which belong in `capabilities`. The set is extensible: consumers SHALL treat an unrecognised reason as an unexplained incompleteness and SHALL NOT reject the envelope for it. This is additive within v1.
 
 #### Scenario: Baseline state is explicit
 - **WHEN** no baseline has been captured
 - **THEN** `analysis.baseline.state` is `no-baseline` and no baseline-diff finding is emitted — absence is not health; **WHEN** a missing branch returns after a fault, the state is `recovered` with `faultSince`/`recoveredAt`
+
+#### Scenario: A reason the consumer does not recognise
+- **WHEN** an envelope carries `coverage.complete: false` with a reason string this consumer does not know
+- **THEN** it is shown verbatim as the cause of an incomplete window; the envelope is neither rejected nor treated as complete
 
 #### Scenario: Trimmed log
 - **WHEN** the JSONL was trimmed inside the requested window
