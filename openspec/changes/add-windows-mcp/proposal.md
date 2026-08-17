@@ -16,7 +16,10 @@ JSON-RPC with no platform dependencies.
   power findings today; the ranked engine arrives with
   `contract-findings-incidents`), as schema `Finding` with `evidence[]`.
 - `connection_incidents` → `IncidentStitcher.Stitch(...)` as schema `Incident`.
-- `connection_diff` → `SnapshotComparer.Compare(baseline, current)`.
+- `connection_diff` → `SnapshotComparer.Compare(baseline, current)`, returned
+  as a **diff document**. Interim (issue #19): matching stays by instance id
+  until `contract-conformance` moves the comparer to vidPid+parent identity;
+  the document's `note` says so, so an agent is not misled.
 - `connection_diagram` → Excalidraw export (new on Windows; port of
   `ExcalidrawExport.swift` over the TS-equivalent layout, or reuse the
   dashboard's layout by embedding a small TS→JSON step — see design).
@@ -32,3 +35,8 @@ Capability `mcp`; `windows/src/ConnectionDoctor/McpServer.cs` (new),
 
 ## Depends on
 `define-interface-contracts` (tool names/schemas must be settled first).
+
+## Completes with
+`contract-conformance` — `connection_diff`'s promised vidPid+parent matching
+and `connection_diagram` (shared Excalidraw export) become real there; until
+then both are present with an explicit `note`/`isError` as described.

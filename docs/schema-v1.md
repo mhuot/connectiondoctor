@@ -39,6 +39,8 @@ only; breaking changes bump the version.
 | `host.os` | `macos` \| `windows` |
 | `host.model` *(opt)* | Hardware model identifier |
 | `displaysKnown` | `false` when the producer had no display session (SSH on macOS); distinct from "no displays attached" |
+| `findings` / `incidents` / `analysis` *(opt, proposed)* | Added by `contract-findings-incidents`: `analysis: {windowHours, generatedAt}` plus the two arrays, present only when recorded history exists. Absent ≠ empty |
+| `producer` *(opt, proposed)* | `{name: "tbdoctor"\|"connectiondoctor", version, commit?, dashboard?}` — added by `release-pipeline` |
 
 ## Power
 
@@ -157,6 +159,80 @@ you cannot audit is an opinion. `confidence` *(opt)*: freeform
 absent means "grouped change, origin unattributed". `sharedParent` *(opt)* is
 the common ancestor when the losses collapse to one — the grouped-loss finding
 in data form.
+
+## Documents
+
+The envelope is one of three **documents** the contract defines. The other two
+are the wrappers that `report --json` / `diff --json` on the CLI and the MCP
+tools return, so that every JSON a person or agent sees is a document defined
+here — never a per-tool shape. Each document carries `schema` and, except the
+envelope, a `kind` discriminator.
+
+| Document | `kind` | Produced by |
+|---|---|---|
+| **Envelope** (above) | — | `probe --json`, `tree --json`, `contract`, `GET /contract`, `connection_probe` |
+| **Report** | `report` | `report --json`, `connection_diagnose`, `connection_incidents` |
+| **Diff** | `diff` | `diff --json`, `connection_diff` |
+
+### Report
+
+```json
+{
+  "schema": "connection-contract/v1",
+  "kind": "report",
+  "host": { "name": "mini", "os": "macos", "arch": "arm64" },
+  "generatedAt": "2026-08-16T22:19:06-05:00",
+  "windowHours": 6,
+  "findings": [ ... ],
+  "incidents": [ ... ],
+  "note": "recorder has not run on this machine; nothing to analyse"
+}
+```
+
+| Field | Notes |
+|---|---|
+| `findings` *(opt)* | Array of Finding. **Absent** means not computed by this call (e.g. `connection_incidents` omits it); **`[]`** means computed and none found |
+| `incidents` *(opt)* | Array of Incident, newest first; same absent-vs-empty rule |
+| `note` *(opt)* | Human-readable caveat, e.g. no recording exists, or the window was truncated. Consumers show it; they do not parse it |
+
+`connection_diagnose` returns a Report with `findings` (and may include
+`incidents`); `connection_incidents` returns a Report with `incidents`; `report
+--json` returns both.
+
+### Diff
+
+```json
+{
+  "schema": "connection-contract/v1",
+  "kind": "diff",
+  "host": { ... },
+  "capturedAt": "...",
+  "baselineCapturedAt": "...",
+  "findings": [ ... ],
+  "missing": [ { "id": "...", "kind": "hub", "name": "...", "vidPid": "043E:9C04", ... } ],
+  "added": [ ... ],
+  "note": "matched by instance id; vidPid+parent matching arrives with contract-conformance"
+}
+```
+
+`missing` and `added` are arrays of **Node** (the node shape above), so a diff
+can be rendered by the same code that renders topology. Matching identity is
+`vidPid + parent's vidPid + kind` once `contract-conformance` lands on both
+platforms; until then a producer that matches otherwise says so in `note`.
+
+### Excalidraw
+
+`excalidraw` / `connection_diagram` return an
+[Excalidraw document](https://github.com/excalidraw/excalidraw/blob/master/packages/excalidraw/data/types.ts)
+(`{type: "excalidraw", version: 2, source, elements[], appState}`) — an
+external format, referenced not redefined here.
+
+### Machine-checkable schema
+
+`docs/schema/v1/` will hold JSON Schema files for the envelope, report and diff
+documents (`contract-conformance` task); the dashboard's parser tests and the
+conformance tests validate wrappers and elements against them, so a missing
+field or renamed key fails a test rather than passing silently.
 
 ## Source mapping
 

@@ -8,7 +8,7 @@ Both binaries SHALL serve MCP over stdio under server name `connectiondoctor` wi
 - **THEN** it receives `connection_probe`, `connection_diagnose`, `connection_incidents`, `connection_diff`, `connection_diagram` with byte-identical descriptions and input schemas on macOS and Windows
 
 ### Requirement: Results are Contract v1 shapes
-Every tool result SHALL be JSON that validates against `docs/schema-v1.md`: `connection_probe` returns the envelope; `connection_diagnose` returns `{findings: Finding[]}`; `connection_incidents` returns `{incidents: Incident[]}`; `connection_diff` returns `{findings, missing, added, baselineCapturedAt}` with contract nodes; `connection_diagram` returns an Excalidraw document.
+Every tool result SHALL be one of the documents defined in `docs/schema-v1.md` § Documents: `connection_probe` returns the envelope; `connection_diagnose` returns a report document with `findings`; `connection_incidents` returns a report document with `incidents`; `connection_diff` returns a diff document (`findings`, `missing`/`added` as contract nodes, `baselineCapturedAt`, `note?`); `connection_diagram` returns an Excalidraw document (external format, referenced by the schema).
 
 #### Scenario: Evidence is mandatory
 - **WHEN** `connection_diagnose` returns a finding
@@ -19,7 +19,7 @@ History-based tools SHALL return an empty list and a `note` explaining that the 
 
 #### Scenario: Fresh machine
 - **WHEN** `connection_diagnose` is called before `install` has ever run
-- **THEN** the result is `{findings: [], note: "…recorder has not run…"}` and `isError` is false
+- **THEN** the result is a report document with `findings: []` and a `note` saying the recorder has not run, and `isError` is false
 
 ### Requirement: Read-only
 No MCP tool SHALL change machine state, start or stop the recorder, or write outside the data directory.

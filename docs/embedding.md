@@ -48,6 +48,12 @@ instead of an honest missing-file error.
   names are content-hashed.
 - `Cache-Control: no-cache` for `index.html`. Without it an updated binary keeps
   serving the previous bundle's asset names, and the app fails to boot.
+- `Server: connectiondoctor/<version>` on **every** response (assets, `/contract`,
+  404s). This is the product identity the `ui` verb and the resident process's
+  "Open dashboard…" check before reusing a port that already answers: any
+  other service on 8787 returning a 2xx must not be mistaken for us. `<version>`
+  is the collector's `version` (e.g. `connectiondoctor/0.1.0`, `tbdoctor/0.1.0`
+  — the product token names the binary, so a fleet can tell them apart).
 - `Access-Control-Allow-Origin: *`, so a dashboard running against a Vite dev
   server can still read a collector on another port.
 

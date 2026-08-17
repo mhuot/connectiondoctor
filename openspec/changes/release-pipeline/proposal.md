@@ -31,8 +31,8 @@ and can never drift.
 ## Non-goals
 Auto-update; MSI/MSIX/pkg; Homebrew cask and winget manifests (follow-ups
 once releases are regular; `SHA256SUMS` exists so they can be added without
-changing the pipeline); universal macOS binary vs arm64-only is decided in
-design.
+changing the pipeline); macOS is arm64-only (decided in design; universal is
+a one-line change when an Intel user appears).
 
 ## Impact
 Capability `distribution` (new); `contract-v1` (producer field);

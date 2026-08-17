@@ -12,10 +12,12 @@ release   (ubuntu-latest)      needs macos,windows → SHA256SUMS → gh release
 the same steps.
 
 ## macOS
-- **Architecture:** arm64 only for now (`swift build -c release`). The fleet
-  is Apple silicon; a universal binary doubles build time and the IOKit class
-  names are the same. Revisit if an Intel user appears; the workflow has one
-  line to change (`--arch arm64 --arch x86_64`).
+- **Architecture:** arm64 only (`swift build -c release` on the arm64
+  runner), and the job asserts it with `lipo -info` so the shipped artifact
+  matches this sentence (issue #23; `docs/distribution.md` says the same). The
+  fleet is Apple silicon; a universal binary doubles build time. Revisit if an
+  Intel user appears; the workflow has one line to change (`--arch arm64
+  --arch x86_64`) and the assertion flips with it.
 - **Signing:** `DEVELOPER_ID_CERT_P12` (base64) + `DEVELOPER_ID_CERT_PASSWORD`
   imported into a temporary keychain; `codesign --deep --options runtime
   --timestamp -s "Developer ID Application: …"`; entitlements none beyond
