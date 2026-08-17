@@ -1,9 +1,18 @@
 import Foundation
 
-/// Severity drives both ordering and the menu bar dot colour.
-enum Severity: Int, Codable, Comparable {
-    case info = 0, warning = 1, critical = 2
-    static func < (a: Severity, b: Severity) -> Bool { a.rawValue < b.rawValue }
+/// Severity drives both ordering and the menu bar dot colour. String raw
+/// values so it serialises as the contract's `info | warning | critical`
+/// (Contract v1 § Findings) rather than as 0/1/2; ordering lives in `rank`.
+enum Severity: String, Codable, Comparable {
+    case info, warning, critical
+    var rank: Int {
+        switch self {
+        case .info: return 0
+        case .warning: return 1
+        case .critical: return 2
+        }
+    }
+    static func < (a: Severity, b: Severity) -> Bool { a.rank < b.rank }
 }
 
 /// A root-cause conclusion with the evidence that produced it. The evidence

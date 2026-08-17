@@ -96,6 +96,32 @@ export interface ContractEnvelope {
   nodes: ContractNode[];
   displays?: ContractDisplay[];
   displaysKnown?: boolean;
+  /** Present only when the collector has recorded history. Absent ≠ empty:
+   *  a consumer can tell "nothing found" from "nothing recorded". */
+  findings?: ContractFinding[];
+  incidents?: ContractIncident[];
+  analysis?: ContractAnalysis;
+}
+
+/** What the recorder can vouch for. `complete` is true only when the recording
+ *  spans the whole requested window with no trim inside it and no gap longer
+ *  than 3× the sample interval; `reasons` are temporal only. */
+export interface ContractCoverage {
+  availableFrom: string;
+  through: string;
+  complete: boolean;
+  reasons?: string[];
+}
+
+export type BaselineState = 'no-baseline' | 'healthy' | 'active-fault' | 'recovered';
+
+export interface ContractAnalysis {
+  windowHours: number;
+  generatedAt: string;
+  coverage: ContractCoverage;
+  baseline?: { state: BaselineState; capturedAt?: string; faultSince?: string; recoveredAt?: string };
+  /** What the collector can attribute — a separate axis from coverage. */
+  capabilities?: { linkEvents?: 'kernel' | 'notification' | 'poll' | 'unavailable' };
 }
 
 export type EventKind =

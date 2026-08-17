@@ -5,3 +5,5 @@ dist/
 macos/Sources/TBDoctor/ui/*
 !macos/Sources/TBDoctor/ui/.gitkeep
 windows/src/ConnectionDoctor/ui/
+# Agent worktrees are local scratch, never content
+.claude/worktrees/

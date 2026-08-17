@@ -172,7 +172,8 @@ enum MCPServer {
             }
 
         case "tb_contract":
-            if let data = try? Contract.json(from: Probes.sample()),
+            let live = Probes.sample()
+            if let data = try? Contract.json(from: live, analysis: Analysis.run(liveSample: live)),
                let json = String(data: data, encoding: .utf8) {
                 respond(id: id, result: ["content": [["type": "text", "text": json]]])
             } else {
