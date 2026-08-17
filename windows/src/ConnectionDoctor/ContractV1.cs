@@ -202,28 +202,46 @@ internal static class ContractV1
     /// kernel link events yet, so rootEvent is absent (origin unattributed);
     /// sharedParent is set when every lost device hangs off one parent.
     /// </summary>
-    public static ContractIncident ToIncident(ConnectionIncident incident)
+    /// <param name="incident">The stitched incident.</param>
+    /// <param name="recording">The recorded entries the incident came from (snapshots included), used to
+    /// resolve a shared parent from the pre-incident topology; the stitcher strips snapshots from
+    /// <see cref="ConnectionIncident.Events"/>.</param>
+    public static ContractIncident ToIncident(ConnectionIncident incident, IReadOnlyList<RecorderEntry>? recording = null)
     {
         var lost = incident.Events
             .Where(entry => entry.Kind == RecorderEntryKinds.DeviceDisappeared && entry.Device is not null)
             .Select(entry => entry.Device!)
             .ToList();
-        var parents = lost
-            .Select(device => device.ParentInstanceId)
-            .Where(parent => parent is not null)
-            .Select(parent => parent!)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
 
+        // sharedParent is the grouped-loss finding in data form, so it is
+        // asserted only on evidence: every lost device must name a parent, all
+        // must name the same one, and that parent must be a device we can
+        // actually resolve (from the incident's own entries or a snapshot in
+        // it) — never a guessed "usb:" prefix on an unresolved id. A device
+        // with unknown parentage makes the attribution unknown, not "the rest".
         string? sharedParent = null;
-        if (lost.Count >= 2 && parents.Count == 1)
+        if (lost.Count >= 2 && lost.All(device => device.ParentInstanceId is not null))
         {
-            var parentDevice = incident.Events
-                .Select(entry => entry.Device)
-                .FirstOrDefault(device => device is not null &&
-                    device.InstanceId.Equals(parents[0], StringComparison.OrdinalIgnoreCase));
-            sharedParent = parentDevice is null ? $"usb:{parents[0]}" : NodeId(parentDevice);
+            var parents = lost.Select(device => device.ParentInstanceId!)
+                .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            if (parents.Count == 1)
+            {
+                var parentDevice = ResolveDevice(parents[0], incident, recording);
+                if (parentDevice is not null)
+                {
+                    sharedParent = NodeId(parentDevice);
+                }
+            }
         }
+
+        // Peak discharge across the incident, from the recorded power samples
+        // (negative while discharging). Absent when no sample carried a rate.
+        var peak = incident.Events
+            .Select(entry => entry.Power?.BatteryRateMilliwatts)
+            .Where(rate => rate is not null and < 0)
+            .Select(rate => rate!.Value)
+            .DefaultIfEmpty()
+            .Min();
 
         return new ContractIncident
         {
@@ -235,8 +253,41 @@ internal static class ContractV1
                 Name = device.FriendlyName,
                 NodeId = NodeId(device)
             }).ToList(),
-            SharedParent = sharedParent
+            SharedParent = sharedParent,
+            Power = peak < 0 ? new ContractIncidentPower { PeakDischargeMilliwatts = peak } : null
         };
+    }
+
+    /// <summary>
+    /// A device by instance id, from the incident's own entries or — preferably —
+    /// the last full snapshot at or before the incident started (the pre-incident
+    /// topology). Null when nothing recorded names it: an unresolved parent is
+    /// unknown, never a guessed id.
+    /// </summary>
+    private static DeviceNode? ResolveDevice(string instanceId, ConnectionIncident incident, IReadOnlyList<RecorderEntry>? recording)
+    {
+        bool Matches(DeviceNode device) => device.InstanceId.Equals(instanceId, StringComparison.OrdinalIgnoreCase);
+
+        var fromIncident = incident.Events
+            .Select(entry => entry.Device)
+            .FirstOrDefault(device => device is not null && Matches(device));
+        if (fromIncident is not null)
+        {
+            return fromIncident;
+        }
+
+        if (recording is null)
+        {
+            return null;
+        }
+
+        var preIncidentSnapshot = recording
+            .Where(entry => entry.Snapshot is not null && entry.At <= incident.Start)
+            .OrderByDescending(entry => entry.At)
+            .Select(entry => entry.Snapshot!)
+            .FirstOrDefault();
+        return preIncidentSnapshot?.Devices.FirstOrDefault(Matches)
+            ?? recording.Select(entry => entry.Device).FirstOrDefault(device => device is not null && Matches(device));
     }
 
     /// <summary>Namespace-prefixed, and unique because InstanceId is unique.</summary>
@@ -465,6 +516,12 @@ internal sealed record ContractIncident
     public string? RootEvent { get; init; }
     public required IReadOnlyList<ContractIncidentDevice> DevicesLost { get; init; }
     public string? SharedParent { get; init; }
+    public ContractIncidentPower? Power { get; init; }
+}
+
+internal sealed record ContractIncidentPower
+{
+    public required int PeakDischargeMilliwatts { get; init; }
 }
 
 internal sealed record ContractIncidentDevice

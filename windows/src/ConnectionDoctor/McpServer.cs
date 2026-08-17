@@ -34,6 +34,14 @@ internal interface IMcpToolHost
 internal sealed class McpServer
 {
     public const string ServerName = "connectiondoctor";
+    /// <summary>
+    /// Protocol versions this server implements — the stdio surface here
+    /// (initialize, tools/list, tools/call, ping) is identical across them.
+    /// Newest first: when a client asks for something else we answer with the
+    /// newest we support, per the MCP negotiation rule; we never echo an
+    /// arbitrary client string as if we implemented it.
+    /// </summary>
+    public static readonly IReadOnlyList<string> SupportedProtocolVersions = ["2025-06-18", "2025-03-26", "2024-11-05"];
     public const string ProtocolVersion = "2024-11-05";
     private const string ToolsResourceName = "mcp-tools.json";
 
@@ -98,20 +106,41 @@ internal sealed class McpServer
             }
             catch (JsonException exception)
             {
-                log.WriteLine($"ConnectionDoctor mcp: ignoring unparseable line: {exception.Message}");
+                // JSON-RPC 2.0: a parse error is answered (id null), and the
+                // server keeps serving — one bad line must not end the session.
+                log.WriteLine($"ConnectionDoctor mcp: parse error: {exception.Message}");
+                RespondError(null, -32700, "Parse error");
                 continue;
             }
 
             if (request is not JsonObject message)
             {
+                RespondError(null, -32600, "Invalid Request: expected a JSON object");
                 continue;
             }
 
+            // A request carries an "id" key — even an explicit null id is a
+            // request and gets an answer with id null. Only an *absent* id is
+            // a notification, which must not be answered.
+            var isNotification = !message.ContainsKey("id");
             var id = message["id"]?.DeepClone();
-            var method = message["method"]?.GetValue<string>() ?? string.Empty;
+            if (id is JsonObject or JsonArray)
+            {
+                RespondError(null, -32600, "Invalid Request: id must be a string, number or null");
+                continue;
+            }
 
-            // Notifications carry no id and must not be answered.
-            if (id is null)
+            var methodNode = message["method"];
+            if (methodNode is not JsonValue methodValue || !methodValue.TryGetValue<string>(out var method) || method.Length == 0)
+            {
+                if (!isNotification)
+                {
+                    RespondError(id, -32600, "Invalid Request: method must be a non-empty string");
+                }
+                continue;
+            }
+
+            if (isNotification)
             {
                 continue;
             }
@@ -120,15 +149,18 @@ internal sealed class McpServer
         }
     }
 
-    private void Handle(JsonNode id, string method, JsonObject? parameters)
+    private void Handle(JsonNode? id, string method, JsonObject? parameters)
     {
         switch (method)
         {
             case "initialize":
             {
-                // Echo the client's protocol version when it offers one rather
-                // than forcing ours and risking a version-mismatch rejection.
-                var negotiated = parameters?["protocolVersion"]?.GetValue<string>() ?? ProtocolVersion;
+                // Negotiate: the client's version if we implement it, else the
+                // newest we do — never an arbitrary echo.
+                var requested = parameters?["protocolVersion"] is JsonValue pv && pv.TryGetValue<string>(out var s) ? s : null;
+                var negotiated = requested is not null && SupportedProtocolVersions.Contains(requested)
+                    ? requested
+                    : SupportedProtocolVersions[0];
                 Respond(id, new JsonObject
                 {
                     ["protocolVersion"] = negotiated,
@@ -196,22 +228,22 @@ internal sealed class McpServer
         }
     }
 
-    private void Respond(JsonNode id, JsonObject result)
+    private void Respond(JsonNode? id, JsonObject result)
     {
         Write(new JsonObject
         {
             ["jsonrpc"] = "2.0",
-            ["id"] = id.DeepClone(),
+            ["id"] = id?.DeepClone(),
             ["result"] = result
         });
     }
 
-    private void RespondError(JsonNode id, int code, string message)
+    private void RespondError(JsonNode? id, int code, string message)
     {
         Write(new JsonObject
         {
             ["jsonrpc"] = "2.0",
-            ["id"] = id.DeepClone(),
+            ["id"] = id?.DeepClone(),
             ["error"] = new JsonObject { ["code"] = code, ["message"] = message }
         });
     }
@@ -241,6 +273,18 @@ internal sealed class DeviceToolHost : IMcpToolHost
 
     private const string DiffMatchingNote =
         "matched by instance id; vidPid+parent matching arrives with contract-conformance";
+
+    /// <summary>
+    /// What connection_diagnose can honestly say on Windows today. The tool
+    /// metadata advertises recorded-history analysis (link drops, grouped
+    /// loss, power correlation); until the history engine lands
+    /// (contract-findings-incidents), a success-shaped report would be a lie —
+    /// so the note says exactly what was and was not analysed, always.
+    /// </summary>
+    public static string DiagnoseNote(bool hasRecording, double hours) =>
+        (hasRecording
+            ? $"Recorded history exists on this machine but is not yet analysed on Windows: findings below are the live power state and the known-good baseline comparison only. Link drops, grouped device loss and power correlation over the last {hours:0.#} h are NOT evaluated yet (contract-findings-incidents); treat their absence as unknown, not clear."
+            : NoRecordingNote + " Findings below are the live power state and the known-good baseline comparison only.");
 
     public McpToolResult Call(string tool, JsonElement? arguments) => tool switch
     {
@@ -282,7 +326,7 @@ internal sealed class DeviceToolHost : IMcpToolHost
             GeneratedAt = DateTimeOffset.Now,
             WindowHours = hours,
             Findings = findings.OrderBy(Rank).Select(ContractV1.ToFinding).ToList(),
-            Note = File.Exists(BackgroundCollector.EventsPath) ? null : NoRecordingNote
+            Note = DiagnoseNote(File.Exists(BackgroundCollector.EventsPath), hours)
         };
         return McpToolResult.Ok(ContractV1.SerializeDocument(report));
     }
@@ -292,12 +336,13 @@ internal sealed class DeviceToolHost : IMcpToolHost
         var current = DeviceProbe.Capture();
         var hasRecording = File.Exists(BackgroundCollector.EventsPath);
         var cutoff = DateTimeOffset.Now.AddHours(-hours);
+        var entries = hasRecording ? BackgroundCollector.ReadEntries() : [];
         var incidents = hasRecording
-            ? IncidentStitcher.Stitch(BackgroundCollector.ReadEntries())
+            ? IncidentStitcher.Stitch(entries)
                 .Where(incident => incident.End >= cutoff)
                 .OrderByDescending(incident => incident.Start)
                 .Take(Math.Max(0, limit))
-                .Select(ContractV1.ToIncident)
+                .Select(incident => ContractV1.ToIncident(incident, entries))
                 .ToList()
             : [];
 

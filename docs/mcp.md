@@ -68,6 +68,8 @@ probe longer than 10 s; a slow enumeration returns what it has with a `note`.
 
 ## Interim behaviour on Windows
 
+- `connection_diagnose` on Windows always carries a `note` saying that recorded-history analysis (link drops, grouped loss, power correlation) is **not evaluated yet** and that only the live power state and the baseline comparison were checked — its absence of findings is unknown, not clear (issue #48).
+
 Both are present in `tools/list` with the shared schema, so an agent's
 instructions do not change when they become real:
 
