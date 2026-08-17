@@ -206,14 +206,28 @@ struct KernelEvent: Codable, Hashable, Identifiable {
 /// A contiguous run of trouble, stitched together from events plus the sample
 /// stream. This is the unit the UI reports, because a single dropped cable
 /// produces hundreds of raw events and none of them individually mean anything.
+/// A device that disappeared during an incident, kept with its cross-platform
+/// identity so the contract's `devicesLost[{vidPid, name}]` can be emitted.
+struct LostDevice: Codable, Hashable {
+    var name: String
+    var vidPid: String?
+    var locationID: UInt32
+}
+
 struct Incident: Codable, Identifiable {
     var start: Date
     var end: Date?
     var eventCount: Int
     var rootEventCount: Int
     var peakDischargeMilliAmps: Int?
+    /// mA × V at the peak-discharge sample — the contract's unit (mW).
+    var peakDischargeMilliwatts: Int?
     var adapterAtStart: AdapterInfo?
     var devicesLost: [String]
+    var lostDevices: [LostDevice] = []
+    /// Common ancestor locationID of the lost devices when they collapse to
+    /// one branch (the grouped-loss finding in data form); nil otherwise.
+    var sharedParentLocationID: UInt32?
 
     var id: Double { start.timeIntervalSince1970 }
     var duration: TimeInterval? { end.map { $0.timeIntervalSince(start) } }

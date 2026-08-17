@@ -4,13 +4,14 @@ import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
 import { TimelineView } from './components/TimelineView';
 import { FleetView } from './components/FleetView';
+import { FindingsView } from './components/FindingsView';
 import { parseEnvelope, parseEventStream } from './contract/parse';
 import surfaceChain from './contract/fixtures/surface-chain.v1.json';
 import kvmMini from './contract/fixtures/kvm-mini.events.jsonl?raw';
 import kvmSurface from './contract/fixtures/kvm-surface.events.jsonl?raw';
 import './App.css';
 
-type Tab = 'topology' | 'timeline' | 'fleet';
+type Tab = 'topology' | 'findings' | 'timeline' | 'fleet';
 
 export function App() {
   const [hosts, setHosts] = useState<HostData[]>([]);
@@ -85,7 +86,7 @@ export function App() {
       <header className="app-header">
         <h1>Connection Dashboard</h1>
         <nav>
-          {(['topology', 'timeline', 'fleet'] as const).map((t) => (
+          {(['topology', 'findings', 'timeline', 'fleet'] as const).map((t) => (
             <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>
               {t[0].toUpperCase() + t.slice(1)}
             </button>
@@ -123,6 +124,10 @@ export function App() {
             <TopologyView envelope={active.envelope}
               recordedLabel={`recorded ${active.envelope.capturedAt}`} />
           ) : <p className="empty">Selected host has no envelope loaded.</p>)}
+          {tab === 'findings' && (
+            <FindingsView findings={active?.envelope?.findings} analysis={active?.envelope?.analysis}
+              hostName={active?.name} />
+          )}
           {tab === 'timeline' && (
             <TimelineView events={active?.events ?? []} snapshot={active?.envelope}
               recordedLabel={active ? `recorded · ${active.origin}` : ''} />

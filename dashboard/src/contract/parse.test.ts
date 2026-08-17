@@ -116,3 +116,72 @@ describe('live producer round-trip', () => {
     expect(env.nodes.every((n) => !n.tunneled)).toBe(true);
   });
 });
+
+describe('parseEnvelope — findings, incidents, analysis (contract-findings-incidents)', () => {
+  const base = () => JSON.parse(fixture('surface-chain.v1.json')) as Record<string, unknown>;
+  const analysis = {
+    windowHours: 6,
+    generatedAt: '2026-08-16T12:04:00Z',
+    coverage: { availableFrom: '2026-08-16T06:04:00Z', through: '2026-08-16T12:03:55Z', complete: true },
+    baseline: { state: 'no-baseline' },
+    capabilities: { linkEvents: 'kernel' },
+  };
+
+  it('absent block stays absent — "nothing recorded" is not "nothing found"', () => {
+    const env = parseEnvelope(base());
+    expect(env.findings).toBeUndefined();
+    expect(env.incidents).toBeUndefined();
+    expect(env.analysis).toBeUndefined();
+  });
+
+  it('empty arrays with complete coverage are the healthy negative case', () => {
+    const env = parseEnvelope({ ...base(), findings: [], incidents: [], analysis });
+    expect(env.findings).toEqual([]);
+    expect(env.incidents).toEqual([]);
+    expect(env.analysis?.coverage.complete).toBe(true);
+    expect(env.analysis?.baseline?.state).toBe('no-baseline');
+  });
+
+  it('parses ranked findings and incidents with vidPid, sharedParent and power', () => {
+    const env = parseEnvelope({
+      ...base(),
+      analysis,
+      findings: [{
+        severity: 'critical', title: 'Power supply under-served', confidence: 'high',
+        explanation: 'Battery discharged while on AC.',
+        evidence: ['Battery supplied up to 10.5W while the machine reported AC power'],
+        recommendation: 'Use a higher-rated adapter.',
+      }],
+      incidents: [{
+        start: '2026-08-16T10:00:00Z', end: '2026-08-16T10:00:20Z', rootEvent: 'linkDown',
+        devicesLost: [{ vidPid: '046d:c08a', name: 'MX Vertical' }, { name: 'Anonymous hub' }],
+        sharedParent: 'usb:0x00120000', power: { peakDischargeMilliwatts: -879 },
+      }],
+    });
+    expect(env.findings?.[0].severity).toBe('critical');
+    expect(env.findings?.[0].evidence).toHaveLength(1);
+    expect(env.incidents?.[0].devicesLost?.[0].vidPid).toBe('046D:C08A');
+    expect(env.incidents?.[0].sharedParent).toBe('usb:0x00120000');
+    expect(env.incidents?.[0].power?.peakDischargeMilliwatts).toBe(-879);
+  });
+
+  it('rejects a present-but-invalid finding instead of dropping it silently', () => {
+    expect(() => parseEnvelope({
+      ...base(), analysis,
+      findings: [{ severity: 'critical', title: 'x', explanation: 'y', evidence: [] }],
+    })).toThrow(ContractError);
+    expect(() => parseEnvelope({
+      ...base(), analysis,
+      findings: [{ severity: 2, title: 'x', explanation: 'y', evidence: ['z'] }],
+    })).toThrow(/severity/);
+  });
+
+  it('keeps temporal coverage reasons so the UI can say "unknown", not "none"', () => {
+    const env = parseEnvelope({
+      ...base(), findings: [], incidents: [],
+      analysis: { ...analysis, coverage: { ...analysis.coverage, complete: false, reasons: ['recorder-started-inside-window', 'gap'] } },
+    });
+    expect(env.analysis?.coverage.complete).toBe(false);
+    expect(env.analysis?.coverage.reasons).toEqual(['recorder-started-inside-window', 'gap']);
+  });
+});

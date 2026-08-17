@@ -8,7 +8,11 @@ enum Contract {
 
     static let schema = "connection-contract/v1"
 
-    static func envelope(from sample: Sample) -> [String: Any] {
+    /// - Parameter analysis: findings/incidents/analysis from the recorded
+    ///   history (`Analysis.run()`), or nil to omit them — which is what a
+    ///   `fullSnapshot` sync point inside the events log does, and what
+    ///   "no history" means (absent ≠ empty).
+    static func envelope(from sample: Sample, analysis: Analysis.Result? = nil) -> [String: Any] {
         var nodes: [[String: Any]] = []
 
         // Host is the root of the data tree; power is envelope-level, not a node.
@@ -73,11 +77,16 @@ enum Contract {
                 return out
             }
         }
+        if let analysis {
+            envelope["findings"] = Analysis.findingsJSON(analysis.findings)
+            envelope["incidents"] = Analysis.incidentsJSON(analysis.incidents)
+            envelope["analysis"] = Analysis.analysisJSON(analysis)
+        }
         return envelope
     }
 
-    static func json(from sample: Sample) throws -> Data {
-        try JSONSerialization.data(withJSONObject: envelope(from: sample),
+    static func json(from sample: Sample, analysis: Analysis.Result? = nil) throws -> Data {
+        try JSONSerialization.data(withJSONObject: envelope(from: sample, analysis: analysis),
                                    options: [.prettyPrinted, .sortedKeys])
     }
 

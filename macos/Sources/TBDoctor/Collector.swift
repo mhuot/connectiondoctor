@@ -254,12 +254,15 @@ final class Collector: ObservableObject {
             if group.count == 1 && group[0].kind == .adapterChange { return nil }
 
             let window = samples.filter { $0.t >= first.t.addingTimeInterval(-5) && $0.t <= last.t.addingTimeInterval(5) }
-            let peak = window.map(\.amperageMilliAmps).min()
+            let peakSample = window.min(by: { $0.amperageMilliAmps < $1.amperageMilliAmps })
+            let peak = peakSample?.amperageMilliAmps
+            let peakMilliwatts = peakSample.map { Int(Double($0.amperageMilliAmps) * $0.voltage) }
 
-            var lost: [String] = []
+            var lost: [LostDevice] = []
             if let before = samples.last(where: { $0.t < first.t }), let during = window.min(by: { $0.usb.count < $1.usb.count }) {
                 let after = Set(during.usb.map { $0.locationID })
-                lost = before.usb.filter { !after.contains($0.locationID) }.map(\.name)
+                lost = before.usb.filter { !after.contains($0.locationID) }
+                    .map { LostDevice(name: $0.name, vidPid: $0.vidPid, locationID: $0.locationID) }
             }
 
             return Incident(
@@ -268,8 +271,11 @@ final class Collector: ObservableObject {
                 eventCount: group.count,
                 rootEventCount: group.filter { $0.kind.isRoot }.count,
                 peakDischargeMilliAmps: peak,
+                peakDischargeMilliwatts: peakMilliwatts,
                 adapterAtStart: samples.last(where: { $0.t <= first.t })?.adapter,
-                devicesLost: lost)
+                devicesLost: lost.map(\.name),
+                lostDevices: lost,
+                sharedParentLocationID: lost.count > 1 ? Diagnosis.commonAncestor(lost.map(\.locationID)) : nil)
         }.reversed()
     }
 

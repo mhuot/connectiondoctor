@@ -120,7 +120,8 @@ enum Headless {
 
     static func contract(to path: String?) {
         do {
-            let data = try Contract.json(from: Probes.sample())
+            let live = Probes.sample()
+            let data = try Contract.json(from: live, analysis: Analysis.run(liveSample: live))
             if let path {
                 try data.write(to: URL(fileURLWithPath: path))
                 print("Wrote \(path)")

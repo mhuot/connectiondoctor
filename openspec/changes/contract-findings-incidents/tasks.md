@@ -1,9 +1,9 @@
 # Tasks: contract-findings-incidents
 - [ ] 1.1 `docs/schema-v1.md`: envelope `findings[]`, `incidents[]`, `analysis{}`; Finding/Incident tightened; state that consumers may derive incidents when absent
-- [ ] 1.2 macOS: `Severity` string raw values; envelope emits findings/incidents/analysis from existing engine; `devicesLost` with vidPid; mW
+- [x] 1.2 macOS: `Severity` string raw values; envelope emits findings/incidents/analysis from existing engine (`Analysis.swift`, on all three doors; `fullSnapshot` embeds stay analysis-free); `devicesLost` with vidPid; mW; coverage incl. `recorder-stopped-before-window`
 - [ ] 1.3 Windows: `Finding.Evidence`; deficit engine port; envelope emits findings/incidents/analysis
-- [ ] 1.4 Dashboard: types + parse (optional, tolerant); tests incl. fixture with findings
-- [ ] 1.5 Dashboard: `FindingsView` panel; Timeline prefers producer incidents and labels source
+- [x] 1.4 Dashboard: types + parse (absent ≠ empty; present-but-invalid rejected); 5 tests
+- [x] 1.5 Dashboard: `FindingsView` panel (ranked, evidence inline, coverage/baseline chips, unknown-vs-none); Timeline prefers producer incidents and labels source; verified against a live TBDoctor `--serve`
 - [ ] 1.5b Dashboard: per-host **contact** (live/stale/offline) and **history** (complete/no-history/envelope-only/incomplete + reasons) as two chips; surface skippedLines and fetch errors per host; "none" only when `coverage.complete`; tests for online-envelope-failed-events, corrupt JSONL, stale retained data, trimmed log, new recorder, and recovery that clears only on a proven-complete payload — issue #29
 - [ ] 1.2b/1.3b Both producers: `analysis.coverage {availableFrom, through, complete, reasons}` from the recorder's real span, trims and gaps
 - [ ] 1.5c Both producers: `analysis.baseline{state,…}`; `POST /baseline` per `embedding.md` § Mutations — loopback-only, same-origin `Origin` check, required `X-ConnectionDoctor-Request` header with CORS-less preflight, no wildcard ACAO on mutations, `If-Match` conditional replace (409 stale / 409 exists / 403 origin or binding), structured metadata; dashboard Capture/Replace control (sends the header and `If-Match`, confirmation names the old capture time); UI states no-baseline / healthy / active-fault / recovered; tests: same-origin capture, malicious cross-origin POST never mutates, LAN-bound POST refused, two-tab stale replace 409, recovery after the branch returns — issue #36, review of #38

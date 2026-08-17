@@ -67,7 +67,10 @@ enum Serve {
             let response: (status: String, type: String, body: Data)
             switch (method, path) {
             case ("GET", "/contract"):
-                if let body = try? Contract.json(from: Probes.sample()) {
+                // The live probe, plus findings/incidents/analysis over the
+                // recorded history when there is any (absent otherwise).
+                let sample = Probes.sample()
+                if let body = try? Contract.json(from: sample, analysis: Analysis.run(liveSample: sample)) {
                     response = ("200 OK", "application/json", body)
                 } else {
                     response = ("500 Internal Server Error", "text/plain", Data("contract failed".utf8))

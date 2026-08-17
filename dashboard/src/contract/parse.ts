@@ -6,9 +6,11 @@
 
 import {
   CONTRACT_SCHEMA,
+  type ContractAnalysis,
   type ContractEnvelope,
   type ContractEvent,
   type ContractFinding,
+  type ContractIncident,
   type ContractNode,
 } from './types';
 
@@ -53,6 +55,69 @@ export function parseEnvelope(json: unknown): ContractEnvelope {
       ? (doc.displays as ContractEnvelope['displays'])
       : undefined,
     displaysKnown: doc.displaysKnown === undefined ? undefined : Boolean(doc.displaysKnown),
+    // Optional analysis block (contract-findings-incidents). Absent stays
+    // absent — that is the "no recording" signal — but present-and-invalid
+    // is an error, not silently dropped: a finding without evidence, or an
+    // unknown severity, is a producer bug the reader should hear about.
+    findings: Array.isArray(doc.findings)
+      ? doc.findings.map((f, i) => {
+          try {
+            return parseFinding(f);
+          } catch (cause) {
+            throw new ContractError(`findings[${i}]: ${(cause as Error).message}`);
+          }
+        })
+      : undefined,
+    incidents: Array.isArray(doc.incidents)
+      ? doc.incidents.map((inc, i) => parseIncident(inc, i))
+      : undefined,
+    analysis: doc.analysis === undefined ? undefined : parseAnalysis(doc.analysis),
+  };
+}
+
+export function parseIncident(json: unknown, index = 0): ContractIncident {
+  const doc = asObject(json, `incidents[${index}]`);
+  const lost = Array.isArray(doc.devicesLost)
+    ? doc.devicesLost.map((d, j) => {
+        const device = asObject(d, `incidents[${index}].devicesLost[${j}]`);
+        return { name: asString(device.name, `incidents[${index}].devicesLost[${j}].name`),
+          vidPid: optString(device.vidPid)?.toUpperCase() };
+      })
+    : undefined;
+  const power = doc.power && typeof doc.power === 'object'
+    ? { peakDischargeMilliwatts: optNumber((doc.power as Record<string, unknown>).peakDischargeMilliwatts) }
+    : undefined;
+  return {
+    start: asString(doc.start, `incidents[${index}].start`),
+    end: optString(doc.end),
+    rootEvent: optString(doc.rootEvent) as ContractIncident['rootEvent'],
+    devicesLost: lost,
+    sharedParent: optString(doc.sharedParent),
+    power,
+  };
+}
+
+export function parseAnalysis(json: unknown): ContractAnalysis {
+  const doc = asObject(json, 'analysis');
+  const coverage = asObject(doc.coverage, 'analysis.coverage');
+  const baseline = doc.baseline && typeof doc.baseline === 'object'
+    ? (doc.baseline as ContractAnalysis['baseline'])
+    : undefined;
+  return {
+    windowHours: typeof doc.windowHours === 'number' ? doc.windowHours : 0,
+    generatedAt: asString(doc.generatedAt, 'analysis.generatedAt'),
+    coverage: {
+      availableFrom: asString(coverage.availableFrom, 'analysis.coverage.availableFrom'),
+      through: asString(coverage.through, 'analysis.coverage.through'),
+      complete: Boolean(coverage.complete),
+      reasons: Array.isArray(coverage.reasons)
+        ? coverage.reasons.filter((r): r is string => typeof r === 'string')
+        : undefined,
+    },
+    baseline,
+    capabilities: doc.capabilities && typeof doc.capabilities === 'object'
+      ? (doc.capabilities as ContractAnalysis['capabilities'])
+      : undefined,
   };
 }
 
