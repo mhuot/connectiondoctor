@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { emptyContact, hostContact, hostHistory, type HostData } from './data/store';
+import { emptyContact, hostContact, hostHistory, hostKey, hostOptions, type HostData } from './data/store';
 import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
 import { TimelineView } from './components/TimelineView';
@@ -16,6 +16,8 @@ type Tab = 'topology' | 'findings' | 'timeline' | 'fleet';
 export function App() {
   const [hosts, setHosts] = useState<HostData[]>([]);
   const [tab, setTab] = useState<Tab>('topology');
+  // Selection follows identity, not the display name: two machines can share
+  // a hostname, and one machine can change its own.
   const [activeHost, setActiveHost] = useState<string>();
   const [error, setError] = useState<string>();
   const [url, setUrl] = useState('');
@@ -45,7 +47,11 @@ export function App() {
     if (!url) return;
     try {
       const host = await loadHttp(url.includes('://') ? url : `http://${url}`);
-      setHosts((prev) => [...prev.filter((h) => h.name !== host.name), host]);
+      // Replace by identity, not by name: a renamed host is the same endpoint
+      // and must not appear twice, and two machines sharing a hostname must
+      // not collapse into one.
+      const key = hostKey(host);
+      setHosts((prev) => [...prev.filter((h) => hostKey(h) !== key), host]);
       setUrl('');
       setError(undefined);
     } catch (err) {
@@ -59,7 +65,7 @@ export function App() {
     setError(errors.length > 0 ? errors.join(' · ') : undefined);
   };
 
-  const active = hosts.find((h) => h.name === activeHost) ?? hosts.find((h) => h.envelope);
+  const active = hosts.find((h) => hostKey(h) === activeHost) ?? hosts.find((h) => h.envelope);
 
   const onDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -95,8 +101,10 @@ export function App() {
         </nav>
         <span className="spacer" />
         {hosts.length > 1 && (
-          <select value={active?.name} onChange={(e) => setActiveHost(e.target.value)}>
-            {hosts.map((h) => <option key={h.name}>{h.name}</option>)}
+          <select {...hostOptions(hosts, active)} onChange={(e) => setActiveHost(e.target.value)}>
+            {hostOptions(hosts, active).options.map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
           </select>
         )}
         {active && <HostStateChips host={active} />}

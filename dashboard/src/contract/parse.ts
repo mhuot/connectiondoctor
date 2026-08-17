@@ -37,6 +37,9 @@ export function parseEnvelope(json: unknown): ContractEnvelope {
     schema: CONTRACT_SCHEMA,
     capturedAt,
     host: {
+      // Present-but-invalid is a producer bug, not a reason to fall back to
+      // hostname correlation: identity corruption must be loud.
+      id: asOptionalHostId(host.id, 'host.id'),
       name: asString(host.name, 'host.name'),
       os: host.os === 'windows' ? 'windows' : 'macos',
       arch: asString(host.arch, 'host.arch'),
@@ -261,6 +264,7 @@ function normalizeNode(json: unknown, index: number): ContractNode {
     kind,
     name: asString(doc.name, `nodes[${index}].name`),
     vidPid: optString(doc.vidPid)?.toUpperCase(),
+    unitKey: asOptionalUnitKey(doc.unitKey, `nodes[${index}].unitKey`),
     protocol,
     // USB 2.0 is carried natively, never tunneled — enforce rather than trust.
     tunneled:
@@ -318,6 +322,35 @@ function parseCapabilities(json: unknown): ContractAnalysis['capabilities'] {
     linkEvents: linkEvents as NonNullable<ContractAnalysis['capabilities']>['linkEvents'],
     baseline: baseline as NonNullable<ContractAnalysis['capabilities']>['baseline'],
   };
+}
+
+/** `host.id` is what hosts are keyed on, so a malformed one is not a cosmetic
+ *  problem: two machines both carrying `"x"` would silently merge into one
+ *  endpoint whose topology flickers between them, which is worse than having
+ *  no id at all. The documented format (schema-v1.md § host) is a random
+ *  UUIDv4, both producers emit exactly that, and anything else is a producer
+ *  bug worth hearing about rather than papering over — so it is rejected, the
+ *  same as any other malformed field in this parser. */
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function asOptionalHostId(v: unknown, label: string): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || !UUID_V4.test(v)) {
+    throw new ContractError(`${label} must be a UUIDv4 when present, got ${JSON.stringify(v)}`);
+  }
+  return v.toLowerCase();
+}
+
+/** `unitKey` is HMAC-SHA256 truncated to 16 hex characters (schema-v1.md
+ *  § nodes). A longer or shorter value is not one of ours, and a raw serial
+ *  would be exactly the thing this field exists to keep off the wire — so the
+ *  length is checked rather than assumed. */
+function asOptionalUnitKey(v: unknown, label: string): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || !/^[0-9a-f]{16}$/i.test(v)) {
+    throw new ContractError(`${label} must be 16 hex characters when present, got ${JSON.stringify(v)}`);
+  }
+  return v.toLowerCase();
 }
 
 function optNumber(v: unknown): number | undefined {

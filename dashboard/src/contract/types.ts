@@ -14,6 +14,10 @@ export const DEFICIT_THRESHOLD_MW = -2000;
 export type HostOS = 'macos' | 'windows';
 
 export interface ContractHost {
+  /** Opaque, random, per-installation. Survives a rename — which is exactly
+   *  what it exists for — and is never derived from hardware, so two exports
+   *  from one machine cannot be linked by a recipient. */
+  id?: string;
   name: string;
   os: HostOS;
   arch: string;
@@ -69,6 +73,9 @@ export interface ContractNode {
   /** Only for what USB4 genuinely tunnels (DP/USB3/PCIe); USB 2.0 is native. */
   tunneled?: boolean;
   usbClass?: number;
+  /** Distinguishes two units of the same VID:PID within one collector's data.
+   *  Keyed to the installation, so it means nothing anywhere else. */
+  unitKey?: string;
   /** Producer classification of integrated devices (internal keyboard,
    *  trackpad, camera, the built-in display's hub). Absent = unknown, never
    *  "external"; consumers filter on it as a view choice, never infer it. */

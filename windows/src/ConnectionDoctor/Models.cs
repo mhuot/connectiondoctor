@@ -29,6 +29,46 @@ internal sealed record DeviceNode(
     /// <summary>bDeviceClass 9 - a hub even when the friendly name says nothing.</summary>
     public const int UsbHubClass = 9;
 
+    /// <summary>
+    /// The device's own serial, when it reports one — and nothing else.
+    ///
+    /// Windows puts a USB device's serial in the third segment of the instance
+    /// id (`USB\VID_045E&amp;PID_0963\0123456789`), but only when the device
+    /// actually supplies one; otherwise that segment is a bus-generated path
+    /// such as `6&amp;1a2b3c4d&amp;0&amp;2`, describing where it is plugged in rather
+    /// than which unit it is. An embedded '&amp;' means generated, so it is not a
+    /// serial.
+    ///
+    /// The '&amp;' test alone is not enough, and real hardware proved it: on a
+    /// Surface, ACPI/PCI and USB4 retimer instance ids end in short location
+    /// tokens with no '&amp;' at all, so three unrelated built-in nodes — a
+    /// dual-role controller and both retimer ports — came out with the *same*
+    /// serial and therefore the same unitKey. A unit identity that merges
+    /// unrelated devices is worse than none: it is the exact confusion the
+    /// field exists to prevent, presented as a trustworthy answer.
+    ///
+    /// So this fails closed, and only recognises the one shape Windows
+    /// documents as carrying a device-reported serial: the USB enumerator,
+    /// with a VID/PID device id. Everything else — ACPI, PCI, USB4, HID,
+    /// SWD, root hubs — is "no serial reported", which is a real answer.
+    /// </summary>
+    public string? Serial
+    {
+        get
+        {
+            var segments = InstanceId.Split('\\');
+            if (segments.Length < 3 ||
+                !segments[0].Equals("USB", StringComparison.OrdinalIgnoreCase) ||
+                !VidPidPattern.IsMatch(segments[1]))
+            {
+                return null;
+            }
+
+            var candidate = segments[^1];
+            return candidate.Length == 0 || candidate.Contains('&') ? null : candidate;
+        }
+    }
+
     private static readonly Regex VidPidPattern = new(
         @"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);

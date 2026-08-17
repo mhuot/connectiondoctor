@@ -10,10 +10,8 @@ internal static class SnapshotStore
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static string DefaultBaselinePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ConnectionDoctor",
-        "baseline.json");
+    /// <summary>Beside the recorded history, so CONNECTIONDOCTOR_DIR moves both together.</summary>
+    public static string DefaultBaselinePath => Path.Combine(BackgroundCollector.DataDirectory, "baseline.json");
 
     public static void Save(ConnectionSnapshot snapshot, string path)
     {

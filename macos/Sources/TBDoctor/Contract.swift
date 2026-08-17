@@ -13,6 +13,12 @@ enum Contract {
     ///   `fullSnapshot` sync point inside the events log does, and what
     ///   "no history" means (absent ≠ empty).
     static func envelope(from sample: Sample, analysis: Analysis.Result? = nil) -> [String: Any] {
+        // Resolved once for the whole document, then carried down. Asking per
+        // device would let one envelope be half-keyed — early nodes written
+        // before an identity existed carry no unitKey, later ones do — and on
+        // a machine that has no durable identity it is a file check and a
+        // failed create attempt for every device on the bus.
+        let identity = Identity.current
         var nodes: [[String: Any]] = []
 
         // Host is the root of the data tree; power is envelope-level, not a node.
@@ -54,13 +60,14 @@ enum Contract {
                                  byLocation: byLocation,
                                  childCount: childCounts[device.locationID] ?? 0,
                                  fallbackParent: firstTBID ?? "host",
-                                 tunnelCapable: firstTBID != nil))
+                                 tunnelCapable: firstTBID != nil,
+                                 identity: identity))
         }
 
         var envelope: [String: Any] = [
             "schema": schema,
             "capturedAt": ISO8601DateFormatter().string(from: sample.t),
-            "host": hostInfo(),
+            "host": hostInfo(identity),
             "power": power(sample),
             "nodes": nodes,
         ]
@@ -98,13 +105,18 @@ enum Contract {
         return builtInMarkers.contains { device.name.localizedCaseInsensitiveContains($0) }
     }
 
-    private static func hostInfo() -> [String: Any] {
+    private static func hostInfo(_ identity: Identity?) -> [String: Any] {
         var info: [String: Any] = [
             "name": Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
             "os": "macos",
             "arch": machineArch(),
         ]
         if let model = sysctlString("hw.model") { info["model"] = model }
+        // Random and per-installation, and omitted entirely when there is no
+        // durable identity: an id that changes between runs would split one
+        // endpoint into many, so absent (fall back to the hostname) is the
+        // honest answer.
+        if let identity { info["id"] = identity.hostId }
         return info
     }
 
@@ -166,7 +178,8 @@ enum Contract {
         byLocation: [UInt32: USBDevice],
         childCount: Int,
         fallbackParent: String,
-        tunnelCapable: Bool
+        tunnelCapable: Bool,
+        identity: Identity?
     ) -> [String: Any] {
         var parentID = fallbackParent
         var parent = device.parentLocationID
@@ -200,6 +213,9 @@ enum Contract {
         ]
         if let vendor = device.vendorName { node["vendorName"] = vendor }
         if let vidPid = device.vidPid { node["vidPid"] = vidPid }
+        // Two identical docks are two units here, and nothing anywhere else:
+        // the serial is keyed with a secret that never leaves this machine.
+        if let unitKey = identity?.unitKey(forModel: device.vidPid, serial: device.serial) { node["unitKey"] = unitKey }
         if let bits { node["linkBitsPerSecond"] = bits }
         if let usbClass = device.deviceClass { node["usbClass"] = usbClass }
         // Producer classification of integrated devices (dashboard-topology-

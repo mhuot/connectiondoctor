@@ -30,6 +30,39 @@ export interface HostData {
 
 export const emptyContact = (): HostContact => ({ skippedLines: 0 });
 
+/** What makes two payloads the same machine. The producer's `host.id` when it
+ *  has one — a renamed laptop is still one endpoint, and two machines that
+ *  happen to share a hostname are still two — falling back to the name for
+ *  producers and recordings that predate it. */
+export function hostKey(host: { envelope?: ContractEnvelope; name: string }): string {
+  return host.envelope?.host.id ?? `name:${host.name}`;
+}
+
+/** The host picker's contents and its selected value, together.
+ *
+ *  They are computed in one place because they have to agree: a controlled
+ *  `<select>` whose value matches none of its options is not an error anyone
+ *  sees — the browser simply displays an option of its choosing, so the picker
+ *  and the view silently disagree about which machine is on screen. That is
+ *  precisely what happened when the options were keyed on identity and the
+ *  value was still the hostname, and it only showed up when two hosts shared
+ *  a name, which is the case identity exists for. */
+export function hostOptions(
+  hosts: Array<{ envelope?: ContractEnvelope; name: string }>,
+  active: { envelope?: ContractEnvelope; name: string } | undefined,
+): { value: string; options: Array<{ value: string; label: string }> } {
+  return {
+    value: active ? hostKey(active) : '',
+    options: hosts.map((h) => ({
+      value: hostKey(h),
+      // Same-name hosts stay distinguishable to a reader, not just to the code.
+      label: hosts.filter((other) => other.name === h.name).length > 1
+        ? `${h.name} (${hostKey(h).slice(0, 8)})`
+        : h.name,
+    })),
+  };
+}
+
 export type ContactState = 'live' | 'stale' | 'offline';
 export type HistoryState = 'complete' | 'no-history' | 'envelope-only' | 'incomplete';
 

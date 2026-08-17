@@ -17,9 +17,17 @@ internal static class BackgroundCollector
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
 
-    public static string DataDirectory => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "ConnectionDoctor");
+    /// <summary>
+    /// Where recorded history, the baseline and the identity live.
+    /// `CONNECTIONDOCTOR_DIR` overrides it (docs/cli.md), which is how a test
+    /// or a fixture run keeps its hands off the real machine's evidence.
+    /// </summary>
+    public static string DataDirectory =>
+        Environment.GetEnvironmentVariable("CONNECTIONDOCTOR_DIR") is { Length: > 0 } directory
+            ? directory
+            : Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "ConnectionDoctor");
 
     public static string EventsPath => Path.Combine(DataDirectory, "events.jsonl");
     public static string CurrentSnapshotPath => Path.Combine(DataDirectory, "current.json");
