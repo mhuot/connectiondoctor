@@ -281,13 +281,15 @@ internal static class ContractV1
             return null;
         }
 
+        // Evidence boundary: only the last full snapshot at or before the
+        // incident. Nothing recorded *after* it may turn an unknown parent into
+        // a known one retroactively.
         var preIncidentSnapshot = recording
             .Where(entry => entry.Snapshot is not null && entry.At <= incident.Start)
             .OrderByDescending(entry => entry.At)
             .Select(entry => entry.Snapshot!)
             .FirstOrDefault();
-        return preIncidentSnapshot?.Devices.FirstOrDefault(Matches)
-            ?? recording.Select(entry => entry.Device).FirstOrDefault(device => device is not null && Matches(device));
+        return preIncidentSnapshot?.Devices.FirstOrDefault(Matches);
     }
 
     /// <summary>Namespace-prefixed, and unique because InstanceId is unique.</summary>

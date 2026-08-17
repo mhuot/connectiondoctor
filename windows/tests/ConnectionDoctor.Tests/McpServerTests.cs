@@ -293,6 +293,48 @@ public sealed class McpServerTests
         Assert.Single(json["incidents"]!.AsArray());
     }
 
+    [Fact]
+    public void InvalidIdsVersionsAndMethodsAreRejectedNotDispatched()
+    {
+        var responses = RoundTrip(
+            new NullToolHost(),
+            """{"jsonrpc":"2.0","id":true,"method":"ping"}""",           // boolean id → -32600 (id null)
+            """{"jsonrpc":"2.0","method":42}""",                       // non-string method on a notification → still -32600
+            """{"id":5,"method":"ping"}""",                            // missing jsonrpc → -32600
+            """{"jsonrpc":"1.0","id":6,"method":"ping"}""",            // wrong version → -32600
+            """{"jsonrpc":"2.0","id":8,"method":"ping"}""");           // and we are still serving
+
+        Assert.Equal(5, responses.Count);
+        Assert.Equal(-32600, responses[0]["error"]!["code"]!.GetValue<int>());
+        Assert.Null(responses[0]["id"]);
+        Assert.Equal(-32600, responses[1]["error"]!["code"]!.GetValue<int>());
+        Assert.Equal(-32600, responses[2]["error"]!["code"]!.GetValue<int>());
+        Assert.Equal(5, responses[2]["id"]!.GetValue<int>());
+        Assert.Equal(-32600, responses[3]["error"]!["code"]!.GetValue<int>());
+        Assert.NotNull(responses[4]["result"]);
+        Assert.Equal(8, responses[4]["id"]!.GetValue<int>());
+    }
+
+    [Fact]
+    public void SharedParentIsNeverResolvedFromEvidenceAfterTheIncident()
+    {
+        var start = DateTimeOffset.Parse("2026-08-13T16:00:00-05:00");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub");
+        var keyboard = SnapshotComparerTests.Device(@"HID\VID_046D&PID_C08A&MI_01\KEYBOARD", "Keyboard", "HID Keyboard Device", hub.InstanceId);
+        var mouse = SnapshotComparerTests.Device(@"HID\VID_046D&PID_C08A&MI_00\MOUSE", "Mouse", "HID-compliant mouse", hub.InstanceId);
+        RecorderEntry[] recording =
+        [
+            new RecorderEntry(start, RecorderEntryKinds.DeviceDisappeared, keyboard, new PowerState(true, 100, 0), null),
+            new RecorderEntry(start.AddSeconds(1), RecorderEntryKinds.DeviceDisappeared, mouse, new PowerState(true, 100, 0), null),
+            // The hub only shows up in a snapshot taken *after* the incident (e.g. once it re-enumerated).
+            RecorderEntry.FullSnapshot(SnapshotComparerTests.Snapshot(hub, keyboard, mouse) with { CapturedAt = start.AddMinutes(10) }),
+            new RecorderEntry(start.AddMinutes(11), RecorderEntryKinds.DeviceAppeared, hub, new PowerState(true, 100, 0), null)
+        ];
+        var incident = IncidentStitcher.Stitch(recording).Select(i => ContractV1.ToIncident(i, recording)).First();
+        Assert.Equal(2, incident.DevicesLost.Count);
+        Assert.Null(incident.SharedParent);
+    }
+
     private static List<JsonNode> RoundTrip(IMcpToolHost host, params string[] lines)
     {
         var input = new StringReader(string.Join('\n', lines) + "\n");
