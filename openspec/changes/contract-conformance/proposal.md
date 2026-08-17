@@ -47,11 +47,17 @@ USB root under the first TB device, disagreeing with TBDoctor's own topology.
    - JSONL trim forces a fresh `fullSnapshot` on both.
    - `host.arch` enum `arm64|x86_64`; timestamps with offset on both;
      `tb.route` integer.
-   - **Stable identity (issue #27):** `host.id` = hashed platform UUID
-     (IOPlatformUUID / MachineGuid), emitted by both; the dashboard keys hosts
-     on it and falls back to `host.name`. `node.serialHash` (opt) when the OS
-     exposes a serial — hashed, never raw — so two same-model docks are
-     distinguishable. Both additive.
+   - **Stable identity, scoped (issue #27, privacy correction from review):**
+     `host.id` = an opaque random per-installation UUID persisted in the data
+     directory — survives renames, regenerates on reinstall, **never derived
+     from hardware identifiers**; the dashboard keys hosts on it and falls
+     back to `host.name`. `node.unitKey` (opt) = HMAC of the serial under a
+     per-installation secret, so two same-model docks are distinguishable
+     *locally* without exporting or globally-hashing the serial. `contract
+     --redact` replaces `host.id` with an export-scoped pseudonym and drops
+     `unitKey` for bundles that leave the machine. Tenant-scoped or
+     platform-supplied identity is a fleet-integration concern. Both fields
+     additive.
 5. **Layout copies converge.** Excalidraw export moves to
    `dashboard/src/domain/excalidraw.ts` over the TS layout engine (already
    invariant-tested). `scripts/build-ui` also emits it as one self-contained

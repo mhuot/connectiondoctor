@@ -38,7 +38,7 @@ only; breaking changes bump the version.
 | `schema` | Literal `connection-contract/v1` |
 | `host.os` | `macos` \| `windows` |
 | `host.model` *(opt)* | Hardware model identifier |
-| `host.id` *(opt, proposed)* | Stable, privacy-preserving endpoint identity that survives renames: SHA-256 of the platform UUID (IOPlatformUUID / MachineGuid), hex, truncated to 32 chars. Consumers key hosts on it when present, `host.name` otherwise. Added by `contract-conformance` (issue #27) |
+| `host.id` *(opt, proposed)* | **Opaque, random, per-installation** endpoint identity (UUIDv4 generated on first run, persisted in the data directory). Survives hostname changes; regenerates on reinstall or when the data directory is removed. **Not derived from hardware** — never a hash of IOPlatformUUID / MachineGuid, which would be a global tracking identifier. Consumers key hosts on it when present, `host.name` otherwise. Portable exports may replace it with an export-scoped pseudonym so two shared bundles are not linkable (`contract --redact`, `contract-conformance`). Managed-fleet correlation uses a platform-supplied endpoint ID or a tenant-keyed HMAC — fleet-integration milestone, not this field. (issue #27) |
 | `displaysKnown` | `false` when the producer had no display session (SSH on macOS); distinct from "no displays attached" |
 | `findings` / `incidents` / `analysis` *(opt, proposed)* | Added by `contract-findings-incidents`: `analysis: {windowHours, generatedAt}` plus the two arrays, present only when recorded history exists. Absent ≠ empty |
 | `producer` *(opt, proposed)* | `{name: "tbdoctor"\|"connectiondoctor", version, commit?, dashboard?}` — added by `release-pipeline` |
@@ -101,7 +101,7 @@ grouped-loss attribution) works on that alone.
 | `tunneled` | Only for what USB4 genuinely tunnels (DP, USB3, PCIe). USB 2.0 is carried natively and must be `false` |
 | `usbClass` *(opt)* | bDeviceClass; 9 = hub even when the name says nothing |
 | `platform` *(opt)* | Untranslated native identifiers (locationID / instanceId), for debugging; consumers must not depend on it |
-| `serialHash` *(opt, proposed)* | SHA-256 of the device serial when the OS exposes one, hex, truncated to 16 chars — distinguishes two units of the same VID:PID without exporting the serial. Never the raw serial. Added by `contract-conformance` (issue #27) |
+| `unitKey` *(opt, proposed)* | Distinguishes two units of the same VID:PID **within one collector's data**: `HMAC-SHA256(serial, installationKey)` truncated to 16 hex chars, where `installationKey` is a random secret stored beside `host.id`. Keyed per installation, so it is not linkable across machines or exports and does not expose the serial (a plain serial hash is neither redaction nor safe for enumerable serials). The raw serial never leaves the machine. Cross-endpoint unit correlation ("the same bad dock following users") is a fleet-integration concern with a tenant-scoped key. (issue #27) |
 
 Thunderbolt/USB4 routers are nodes of kind `thunderbolt` with *(opt)*
 `tb: { routeString, depth, linkGbps, firmware }`.
