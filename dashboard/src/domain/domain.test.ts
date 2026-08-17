@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnvelope, parseEventStream } from '../contract/parse';
-import { buildViewTree, type ViewNode } from './topology';
+import { buildTopology, buildViewTree, builtInChip, filterBuiltIn, modeChip, type ViewNode } from './topology';
 import { layoutDiagram, type DiagramStyle } from './layout';
 import { detectMigrations } from './migrate';
 
@@ -184,5 +184,82 @@ describe('detectMigrations (the KVM case, from real recordings)', () => {
       { windowMs: 120_000 },
     );
     expect(result.migrations).toHaveLength(0);
+  });
+});
+
+describe('topology controls (dashboard-topology-controls, issues #42 #43)', () => {
+  /** A Surface-class laptop: integrated panel/touch/HID hang off an internal
+   *  root hub, and so does the external dock branch — the shape that makes a
+   *  naive "hide built-in" filter orphan what you plugged in. */
+  const surfaceLike = () => parseEnvelope({
+    schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+    host: { name: 'surface', os: 'windows', arch: 'arm64' },
+    power: { source: 'dock', externalConnected: true, batteryPresent: true },
+    displaysKnown: false,
+    nodes: [
+      { id: 'host', kind: 'host', name: 'surface', protocol: 'power' },
+      { id: 'usb:root', parentId: 'host', kind: 'hub', name: 'USB Root Hub (USB 3.0)', protocol: 'usb3', builtIn: true },
+      { id: 'usb:panel', parentId: 'usb:root', kind: 'device', name: 'Surface Calibrated Panel', protocol: 'usb2', builtIn: true },
+      { id: 'usb:touch', parentId: 'usb:root', kind: 'device', name: 'Surface Touch Screen Device', protocol: 'usb2', builtIn: true },
+      { id: 'usb:tp', parentId: 'usb:root', kind: 'hub', name: 'Surface Touchpad Device', protocol: 'usb2', builtIn: true, vidPid: '045E:0001', vendorName: 'Microsoft' },
+      { id: 'usb:tp1', parentId: 'usb:tp', kind: 'device', name: 'Surface Touchpad Configuration', protocol: 'usb2', builtIn: true, vidPid: '045E:0002', vendorName: 'Microsoft' },
+      { id: 'usb:tp2', parentId: 'usb:tp', kind: 'device', name: 'Surface HID Mouse', protocol: 'usb2', builtIn: true, vidPid: '045E:0003', vendorName: 'Microsoft' },
+      { id: 'tb:dock', parentId: 'usb:root', kind: 'thunderbolt', name: 'Surface Thunderbolt 4 Dock', protocol: 'thunderbolt', builtIn: false },
+      { id: 'usb:lghub', parentId: 'tb:dock', kind: 'hub', name: '4-Port USB 2.0 Hub', vendorName: 'LG Electronics Inc.', vidPid: '043E:9C04', protocol: 'usb2', builtIn: false },
+      { id: 'usb:kbd', parentId: 'usb:lghub', kind: 'device', name: 'Magic Keyboard', vidPid: '05AC:029F', protocol: 'usb2', builtIn: false },
+      { id: 'usb:unknown', parentId: 'usb:lghub', kind: 'device', name: 'USB Input Device', protocol: 'usb2' },
+    ],
+  });
+  const ids = (n: ViewNode): string[] => [n.id, ...n.children.flatMap(ids)];
+
+  it('default off hides integrated devices but keeps the internal root hub that feeds the dock', () => {
+    const { root, stats } = buildTopology(surfaceLike(), 'full', { includeBuiltIn: false });
+    const seen = ids(root);
+    expect(seen).not.toContain('usb:panel');
+    expect(seen).not.toContain('usb:touch');
+    expect(seen).not.toContain('usb:tp1');
+    expect(seen).toContain('usb:root');     // built-in, but external below it
+    expect(seen).toContain('tb:dock');
+    expect(seen).toContain('usb:lghub');
+    expect(seen).toContain('usb:kbd');
+    expect(seen).toContain('usb:unknown');  // absent builtIn = unknown, never hidden
+    expect(stats.builtInHidden).toBe(5);
+    expect(builtInChip(stats)).toBe('5 built-in hidden');
+  });
+
+  it('on shows everything and says so', () => {
+    const { root, stats } = buildTopology(surfaceLike(), 'full', { includeBuiltIn: true });
+    expect(ids(root)).toContain('usb:panel');
+    expect(stats.builtInHidden).toBe(0);
+    expect(builtInChip(stats)).toBe('6 built-in shown');
+  });
+
+  it('filterBuiltIn is a pure contract-level operation', () => {
+    const { nodes, hidden, total } = filterBuiltIn(surfaceLike().nodes);
+    expect(hidden).toBe(5); expect(total).toBe(6);
+    expect(nodes.map((n) => n.id)).toContain('usb:root');
+  });
+
+  it('mode chip changes without any scrolling: folded count vs surfaced count', () => {
+    // With built-ins shown, the touchpad hub folds its same-vendor children in
+    // physical mode — the "first surfaced node below the fold" case from #42.
+    const physical = buildTopology(surfaceLike(), 'physical', { includeBuiltIn: true });
+    const full = buildTopology(surfaceLike(), 'full', { includeBuiltIn: true });
+    expect(physical.stats.folded).toBeGreaterThan(0);
+    expect(modeChip('physical', physical.stats)).toMatch(/^\d+ internal folded into \d+ container/);
+    expect(modeChip('full', full.stats)).toBe(`${physical.stats.folded} surfaced`);
+    expect(full.stats).toEqual(physical.stats); // accounting is mode-independent
+  });
+
+  it('real recording: physical fold accounting matches the +N internal badges', () => {
+    const { root, stats } = buildTopology(envelope(), 'physical', { includeBuiltIn: true });
+    const badges = (n: ViewNode): number[] => [
+      ...n.badges.filter((b) => b.endsWith(' internal')).map((b) => parseInt(b, 10)),
+      ...n.children.flatMap(badges)];
+    const fromBadges = badges(root);
+    expect(fromBadges.reduce((a, b) => a + b, 0)).toBe(stats.folded);
+    expect(fromBadges.length).toBe(stats.containers);
+    expect(stats.builtInTotal).toBe(0); // this producer build predates builtIn
+    expect(builtInChip(stats)).toBeUndefined();
   });
 });

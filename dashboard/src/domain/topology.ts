@@ -45,6 +45,93 @@ const CONTROLLER_SILICON = new Set(['8087', '05E3', '1D5C', '2109', '1A40']);
 const vendorKey = (node: ContractNode): string | undefined =>
   node.vidPid?.slice(0, 4) ?? node.vendorName;
 
+export interface TopologyOptions {
+  /** Show nodes the producer marked `builtIn`. Default false: a dock-fault
+   *  tool is about what you plugged in; integrated devices are hidden — and
+   *  counted, so nothing disappears silently. */
+  includeBuiltIn: boolean;
+}
+
+export interface TopologyStats {
+  /** Physical-mode accounting, computed regardless of the mode shown. */
+  folded: number;
+  containers: number;
+  /** Built-in nodes hidden by the filter (0 when the filter is off). */
+  builtInHidden: number;
+  /** Built-in nodes the producer marked, whether shown or hidden. */
+  builtInTotal: number;
+}
+
+export interface Topology {
+  root: ViewNode;
+  stats: TopologyStats;
+}
+
+/** The view tree plus the numbers the controls need to give feedback that does
+ *  not depend on scroll position (issue #42) and to say how many built-ins are
+ *  hidden (issue #43). */
+export function buildTopology(env: ContractEnvelope, mode: TopoMode, options: TopologyOptions): Topology {
+  const { nodes, hidden, total } = options.includeBuiltIn
+    ? { nodes: env.nodes, hidden: 0, total: env.nodes.filter((n) => n.builtIn).length }
+    : filterBuiltIn(env.nodes);
+  const filtered: ContractEnvelope = { ...env, nodes };
+  const physical = buildViewTree(filtered, 'physical');
+  const root = mode === 'physical' ? physical : buildViewTree(filtered, 'full');
+  const { folded, containers } = foldStats(physical);
+  return { root, stats: { folded, containers, builtInHidden: hidden, builtInTotal: total } };
+}
+
+/** Text for the mode chip: what a switch changes, readable without scrolling. */
+export function modeChip(mode: TopoMode, stats: TopologyStats): string {
+  if (stats.folded === 0) return 'nothing folded';
+  return mode === 'physical'
+    ? `${stats.folded} internal folded into ${stats.containers} container${stats.containers === 1 ? '' : 's'}`
+    : `${stats.folded} surfaced`;
+}
+
+/** Text for the built-in chip; only shown when the producer classified any. */
+export function builtInChip(stats: TopologyStats): string | undefined {
+  if (stats.builtInTotal === 0) return undefined;
+  return stats.builtInHidden > 0
+    ? `${stats.builtInHidden} built-in hidden`
+    : `${stats.builtInTotal} built-in shown`;
+}
+
+/** Drop nodes the producer marked built-in — but only when nothing external
+ *  hangs below them: an internal root hub that feeds an external port stays,
+ *  because removing it would orphan what you plugged in. Absent `builtIn`
+ *  is unknown and is never hidden. */
+export function filterBuiltIn(nodes: ContractNode[]): { nodes: ContractNode[]; hidden: number; total: number } {
+  const hasExternalBelow = new Map<string, boolean>();
+  const childrenOf = new Map<string, ContractNode[]>();
+  for (const n of nodes) {
+    if (n.parentId) childrenOf.set(n.parentId, [...(childrenOf.get(n.parentId) ?? []), n]);
+  }
+  const external = (n: ContractNode): boolean => {
+    const cached = hasExternalBelow.get(n.id);
+    if (cached !== undefined) return cached;
+    hasExternalBelow.set(n.id, false); // cycle guard
+    const own = n.builtIn !== true;
+    const below = (childrenOf.get(n.id) ?? []).some(external);
+    const result = own || below;
+    hasExternalBelow.set(n.id, result);
+    return result;
+  };
+  const kept = nodes.filter((n) => n.builtIn !== true || external(n));
+  const total = nodes.filter((n) => n.builtIn === true).length;
+  return { nodes: kept, hidden: nodes.length - kept.length, total };
+}
+
+function foldStats(root: ViewNode): { folded: number; containers: number } {
+  let folded = 0, containers = 0;
+  const walk = (n: ViewNode): void => {
+    if (n.internalCount > 0) { folded += n.internalCount; containers += 1; }
+    n.children.forEach(walk);
+  };
+  walk(root);
+  return { folded, containers };
+}
+
 export function buildViewTree(env: ContractEnvelope, mode: TopoMode): ViewNode {
   const { roots } = buildTree(env.nodes);
   const power = powerNode(env);
@@ -133,6 +220,7 @@ function details(n: ContractNode): Detail[] {
     if (n.tb.routeString !== undefined) rows.push({ label: 'Route', value: String(n.tb.routeString) });
     if (n.tb.firmware) rows.push({ label: 'Firmware', value: n.tb.firmware });
   }
+  if (n.builtIn !== undefined) rows.push({ label: 'Built-in', value: n.builtIn ? 'yes (integrated device)' : 'no' });
   rows.push({ label: 'Contract id', value: n.id });
   return rows;
 }
