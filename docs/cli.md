@@ -50,7 +50,7 @@ does not silently omit the verb.
 | `collect` | Run the recorder in the foreground with no UI (SSH, services); refuses with exit 3 if another collector holds the store lock | log lines | win ✓ (`collect`/`watch` alias); **mac to add** (headless collector) |
 | `serve [port] [--bind lan]` | HTTP `/contract`, `/events` and the dashboard bundle | — | ✓ (mac `--serve`) |
 | `ui [port]` | Open the dashboard in the default browser; reuses a server on the port only if it answers with our `Server:` header, starts `serve` if the port is free, and refuses (exit 1) if something else holds it | — | win ✓; **mac to add** |
-| `mcp` | MCP server on stdio ([`mcp.md`](mcp.md)) | JSON-RPC | mac ✓ (`--mcp`); **win to add** (`add-windows-mcp`) |
+| `mcp` | MCP server on stdio ([`mcp.md`](mcp.md)) | JSON-RPC | ✓ (mac `--mcp` with `tb_*` names until `align-cli-verbs`; win `mcp`) |
 | `install` | Register the resident process (menu bar / tray + recorder) to start at login, start it now, and wait for its first heartbeat | text; exit 1 if no heartbeat within 10 s | win ✓; **mac to add** (`SMAppService`) |
 | `uninstall` | Remove the login registration; stop nothing that is running | text | win ✓; **mac to add** |
 | `status` | Is the recorder running, when was the last sample, where the data is | text; `0` healthy · `1` not running / stale / no heartbeat · `3` lock conflict | win ✓; **mac to add** |

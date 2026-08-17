@@ -21,6 +21,13 @@
   <!-- The Connection Dashboard bundle, staged by scripts/build-ui.ps1 and
        compiled in so users need no Node. Absent in a plain source build; the
        server reports that rather than failing. -->
+  <!-- MCP tool metadata (names, descriptions, input schemas) is the single
+       source in docs/mcp-tools.json, embedded so tools/list is byte-identical
+       to macOS. A test asserts the embedded copy equals the repo file. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\docs\mcp-tools.json" LogicalName="mcp-tools.json" />
+  </ItemGroup>
+
   <ItemGroup>
     <EmbeddedResource Include="ui/**/*" Exclude="ui/**/*.map">
       <LogicalName>ui/%(RecursiveDir)%(Filename)%(Extension)</LogicalName>

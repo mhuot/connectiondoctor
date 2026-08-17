@@ -60,9 +60,27 @@ dotnet publish .\src\ConnectionDoctor -c Release -r win-arm64 --self-contained f
 | `uninstall` | Remove the startup registration |
 | `ui` | Serve and open the Connection Dashboard in a browser |
 | `tray` | Notification-area status; serves the dashboard for the session |
+| `mcp` | MCP server on stdio for coding agents (see below) |
 
 The default baseline is stored under `%LOCALAPPDATA%\ConnectionDoctor\baseline.json`.
 Continuous events are stored under `%LOCALAPPDATA%\ConnectionDoctor\events.jsonl` and trimmed at 24 MB.
+
+## Use from a coding agent
+
+ConnectionDoctor is an MCP server, the same tool set TBDoctor serves on macOS
+([`docs/mcp.md`](../docs/mcp.md)), so Claude Code, Copilot in VS Code and Cursor
+can query the hardware directly instead of being handed pasted terminal output:
+
+```powershell
+claude mcp add connectiondoctor -- C:\path\to\ConnectionDoctor.exe mcp
+```
+
+Tools: `connection_probe` (current state as a Connection Contract v1 envelope),
+`connection_diagnose` (findings with evidence), `connection_incidents`
+(recorded fault incidents), `connection_diff` (what is missing versus the saved
+baseline), `connection_diagram` (interim: points at the dashboard's export until
+the shared Excalidraw export lands). Every result is a contract document, so an
+agent's instructions written against a Mac work here unchanged.
 
 ## The dashboard
 
@@ -134,7 +152,7 @@ TBDoctor's architecture transfers well, but its name and some diagnoses are spec
 3. Incident stitching that separates root events from downstream fallout.
 4. Modern Standby and lid-action awareness.
 5. QueryDisplayConfig display-path correlation and USB4 route details.
-6. MCP tools for probe, diagnosis, incidents, and diagrams.
+6. ~~MCP tools for probe, diagnosis, incidents, and diagrams.~~ Done: `mcp` verb, see "Use from a coding agent".
 7. USB4 router facts, so `tunneled` stops being a flat false.
 
 ## Naming

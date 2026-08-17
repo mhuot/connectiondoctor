@@ -93,7 +93,18 @@ internal sealed record DeviceNode(
     public string StableId => $"{ClassName}|{HardwareId}|{FriendlyName}".ToUpperInvariant();
 }
 
-internal sealed record Finding(string Severity, string Title, string Explanation, string Recommendation);
+/// <summary>
+/// A diagnosis with the evidence that produced it. Evidence is mandatory and
+/// non-empty by contract (docs/schema-v1.md): a verdict you cannot audit is
+/// an opinion. Severity is one of info | warning | critical.
+/// </summary>
+internal sealed record Finding(
+    string Severity,
+    string Title,
+    string Explanation,
+    string Recommendation,
+    IReadOnlyList<string> Evidence,
+    string? Confidence = null);
 
 internal sealed record ComparisonReport(
     IReadOnlyList<DeviceNode> Missing,

@@ -138,6 +138,101 @@ internal static class ContractV1
     public static string Serialize(ContractEnvelope envelope, bool indented = true) =>
         JsonSerializer.Serialize(envelope, indented ? IndentedOptions : CompactOptions);
 
+    /// <summary>Any contract document (report, diff, …) with the same JSON conventions as the envelope.</summary>
+    public static string SerializeDocument<T>(T document, bool indented = true) =>
+        JsonSerializer.Serialize(document, indented ? IndentedOptions : CompactOptions);
+
+    public static ContractHost ToHost(ConnectionSnapshot snapshot) => new()
+    {
+        Name = snapshot.HostName,
+        Arch = snapshot.OperatingSystemArchitecture.ToLowerInvariant()
+    };
+
+    /// <summary>
+    /// A subset of a snapshot's devices as contract nodes — used by the diff
+    /// document so `missing`/`added` render with the same code as topology.
+    /// Parents resolve within the snapshot the devices came from.
+    /// </summary>
+    public static IReadOnlyList<ContractNode> ToNodes(
+        ConnectionSnapshot snapshot,
+        IEnumerable<DeviceNode> devices)
+    {
+        var byId = snapshot.Devices.ToDictionary(device => device.InstanceId, StringComparer.OrdinalIgnoreCase);
+        var included = new HashSet<string>(
+            DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Select(device => device.InstanceId),
+            StringComparer.OrdinalIgnoreCase);
+        return devices.Select(device =>
+        {
+            var kind = KindOf(device);
+            return new ContractNode
+            {
+                Id = NodeId(device),
+                ParentId = ParentNodeId(device, byId, included),
+                Kind = kind,
+                Name = device.FriendlyName,
+                VendorName = device.Manufacturer,
+                VidPid = device.VidPid,
+                Protocol = ProtocolOf(kind, device.LinkSpeed),
+                LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
+                UsbClass = device.UsbClass,
+                Platform = new Dictionary<string, string> { ["instanceId"] = device.InstanceId }
+            };
+        }).ToList();
+    }
+
+    /// <summary>Schema Finding: string severity, mandatory evidence.</summary>
+    public static ContractFinding ToFinding(Finding finding) => new()
+    {
+        Severity = finding.Severity,
+        Title = finding.Title,
+        Explanation = finding.Explanation,
+        Evidence = finding.Evidence,
+        Recommendation = finding.Recommendation,
+        Confidence = finding.Confidence
+    };
+
+    /// <summary>
+    /// Schema Incident from a stitched group of recorded changes. Windows has no
+    /// kernel link events yet, so rootEvent is absent (origin unattributed);
+    /// sharedParent is set when every lost device hangs off one parent.
+    /// </summary>
+    public static ContractIncident ToIncident(ConnectionIncident incident)
+    {
+        var lost = incident.Events
+            .Where(entry => entry.Kind == RecorderEntryKinds.DeviceDisappeared && entry.Device is not null)
+            .Select(entry => entry.Device!)
+            .ToList();
+        var parents = lost
+            .Select(device => device.ParentInstanceId)
+            .Where(parent => parent is not null)
+            .Select(parent => parent!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        string? sharedParent = null;
+        if (lost.Count >= 2 && parents.Count == 1)
+        {
+            var parentDevice = incident.Events
+                .Select(entry => entry.Device)
+                .FirstOrDefault(device => device is not null &&
+                    device.InstanceId.Equals(parents[0], StringComparison.OrdinalIgnoreCase));
+            sharedParent = parentDevice is null ? $"usb:{parents[0]}" : NodeId(parentDevice);
+        }
+
+        return new ContractIncident
+        {
+            Start = incident.Start,
+            End = incident.End,
+            DevicesLost = lost.Select(device => new ContractIncidentDevice
+            {
+                VidPid = device.VidPid,
+                Name = device.FriendlyName,
+                NodeId = NodeId(device)
+            }).ToList(),
+            SharedParent = sharedParent
+        };
+    }
+
     /// <summary>Namespace-prefixed, and unique because InstanceId is unique.</summary>
     private static string NodeId(DeviceNode device) =>
         $"{Namespace(device)}:{device.InstanceId}";
@@ -316,6 +411,59 @@ internal sealed record ContractDisplay
     public int? RefreshHz { get; init; }
     public required bool BuiltIn { get; init; }
     public string? AttachedTo { get; init; }
+}
+
+/// <summary>docs/schema-v1.md § Documents — Report.</summary>
+internal sealed record ContractReport
+{
+    public string Schema { get; init; } = ContractV1.SchemaId;
+    public string Kind { get; init; } = "report";
+    public required ContractHost Host { get; init; }
+    public required DateTimeOffset GeneratedAt { get; init; }
+    public required double WindowHours { get; init; }
+    public IReadOnlyList<ContractFinding>? Findings { get; init; }
+    public IReadOnlyList<ContractIncident>? Incidents { get; init; }
+    public string? Note { get; init; }
+}
+
+/// <summary>docs/schema-v1.md § Documents — Diff.</summary>
+internal sealed record ContractDiff
+{
+    public string Schema { get; init; } = ContractV1.SchemaId;
+    public string Kind { get; init; } = "diff";
+    public required ContractHost Host { get; init; }
+    public required DateTimeOffset CapturedAt { get; init; }
+    public required DateTimeOffset BaselineCapturedAt { get; init; }
+    public required IReadOnlyList<ContractFinding> Findings { get; init; }
+    public required IReadOnlyList<ContractNode> Missing { get; init; }
+    public required IReadOnlyList<ContractNode> Added { get; init; }
+    public string? Note { get; init; }
+}
+
+internal sealed record ContractFinding
+{
+    public required string Severity { get; init; }
+    public required string Title { get; init; }
+    public required string Explanation { get; init; }
+    public required IReadOnlyList<string> Evidence { get; init; }
+    public required string Recommendation { get; init; }
+    public string? Confidence { get; init; }
+}
+
+internal sealed record ContractIncident
+{
+    public required DateTimeOffset Start { get; init; }
+    public required DateTimeOffset End { get; init; }
+    public string? RootEvent { get; init; }
+    public required IReadOnlyList<ContractIncidentDevice> DevicesLost { get; init; }
+    public string? SharedParent { get; init; }
+}
+
+internal sealed record ContractIncidentDevice
+{
+    public string? VidPid { get; init; }
+    public required string Name { get; init; }
+    public string? NodeId { get; init; }
 }
 
 internal sealed record ContractEvent

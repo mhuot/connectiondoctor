@@ -19,7 +19,11 @@ internal static class SnapshotComparer
                 "warning",
                 "Keyboard and mouse interfaces disappeared together",
                 $"{missingInputDevices.Count} input-device interfaces from the known-good state are absent, which suggests an upstream hub or connection failure.",
-                "Investigate their shared parent hub before reinstalling individual device drivers."));
+                "Investigate their shared parent hub before reinstalling individual device drivers.",
+                missingInputDevices
+                    .Select(device => $"Missing: {device.FriendlyName} [{device.VidPid ?? device.ClassName}]")
+                    .Take(8)
+                    .ToList()));
         }
 
         findings.AddRange(PowerDiagnosis.Analyze(current.Power));
@@ -61,11 +65,22 @@ internal static class SnapshotComparer
             var childNames = string.Join(
                 ", ",
                 strandedInputs.Select(device => device.FriendlyName).Distinct().Take(4));
+            var evidence = new List<string>
+            {
+                $"Display path present in both baseline and current state",
+                $"Hub absent now, present in baseline: {hubIdentity}"
+            };
+            evidence.AddRange(strandedInputs
+                .Select(device => $"Stranded behind it: {device.FriendlyName} [{device.VidPid ?? device.ClassName}]")
+                .Distinct()
+                .Take(6));
             yield return new Finding(
                 "critical",
                 "Display is active but a baseline USB hub branch is missing",
                 $"{hubIdentity} did not enumerate while the display path survived. Stranded input interfaces include: {childNames}. These are downstream fallout, not separate failures.",
-                "Cold power-cycle the monitor or dock containing the missing hub for at least 30 seconds, then reconnect USB-C.");
+                "Cold power-cycle the monitor or dock containing the missing hub for at least 30 seconds, then reconnect USB-C.",
+                evidence,
+                "high");
         }
     }
 
