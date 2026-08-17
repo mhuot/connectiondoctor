@@ -89,12 +89,12 @@ export function modeChip(mode: TopoMode, stats: TopologyStats): string {
     : `${stats.folded} surfaced`;
 }
 
-/** Text for the built-in chip; only shown when the producer classified any. */
+/** Text for the built-in chip; only shown when the producer classified any.
+ *  Always the hidden count — one quantity, comparable before and after the
+ *  toggle ("6 built-in hidden" → "0 built-in hidden"). */
 export function builtInChip(stats: TopologyStats): string | undefined {
   if (stats.builtInTotal === 0) return undefined;
-  return stats.builtInHidden > 0
-    ? `${stats.builtInHidden} built-in hidden`
-    : `${stats.builtInTotal} built-in shown`;
+  return `${stats.builtInHidden} built-in hidden`;
 }
 
 /** Drop nodes the producer marked built-in — but only when nothing external

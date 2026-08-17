@@ -10,4 +10,5 @@
 - [ ] 1.4 Windows analysis over envelope+events (vidPid+parent identity — removes the interim `note` from `connection_diff`/`diff`, issue #19; `adapter` always present, displays[], tunneled rule, linkDown/linkUp poll-derived, trim→snapshot); conformance test
 - [ ] 1.5 Dashboard: read display nodes with `attachedTo`; conformance test over `domain/`
 - [ ] 1.6 `domain/excalidraw.ts` + `build-ui` emits `excalidraw.js`; collectors embed and run it (JavaScriptCore / Jint) for `excalidraw` and `connection_diagram`; delete `Diagram.swift`, `ExcalidrawExport.swift`
+- [ ] 1.6b Dashboard render tests (jsdom + testing-library): topology controls default off, localStorage persistence, chip feedback without scrolling — review of #49; macOS gains a SwiftPM test target here (producer serialization: `builtIn`, findings/analysis shapes)
 - [ ] 1.7 Regenerate all shipped fixtures from current producers; delete stale `surface-chain.v1.json`

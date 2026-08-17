@@ -64,13 +64,13 @@ export function TopologyView({ envelope, recordedLabel }: {
         <Segmented options={['physical', 'full'] as const} value={mode}
           labels={{ physical: 'Physical', full: 'All device nodes' }}
           onChange={(v) => { localStorage.setItem('diagramMode', v); setMode(v); }} />
-        <span className="chip" data-testid="mode-chip">{modeChip(mode, topology.stats)}</span>
+        <span className="chip" data-testid="mode-chip" role="status" aria-live="polite">{modeChip(mode, topology.stats)}</span>
         <label className="toggle">
           <input type="checkbox" checked={includeBuiltIn}
             onChange={(e) => { localStorage.setItem('includeBuiltIn', String(e.target.checked)); setIncludeBuiltIn(e.target.checked); }} />
           Include built-in devices
         </label>
-        {builtInText && <span className="chip muted" data-testid="builtin-chip">{builtInText}</span>}
+        {builtInText && <span className="chip muted" data-testid="builtin-chip" role="status" aria-live="polite">{builtInText}</span>}
         <span className="spacer" />
         <span className="recorded">{recordedLabel}</span>
       </div>

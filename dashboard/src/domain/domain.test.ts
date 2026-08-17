@@ -231,7 +231,7 @@ describe('topology controls (dashboard-topology-controls, issues #42 #43)', () =
     const { root, stats } = buildTopology(surfaceLike(), 'full', { includeBuiltIn: true });
     expect(ids(root)).toContain('usb:panel');
     expect(stats.builtInHidden).toBe(0);
-    expect(builtInChip(stats)).toBe('6 built-in shown');
+    expect(builtInChip(stats)).toBe('0 built-in hidden');
   });
 
   it('filterBuiltIn is a pure contract-level operation', () => {

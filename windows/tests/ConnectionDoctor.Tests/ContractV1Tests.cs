@@ -281,6 +281,50 @@ public sealed class ContractV1Tests
         Assert.False(lines[2].TryGetProperty("nodeId", out _));
     }
 
+
+    [Fact]
+    public void BuiltInIsTheProducersClassificationAndEveryNodeIsStillExported()
+    {
+        // A built-in root hub feeding both an integrated touchpad and the
+        // external dock branch: the dashboard filters on the flag; the envelope
+        // keeps every node (dashboard-topology-controls, issues #42 #43).
+        var root = new DeviceNode(
+            @"USB\ROOT_HUB30\4&1",
+            "USB",
+            "USB Root Hub (USB 3.0)",
+            "Microsoft",
+            null,
+            @"USB\Class_09");
+        var touchpad = new DeviceNode(
+            @"HID\SURFACE_TOUCHPAD\1",
+            "HIDClass",
+            "Surface Touchpad Device",
+            "Microsoft",
+            root.InstanceId,
+            @"HID\Class_03");
+        var dock = SnapshotComparerTests.Device(
+            @"USB4\VID_045E&PID_0963\DOCK",
+            "USB",
+            "Surface Thunderbolt(TM) 4 Dock",
+            root.InstanceId);
+        var mouse = SnapshotComparerTests.Device(
+            @"USB\VID_046D&PID_C08A\MOUSE",
+            "Mouse",
+            "MX Vertical",
+            dock.InstanceId);
+
+        var nodes = Export(SnapshotComparerTests.Snapshot(root, touchpad, dock, mouse))
+            .GetProperty("nodes").EnumerateArray()
+            .ToDictionary(node => node.GetProperty("id").GetString()!, node => node);
+
+        // All four devices (plus the host root) are exported regardless of classification.
+        Assert.Equal(5, nodes.Count);
+        Assert.True(nodes.Single(pair => pair.Key.Contains("ROOT_HUB")).Value.GetProperty("builtIn").GetBoolean());
+        Assert.True(nodes.Single(pair => pair.Key.Contains("TOUCHPAD")).Value.GetProperty("builtIn").GetBoolean());
+        Assert.False(nodes.Single(pair => pair.Key.Contains("DOCK")).Value.GetProperty("builtIn").GetBoolean());
+        Assert.False(nodes.Single(pair => pair.Key.Contains("MOUSE")).Value.GetProperty("builtIn").GetBoolean());
+    }
+
     private static JsonElement Export(ConnectionSnapshot snapshot) =>
         JsonDocument.Parse(ContractV1.Serialize(ContractV1.ToEnvelope(snapshot))).RootElement;
 
