@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Text.RegularExpressions;
 using System.Text;
 using System.Text.Json;
 
@@ -148,7 +149,7 @@ internal sealed record Identity(string HostId, byte[] InstallationKey)
         {
             var identity = JsonSerializer.Deserialize<Identity>(File.ReadAllText(path), Options);
             if (identity is null ||
-                !Guid.TryParse(identity.HostId, out _) ||
+                !IsRandomUuid(identity.HostId) ||
                 identity.InstallationKey.Length != KeyBytes)
             {
                 return null;   // corrupt: not an identity we wrote
@@ -161,6 +162,21 @@ internal sealed record Identity(string HostId, byte[] InstallationKey)
             return null;
         }
     }
+
+    /// <summary>
+    /// The documented format for <c>host.id</c>: a random UUIDv4 (schema-v1.md
+    /// § host). <c>Guid.TryParse</c> is not enough — it accepts a v1 UUID,
+    /// which encodes a MAC address and a timestamp and is exactly the
+    /// hardware-derived, globally linkable identifier this field exists to
+    /// avoid. Accepting one would also make the producer emit documents its
+    /// own dashboard rejects, since the consumer enforces the same rule.
+    /// </summary>
+    internal static bool IsRandomUuid(string? value) =>
+        value is not null && RandomUuid.IsMatch(value);
+
+    private static readonly Regex RandomUuid = new(
+        "^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private static void TryDelete(string path)
     {

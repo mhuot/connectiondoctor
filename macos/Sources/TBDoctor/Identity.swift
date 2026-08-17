@@ -26,15 +26,23 @@ struct Identity: Codable {
     private static var cached: Identity?
     private static var failureLogged = false
 
-    /// The durable identity, or nil when there is none we can stand behind.
+    /// The durable identity for this process's data directory, or nil when
+    /// there is none we can stand behind.
     static var current: Identity? {
         lock.lock()
         defer { lock.unlock() }
         if let cached { return cached }
+        let resolved = resolve(in: Store.directory)
+        cached = resolved
+        return resolved
+    }
 
-        let url = Store.directory.appendingPathComponent(filename)
+    /// Read the identity in `directory`, creating one if it has none. Takes no
+    /// process-wide state, so a caller with its own directory — a test, or a
+    /// future per-scope export — neither sees nor disturbs anyone else's.
+    static func resolve(in directory: URL) -> Identity? {
+        let url = directory.appendingPathComponent(filename)
         if let existing = read(url) {
-            cached = existing
             return existing
         }
 
@@ -56,7 +64,6 @@ struct Identity: Codable {
             let written = payload.withUnsafeBytes { write(descriptor, $0.baseAddress, $0.count) }
             close(descriptor)
             if written == payload.count, let readBack = read(url) {
-                cached = readBack
                 return readBack
             }
             // Wrote nothing usable: leave no half-file behind claiming to be identity.
@@ -67,7 +74,6 @@ struct Identity: Codable {
 
         // Someone else created it (or we cannot write here at all).
         if let winner = read(url) {
-            cached = winner
             return winner
         }
 
@@ -75,10 +81,6 @@ struct Identity: Codable {
         return nil
     }
 
-    /// A device's identity within this installation: HMAC of its serial under
-    /// the installation key, truncated. Nil when there is no durable identity
-    /// or the device reports no serial — "same model, unit unknown" is a real
-    /// answer, and so is "this machine has no identity to key it with".
     /// A device's identity within this installation: HMAC of its serial under
     /// the installation key, truncated. An instance method, so a caller has to
     /// have resolved the identity first — one document, one answer.
@@ -94,10 +96,28 @@ struct Identity: Codable {
     private static func read(_ url: URL) -> Identity? {
         guard let data = try? Data(contentsOf: url),
               let decoded = try? JSONDecoder().decode(Identity.self, from: data),
-              UUID(uuidString: decoded.hostId) != nil,
+              isRandomUUID(decoded.hostId),
               decoded.installationKey.count == keyBytes
         else { return nil }
         return decoded
+    }
+
+    /// The documented format for `host.id`: a random UUIDv4 (schema-v1.md
+    /// § host). `UUID(uuidString:)` is not enough — it accepts a v1 UUID,
+    /// which encodes a MAC address and a timestamp and is precisely the
+    /// hardware-derived, globally linkable identifier this field exists to
+    /// avoid. Accepting one here would also make the producer emit documents
+    /// its own dashboard rejects, since the consumer checks the same rule.
+    static func isRandomUUID(_ value: String) -> Bool {
+        let parts = value.split(separator: "-", omittingEmptySubsequences: false)
+        guard parts.count == 5,
+              parts.map(\.count) == [8, 4, 4, 4, 12],
+              value.lowercased().allSatisfy({ $0.isHexDigit || $0 == "-" }),
+              parts[2].first == "4",
+              let variant = parts[3].first,
+              "89ab".contains(Character(variant.lowercased()))
+        else { return false }
+        return true
     }
 
     /// Say it once: a machine with no identity should not fill the log with it.

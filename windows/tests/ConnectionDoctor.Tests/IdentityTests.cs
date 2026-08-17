@@ -145,14 +145,40 @@ public sealed class IdentityDurabilityTests
         Assert.Null(Identity.Resolve(directory.Path));
     }
 
-    [Fact]
-    public void AnIdentityWithANonUuidHostIdIsRejected()
+    [Theory]
+    [InlineData("not-a-uuid")]
+    [InlineData("")]
+    // Parses as a Guid, and is not one of ours: a v1 UUID encodes a MAC
+    // address and a timestamp, which is the hardware-derived, globally
+    // linkable identifier this field exists to avoid.
+    [InlineData("3f9a1c2e-7b4d-1a61-9c8f-2e5b7d1a4c60")]
+    // v4 version nibble but a reserved variant: not RFC 4122 random either.
+    [InlineData("3f9a1c2e-7b4d-4a61-fc8f-2e5b7d1a4c60")]
+    public void AnIdentityThatIsNotARandomUuidIsRejected(string hostId)
     {
         using var directory = new TemporaryDirectory();
         File.WriteAllText(Identity.PathIn(directory.Path),
-            """{"hostId":"not-a-uuid","installationKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}""");
+            $$"""{"hostId":"{{hostId}}","installationKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}""");
 
+        // Rejected rather than tolerated, because the dashboard enforces the
+        // same rule: tolerating it here would have the producer emitting
+        // documents its own consumer refuses to parse.
+        Assert.False(Identity.IsRandomUuid(hostId));
         Assert.Null(Identity.Resolve(directory.Path));
+    }
+
+    [Fact]
+    public void TheIdentityWeGenerateSatisfiesTheFormatWeDemand()
+    {
+        using var directory = new TemporaryDirectory();
+        var identity = Identity.Resolve(directory.Path)!;
+
+        // The rule the consumer applies, applied to what we actually write —
+        // the check that keeps the two halves of the contract in step.
+        Assert.True(Identity.IsRandomUuid(identity.HostId));
+        Assert.Equal(identity.HostId, identity.HostId.ToLowerInvariant());
+        // And it survives a round trip through the file we persisted.
+        Assert.Equal(identity.HostId, Identity.Resolve(directory.Path)!.HostId);
     }
 
     [Fact]

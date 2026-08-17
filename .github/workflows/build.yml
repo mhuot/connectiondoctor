@@ -63,6 +63,9 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
           echo "have=true" >> "$GITHUB_OUTPUT"
+      - name: Test TBDoctor
+        working-directory: macos
+        run: swift test
       - name: Build TBDoctor.app
         working-directory: macos
         env:

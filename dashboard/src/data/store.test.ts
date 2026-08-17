@@ -374,6 +374,7 @@ describe('identity drives selection and file merging (review of #62)', () => {
 
 describe('loadFiles attributes a bare event stream to the right machine (review of #62)', () => {
   const ID = 'c1d2e3f4-a5b6-4c78-9d0e-1f2a3b4c5d6e';
+  const OTHER_ID = '5e6f7a8b-9c0d-4e1f-a2b3-c4d5e6f7a8b9';
   const contract = (name: string, id?: string) => JSON.stringify({
     schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
     host: { name, os: 'macos', arch: 'arm64', ...(id ? { id } : {}) },
@@ -427,6 +428,69 @@ describe('loadFiles attributes a bare event stream to the right machine (review 
     const orphan = withEvents.find((h) => !h.envelope)!;
     expect(orphan.events).toHaveLength(1);
     expect(orphan.historyReasons.join(' ')).toMatch(/2 hosts named "surface"/);
+  });
+
+  // The names the recorder and the bundle actually write. `events.jsonl` names
+  // no machine at all, and inventing one called "events" from it matched no
+  // envelope — so the ordinary at-home workflow, dropping the contract and the
+  // stream together, split one machine in two.
+  it('handles the real default bundle names in both orders', async () => {
+    const envelopeFile = file('contract.v1.json', contract('mini', ID));
+    const eventsFile = file('events.v1.jsonl', stream);
+
+    for (const order of [[envelopeFile, eventsFile], [eventsFile, envelopeFile]]) {
+      const hosts = await loadFiles(order, []);
+      expect(hosts).toHaveLength(1);
+      expect(hostKey(hosts[0])).toBe(ID);
+      expect(hosts[0].name).toBe('mini');       // never "events" or "events.v1"
+      expect(hosts[0].events).toHaveLength(1);
+      expect(hosts[0].envelope).toBeDefined();
+    }
+  });
+
+  // A stream that carries a sync point is self-describing, which beats any
+  // filename convention — including when the filename says nothing.
+  it('takes the host from a sync point inside the stream', async () => {
+    const withSnapshot = `{"t":"2026-08-17T00:00:00Z","kind":"fullSnapshot","snapshot":${contract('mini', ID)}}\n`;
+
+    const streamFirst = await loadFiles([file('events.jsonl', withSnapshot)], []);
+    expect(streamFirst[0].name).toBe('mini');
+
+    const joined = await loadFiles([file('contract.v1.json', contract('mini', ID))], streamFirst);
+    expect(joined).toHaveLength(1);
+    expect(hostKey(joined[0])).toBe(ID);
+    expect(joined[0].events).toHaveLength(1);
+  });
+
+  it('attaches an anonymous stream when exactly one host is loaded, and not when two are', async () => {
+    const one = await loadFiles([file('contract.v1.json', contract('mini', ID))], []);
+    const attached = await loadFiles([file('events.jsonl', stream)], one);
+    expect(attached).toHaveLength(1);
+    expect(attached[0].events).toHaveLength(1);
+
+    const two = await loadFiles([file('contract.v1.json', contract('other', OTHER_ID))], one);
+    const refused = await loadFiles([file('events.jsonl', stream)], two);
+    expect(refused).toHaveLength(3);
+    expect(refused.find((h) => !h.envelope)!.historyReasons.join(' ')).toMatch(/names no host and 2 are loaded/);
+  });
+
+  // Two ambiguous streams must accumulate in one entry. Creating a fresh one
+  // each time writes it to the same `name:` key and takes the previous
+  // stream's events and reasons down with it — evidence lost silently, which
+  // is the failure mode the unattributed entry exists to prevent.
+  it('keeps a second ambiguous stream instead of overwriting the first', async () => {
+    const two = await loadFiles([
+      file('surface.contract.v1.json', contract('surface', ID)),
+      file('surface.contract.v1.json', contract('surface', OTHER_ID)),
+    ], []);
+
+    const once = await loadFiles([file('surface.events.jsonl', stream)], two);
+    const twice = await loadFiles([file('surface.events.jsonl', stream)], once);
+
+    expect(twice).toHaveLength(3);                   // still one orphan, not two
+    const orphan = twice.find((h) => !h.envelope)!;
+    expect(orphan.events).toHaveLength(2);           // both streams survived
+    expect(orphan.historyReasons.filter((r) => r.includes('surface'))).toHaveLength(1);
   });
 
   it('a stream loaded before any envelope is adopted by the envelope that follows', async () => {
