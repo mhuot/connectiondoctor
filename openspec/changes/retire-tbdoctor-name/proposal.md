@@ -46,6 +46,13 @@ config makes the rename more expensive. This is the cheapest it will ever be.
   `scripts/build-ui.{sh,ps1}` following.
 - READMEs keep the origin story and screenshots; one "formerly TBDoctor" line
   appears in the README and the v0.2.0 notes, then goes away.
+- **The macOS MCP server's advertised identity moves with the rest.** It still
+  reports `serverInfo.name: "tbdoctor"` and `tb_*` tools while `docs/mcp.md`
+  says `connectiondoctor` and `connection_*` — a doc-vs-code drift that this
+  change must not leave behind. `align-cli-verbs` owns the tool renames and the
+  `tb_*` deprecation aliases; this change owns `serverInfo.name`, and whichever
+  lands second removes the last of the old identity. Neither may leave the
+  server advertising a name the documentation does not use.
 
 ## Non-goals
 Rewriting archived OpenSpec changes or git history — they are a record of what
