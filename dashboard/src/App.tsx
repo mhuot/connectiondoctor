@@ -16,6 +16,8 @@ type Tab = 'topology' | 'findings' | 'timeline' | 'fleet';
 export function App() {
   const [hosts, setHosts] = useState<HostData[]>([]);
   const [tab, setTab] = useState<Tab>('topology');
+  // Selection follows identity, not the display name: two machines can share
+  // a hostname, and one machine can change its own.
   const [activeHost, setActiveHost] = useState<string>();
   const [error, setError] = useState<string>();
   const [url, setUrl] = useState('');
@@ -63,7 +65,7 @@ export function App() {
     setError(errors.length > 0 ? errors.join(' · ') : undefined);
   };
 
-  const active = hosts.find((h) => h.name === activeHost) ?? hosts.find((h) => h.envelope);
+  const active = hosts.find((h) => hostKey(h) === activeHost) ?? hosts.find((h) => h.envelope);
 
   const onDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
@@ -100,7 +102,14 @@ export function App() {
         <span className="spacer" />
         {hosts.length > 1 && (
           <select value={active?.name} onChange={(e) => setActiveHost(e.target.value)}>
-            {hosts.map((h) => <option key={h.name}>{h.name}</option>)}
+            {hosts.map((h) => (
+              <option key={hostKey(h)} value={hostKey(h)}>
+                {/* Same-name hosts are still distinguishable to a reader. */}
+                {hosts.filter((other) => other.name === h.name).length > 1
+                  ? `${h.name} (${hostKey(h).slice(0, 8)})`
+                  : h.name}
+              </option>
+            ))}
           </select>
         )}
         {active && <HostStateChips host={active} />}

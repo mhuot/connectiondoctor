@@ -73,6 +73,9 @@ export interface ContractNode {
   /** Only for what USB4 genuinely tunnels (DP/USB3/PCIe); USB 2.0 is native. */
   tunneled?: boolean;
   usbClass?: number;
+  /** Distinguishes two units of the same VID:PID within one collector's data.
+   *  Keyed to the installation, so it means nothing anywhere else. */
+  unitKey?: string;
   /** Producer classification of integrated devices (internal keyboard,
    *  trackpad, camera, the built-in display's hub). Absent = unknown, never
    *  "external"; consumers filter on it as a view choice, never infer it. */

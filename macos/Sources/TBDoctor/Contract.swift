@@ -101,13 +101,15 @@ enum Contract {
     private static func hostInfo() -> [String: Any] {
         var info: [String: Any] = [
             "name": Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
-            // Random and per-installation: what makes a renamed Mac still one
-            // machine, without being derived from anything about the hardware.
-            "id": Identity.current.hostId,
             "os": "macos",
             "arch": machineArch(),
         ]
         if let model = sysctlString("hw.model") { info["model"] = model }
+        // Random and per-installation, and omitted entirely when there is no
+        // durable identity: an id that changes between runs would split one
+        // endpoint into many, so absent (fall back to the hostname) is the
+        // honest answer.
+        if let identity = Identity.current { info["id"] = identity.hostId }
         return info
     }
 

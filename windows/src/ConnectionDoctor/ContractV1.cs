@@ -172,9 +172,10 @@ internal static class ContractV1
     public static ContractHost ToHost(ConnectionSnapshot snapshot) => new()
     {
         Name = snapshot.HostName,
-        // Random and per-installation: what makes a renamed machine still one
-        // endpoint, without being derived from anything about the hardware.
-        Id = Identity.Current.HostId,
+        // Random and per-installation, and omitted entirely when there is no
+        // durable identity: an id that changes between runs would split one
+        // endpoint into many, so absent (fall back to the hostname) is honest.
+        Id = Identity.Current?.HostId,
         Arch = snapshot.OperatingSystemArchitecture.ToLowerInvariant()
     };
 

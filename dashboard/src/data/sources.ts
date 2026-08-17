@@ -1,28 +1,38 @@
 import { parseEnvelope, parseEventStream } from '../contract/parse';
-import { emptyContact, mergeRefresh, type HostData } from './store';
+import { emptyContact, hostKey, mergeRefresh, type HostData } from './store';
 
 /** Loads dropped/picked files: `.jsonl` → event stream, otherwise envelope.
  *  Host identity comes from the envelope, or the filename for bare streams. */
 export async function loadFiles(files: File[], existing: HostData[]): Promise<HostData[]> {
-  const hosts = new Map(existing.map((h) => [h.name, { ...h }]));
+  // Keyed by identity: two envelopes with the same hostname and different
+  // host.id are two machines and must not merge, and a renamed machine must
+  // not split. Event-only files have no envelope, so they key on their derived
+  // name until an envelope for the same host arrives.
+  const hosts = new Map(existing.map((h) => [hostKey(h), { ...h }]));
   for (const file of files) {
     const text = await file.text();
     if (file.name.endsWith('.jsonl')) {
       const { events, skippedLines } = parseEventStream(text);
       const name = hostNameFromFile(file.name);
-      const host = hosts.get(name) ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
+      const host = hosts.get(`name:${name}`) ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
       host.events = [...host.events, ...events];
       host.origin = `${host.origin === file.name ? '' : `${host.origin}, `}${file.name}`;
       host.contact = { ...host.contact, eventsAt: new Date().toISOString(), skippedLines: host.contact.skippedLines + skippedLines };
       if (skippedLines > 0) host.historyReasons = [...new Set([...host.historyReasons, `${skippedLines} skipped lines`])];
-      hosts.set(name, host);
+      hosts.set(hostKey(host), host);
     } else {
       const envelope = parseEnvelope(JSON.parse(text));
       const name = envelope.host.name;
-      const host = hosts.get(name) ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
+      // An envelope carrying an id adopts any events already loaded under that
+      // name — the same machine, now identified — and thereafter keys on the id.
+      const host = hosts.get(envelope.host.id ?? `name:${name}`)
+        ?? hosts.get(`name:${name}`)
+        ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
+      if (envelope.host.id) hosts.delete(`name:${host.name}`);
+      host.name = name;
       host.envelope = envelope;
       host.contact = { ...host.contact, contractAt: new Date().toISOString() };
-      hosts.set(name, host);
+      hosts.set(hostKey(host), host);
     }
   }
   return [...hosts.values()];

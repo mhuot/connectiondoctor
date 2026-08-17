@@ -281,9 +281,49 @@ describe('host identity (issue #27)', () => {
     expect(hostKey(host({ name: 'm3pro' }))).toBe('name:m3pro');   // events-only host
   });
 
+  it('rejects a present-but-invalid identity rather than falling back to hostname correlation', () => {
+    expect(() => envelopeWith({ id: 42 })).toThrow(/host\.id/);
+    expect(() => envelopeWith({ id: '' })).toThrow(/host\.id/);
+    expect(() => parseEnvelope({
+      schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+      host: { name: 'mini', os: 'macos', arch: 'arm64' },
+      power: { source: 'mains', externalConnected: true, batteryPresent: false },
+      nodes: [{ id: 'host', kind: 'host', name: 'mini', protocol: 'power' },
+              { id: 'usb:1', parentId: 'host', kind: 'device', name: 'Mouse', protocol: 'usb2', unitKey: 7 }],
+    })).toThrow(/unitKey/);
+  });
+
   it('parses host.id and node unitKey without requiring either', () => {
     const env = envelopeWith({ id: 'abc-123' });
     expect(env.host.id).toBe('abc-123');
     expect(envelopeWith({}).host.id).toBeUndefined();
+  });
+});
+
+describe('identity drives selection and file merging (review of #62)', () => {
+  const envOf = (name: string, id?: string) => parseEnvelope({
+    schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+    host: { name, os: 'macos', arch: 'arm64', ...(id ? { id } : {}) },
+    power: { source: 'mains', externalConnected: true, batteryPresent: false },
+    nodes: [{ id: 'host', kind: 'host', name, protocol: 'power' }],
+  });
+
+  it('two same-name machines stay two entries and are separately selectable', () => {
+    const a = host({ name: 'surface', envelope: envOf('surface', 'id-a') });
+    const b = host({ name: 'surface', envelope: envOf('surface', 'id-b') });
+    const keys = new Set([hostKey(a), hostKey(b)]);
+    expect(keys.size).toBe(2);
+    // Selection by key finds exactly one of them.
+    const hosts = [a, b];
+    expect(hosts.filter((h) => hostKey(h) === hostKey(b))).toHaveLength(1);
+  });
+
+  it('a machine that gains an id keeps the events already loaded under its name', () => {
+    // This is the file-import path: events.jsonl first, envelope second.
+    const eventsOnly = host({ name: 'mini', events: [{ t: '2026-08-17T00:00:00Z', kind: 'linkDown' }] });
+    expect(hostKey(eventsOnly)).toBe('name:mini');
+    const identified = { ...eventsOnly, envelope: envOf('mini', 'id-mini') };
+    expect(hostKey(identified)).toBe('id-mini');
+    expect(identified.events).toHaveLength(1);   // the history came along
   });
 });

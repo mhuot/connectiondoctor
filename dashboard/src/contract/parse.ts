@@ -37,7 +37,9 @@ export function parseEnvelope(json: unknown): ContractEnvelope {
     schema: CONTRACT_SCHEMA,
     capturedAt,
     host: {
-      id: optString(host.id),
+      // Present-but-invalid is a producer bug, not a reason to fall back to
+      // hostname correlation: identity corruption must be loud.
+      id: asOptionalIdentity(host.id, 'host.id'),
       name: asString(host.name, 'host.name'),
       os: host.os === 'windows' ? 'windows' : 'macos',
       arch: asString(host.arch, 'host.arch'),
@@ -262,6 +264,7 @@ function normalizeNode(json: unknown, index: number): ContractNode {
     kind,
     name: asString(doc.name, `nodes[${index}].name`),
     vidPid: optString(doc.vidPid)?.toUpperCase(),
+    unitKey: asOptionalIdentity(doc.unitKey, `nodes[${index}].unitKey`),
     protocol,
     // USB 2.0 is carried natively, never tunneled — enforce rather than trust.
     tunneled:
@@ -319,6 +322,16 @@ function parseCapabilities(json: unknown): ContractAnalysis['capabilities'] {
     linkEvents: linkEvents as NonNullable<ContractAnalysis['capabilities']>['linkEvents'],
     baseline: baseline as NonNullable<ContractAnalysis['capabilities']>['baseline'],
   };
+}
+
+/** An identity string, when present, must be a non-empty string — never a
+ *  number or an object that would later be formatted into a key. */
+function asOptionalIdentity(v: unknown, label: string): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || v.length === 0) {
+    throw new ContractError(`${label} must be a non-empty string when present, got ${JSON.stringify(v)}`);
+  }
+  return v;
 }
 
 function optNumber(v: unknown): number | undefined {

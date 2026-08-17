@@ -74,3 +74,85 @@ public sealed class IdentityTests
             .Select(n => n!["unitKey"]?.GetValue<string>() ?? string.Empty).ToArray());
     }
 }
+
+/// <summary>
+/// Durability: an identity that changes between runs is worse than none — it
+/// splits one endpoint into many in every consumer that keys on it. So the
+/// only two acceptable answers are "the same one as last time" and "none".
+/// </summary>
+public sealed class IdentityDurabilityTests : IDisposable
+{
+    private readonly string directory = Path.Combine(Path.GetTempPath(), "cd-identity-" + Guid.NewGuid().ToString("n"));
+    private readonly string? previous = Environment.GetEnvironmentVariable("CONNECTIONDOCTOR_DIR");
+
+    public IdentityDurabilityTests()
+    {
+        Environment.SetEnvironmentVariable("CONNECTIONDOCTOR_DIR", directory);
+        Identity.ResetCacheForTesting();
+    }
+
+    public void Dispose()
+    {
+        Environment.SetEnvironmentVariable("CONNECTIONDOCTOR_DIR", previous);
+        Identity.ResetCacheForTesting();
+        try { Directory.Delete(directory, recursive: true); } catch (IOException) { }
+    }
+
+    [Fact]
+    public void ACorruptIdentityFileYieldsNoIdentityRatherThanANewOne()
+    {
+        Directory.CreateDirectory(directory);
+        // Whatever this is, it is not an identity we wrote: a short key.
+        File.WriteAllText(Identity.Path, """{"hostId":"11111111-1111-1111-1111-111111111111","installationKey":"AAAA"}""");
+        Identity.ResetCacheForTesting();
+
+        // It must not silently become a fresh identity that differs next run;
+        // the file is there and unusable, so the honest answer is none.
+        Assert.Null(Identity.Current);
+        Assert.Null(Identity.UnitKey("SERIAL-A"));
+    }
+
+    [Fact]
+    public void AnIdentityWithANonUuidHostIdIsRejected()
+    {
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Identity.Path,
+            """{"hostId":"not-a-uuid","installationKey":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="}""");
+        Identity.ResetCacheForTesting();
+
+        Assert.Null(Identity.Current);
+    }
+
+    [Fact]
+    public void TheEnvelopeOmitsHostIdWhenThereIsNoDurableIdentity()
+    {
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Identity.Path, "{ not json");
+        Identity.ResetCacheForTesting();
+
+        var json = System.Text.Json.Nodes.JsonNode.Parse(
+            ContractV1.Serialize(ContractV1.ToEnvelope(SnapshotComparerTests.Snapshot())))!;
+
+        // Absent, not invented: consumers fall back to the hostname, which is
+        // honest, rather than to a value that changes on the next request.
+        Assert.Null(json["host"]!["id"]);
+    }
+
+    [Fact]
+    public void ConcurrentFirstRunsAgreeOnOneIdentity()
+    {
+        Directory.CreateDirectory(directory);
+        // Every process that can start at once — collector, CLI, HTTP, MCP —
+        // racing to be the first. Exactly one file wins and everyone adopts it.
+        var results = new System.Collections.Concurrent.ConcurrentBag<string?>();
+        Parallel.For(0, 8, _ =>
+        {
+            Identity.ResetCacheForTesting();
+            results.Add(Identity.Current?.HostId);
+        });
+
+        var distinct = results.Where(id => id is not null).Distinct().ToList();
+        Assert.Single(distinct);
+        Assert.Equal(File.ReadAllText(Identity.Path).Contains(distinct[0]!), true);
+    }
+}
