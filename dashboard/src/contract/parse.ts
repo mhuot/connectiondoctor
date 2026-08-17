@@ -37,6 +37,7 @@ export function parseEnvelope(json: unknown): ContractEnvelope {
     schema: CONTRACT_SCHEMA,
     capturedAt,
     host: {
+      id: optString(host.id),
       name: asString(host.name, 'host.name'),
       os: host.os === 'windows' ? 'windows' : 'macos',
       arch: asString(host.arch, 'host.arch'),

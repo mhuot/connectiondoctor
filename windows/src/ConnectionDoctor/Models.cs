@@ -29,6 +29,29 @@ internal sealed record DeviceNode(
     /// <summary>bDeviceClass 9 - a hub even when the friendly name says nothing.</summary>
     public const int UsbHubClass = 9;
 
+    /// <summary>
+    /// The device's own serial, when it reports one. Windows puts it in the
+    /// third segment of the instance id — `USB\VID_045E&amp;PID_0963\0123456789` —
+    /// but only when the device actually supplies one; otherwise that segment
+    /// is a bus-generated path such as `6&amp;1a2b3c4d&amp;0&amp;2`, which describes where
+    /// it is plugged in rather than which unit it is. A leading '&' (or an
+    /// embedded '&' path form) means generated, so it is not a serial.
+    /// </summary>
+    public string? Serial
+    {
+        get
+        {
+            var segments = InstanceId.Split('\\');
+            if (segments.Length < 3)
+            {
+                return null;
+            }
+
+            var candidate = segments[^1];
+            return candidate.Length == 0 || candidate.Contains('&') ? null : candidate;
+        }
+    }
+
     private static readonly Regex VidPidPattern = new(
         @"VID_([0-9A-F]{4})&PID_([0-9A-F]{4})",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);

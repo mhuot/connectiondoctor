@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { emptyContact, hostContact, hostHistory, type HostData } from './data/store';
+import { emptyContact, hostContact, hostHistory, hostKey, type HostData } from './data/store';
 import { loadFiles, loadHttp, refreshHttpHosts } from './data/sources';
 import { TopologyView } from './components/TopologyView';
 import { TimelineView } from './components/TimelineView';
@@ -45,7 +45,11 @@ export function App() {
     if (!url) return;
     try {
       const host = await loadHttp(url.includes('://') ? url : `http://${url}`);
-      setHosts((prev) => [...prev.filter((h) => h.name !== host.name), host]);
+      // Replace by identity, not by name: a renamed host is the same endpoint
+      // and must not appear twice, and two machines sharing a hostname must
+      // not collapse into one.
+      const key = hostKey(host);
+      setHosts((prev) => [...prev.filter((h) => hostKey(h) !== key), host]);
       setUrl('');
       setError(undefined);
     } catch (err) {

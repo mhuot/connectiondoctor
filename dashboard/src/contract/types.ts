@@ -14,6 +14,10 @@ export const DEFICIT_THRESHOLD_MW = -2000;
 export type HostOS = 'macos' | 'windows';
 
 export interface ContractHost {
+  /** Opaque, random, per-installation. Survives a rename — which is exactly
+   *  what it exists for — and is never derived from hardware, so two exports
+   *  from one machine cannot be linked by a recipient. */
+  id?: string;
   name: string;
   os: HostOS;
   arch: string;

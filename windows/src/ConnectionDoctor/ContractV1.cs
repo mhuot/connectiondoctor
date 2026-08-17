@@ -77,6 +77,10 @@ internal static class ContractV1
                 Protocol = ProtocolOf(kind, device.LinkSpeed),
                 LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
                 UsbClass = device.UsbClass,
+                // Two identical docks are two units here and nothing anywhere
+                // else: the serial is keyed with a secret that stays on this
+                // machine, and is absent when the device reports no serial.
+                UnitKey = Identity.UnitKey(device.Serial),
                 // The producer's classification (dashboard-topology-controls):
                 // integrated panel/touch/HID and the internal buses they hang
                 // off are built-in; anything reached through an external bus
@@ -90,11 +94,7 @@ internal static class ContractV1
         return new ContractEnvelope
         {
             CapturedAt = snapshot.CapturedAt,
-            Host = new ContractHost
-            {
-                Name = snapshot.HostName,
-                Arch = snapshot.OperatingSystemArchitecture.ToLowerInvariant()
-            },
+            Host = ToHost(snapshot),
             Power = ToPower(snapshot.Power, nodes),
 
             // Native pixel sizes need QueryDisplayConfig (connectiondoctor#14).
@@ -172,6 +172,9 @@ internal static class ContractV1
     public static ContractHost ToHost(ConnectionSnapshot snapshot) => new()
     {
         Name = snapshot.HostName,
+        // Random and per-installation: what makes a renamed machine still one
+        // endpoint, without being derived from anything about the hardware.
+        Id = Identity.Current.HostId,
         Arch = snapshot.OperatingSystemArchitecture.ToLowerInvariant()
     };
 
@@ -202,6 +205,7 @@ internal static class ContractV1
                 Protocol = ProtocolOf(kind, device.LinkSpeed),
                 LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
                 UsbClass = device.UsbClass,
+                UnitKey = Identity.UnitKey(device.Serial),
                 Platform = new Dictionary<string, string> { ["instanceId"] = device.InstanceId }
             };
         }).ToList();
@@ -496,6 +500,7 @@ internal sealed record ContractCapabilities
 internal sealed record ContractHost
 {
     public required string Name { get; init; }
+    public string? Id { get; init; }
     public string Os => "windows";
     public required string Arch { get; init; }
     public string? Model { get; init; }
@@ -524,6 +529,8 @@ internal sealed record ContractNode
     public int? UsbClass { get; init; }
     /// <summary>Producer classification of integrated devices; absent means unknown.</summary>
     public bool? BuiltIn { get; init; }
+    /// <summary>HMAC of the device serial under this installation's key; absent when it reports none.</summary>
+    public string? UnitKey { get; init; }
     public IReadOnlyDictionary<string, string>? Platform { get; init; }
 }
 

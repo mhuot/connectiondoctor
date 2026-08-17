@@ -101,6 +101,9 @@ enum Contract {
     private static func hostInfo() -> [String: Any] {
         var info: [String: Any] = [
             "name": Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
+            // Random and per-installation: what makes a renamed Mac still one
+            // machine, without being derived from anything about the hardware.
+            "id": Identity.current.hostId,
             "os": "macos",
             "arch": machineArch(),
         ]
@@ -200,6 +203,9 @@ enum Contract {
         ]
         if let vendor = device.vendorName { node["vendorName"] = vendor }
         if let vidPid = device.vidPid { node["vidPid"] = vidPid }
+        // Two identical docks are two units here, and nothing anywhere else:
+        // the serial is keyed with a secret that never leaves this machine.
+        if let unitKey = Identity.unitKey(forSerial: device.serial) { node["unitKey"] = unitKey }
         if let bits { node["linkBitsPerSecond"] = bits }
         if let usbClass = device.deviceClass { node["usbClass"] = usbClass }
         // Producer classification of integrated devices (dashboard-topology-

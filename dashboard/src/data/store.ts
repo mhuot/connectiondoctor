@@ -30,6 +30,14 @@ export interface HostData {
 
 export const emptyContact = (): HostContact => ({ skippedLines: 0 });
 
+/** What makes two payloads the same machine. The producer's `host.id` when it
+ *  has one — a renamed laptop is still one endpoint, and two machines that
+ *  happen to share a hostname are still two — falling back to the name for
+ *  producers and recordings that predate it. */
+export function hostKey(host: { envelope?: ContractEnvelope; name: string }): string {
+  return host.envelope?.host.id ?? `name:${host.name}`;
+}
+
 export type ContactState = 'live' | 'stale' | 'offline';
 export type HistoryState = 'complete' | 'no-history' | 'envelope-only' | 'incomplete';
 

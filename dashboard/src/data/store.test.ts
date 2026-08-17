@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyContact, hostContact, hostHistory, mergeRefresh, type HostData } from './store';
+import { emptyContact, hostContact, hostHistory, hostKey, mergeRefresh, type HostData } from './store';
 import { ifMatchHeader } from './baseline';
 import { deviceCountSeries } from '../domain/series';
 import { parseEnvelope, parseEventStream, ContractError } from '../contract/parse';
@@ -247,5 +247,43 @@ describe('coverage reason vocabulary is extensible (review of #58)', () => {
     const state = hostHistory(h);
     expect(state.state).toBe('incomplete');
     expect(state.reasons).toEqual(expect.arrayContaining(['solar-flare', 'corrupt-lines']));
+  });
+});
+
+describe('host identity (issue #27)', () => {
+  const envelopeWith = (extra: Record<string, unknown>) => parseEnvelope({
+    schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+    host: { name: 'mini', os: 'macos', arch: 'arm64', ...extra },
+    power: { source: 'mains', externalConnected: true, batteryPresent: false },
+    nodes: [{ id: 'host', kind: 'host', name: 'mini', protocol: 'power' }],
+  });
+
+  it('a renamed machine is still one endpoint', () => {
+    const before = host({ name: 'mini', envelope: envelopeWith({ id: 'abc-123' }) });
+    const after = host({ name: 'mac-mini-office', envelope: parseEnvelope({
+      schema: 'connection-contract/v1', capturedAt: '2026-08-17T01:00:00Z',
+      host: { name: 'mac-mini-office', os: 'macos', arch: 'arm64', id: 'abc-123' },
+      power: { source: 'mains', externalConnected: true, batteryPresent: false },
+      nodes: [{ id: 'host', kind: 'host', name: 'mac-mini-office', protocol: 'power' }],
+    }) });
+    expect(hostKey(after)).toBe(hostKey(before));
+  });
+
+  it('two machines that share a hostname stay two endpoints', () => {
+    const a = host({ name: 'surface', envelope: envelopeWith({ id: 'aaa' }) });
+    const b = host({ name: 'surface', envelope: envelopeWith({ id: 'bbb' }) });
+    expect(hostKey(a)).not.toBe(hostKey(b));
+  });
+
+  it('falls back to the name for producers that predate host.id', () => {
+    const legacy = host({ name: 'm3pro', envelope: envelopeWith({}) });
+    expect(hostKey(legacy)).toBe('name:m3pro');
+    expect(hostKey(host({ name: 'm3pro' }))).toBe('name:m3pro');   // events-only host
+  });
+
+  it('parses host.id and node unitKey without requiring either', () => {
+    const env = envelopeWith({ id: 'abc-123' });
+    expect(env.host.id).toBe('abc-123');
+    expect(envelopeWith({}).host.id).toBeUndefined();
   });
 });
