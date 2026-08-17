@@ -19,7 +19,7 @@ would encode as `0/1/2` instead of `info/warning/critical`.
 Contract (additive, stays v1):
 - Envelope gains optional `findings: Finding[]` and `incidents: Incident[]`
   and `analysis: { windowHours, generatedAt, coverage: {availableFrom,
-  through, complete, reasons?} }` — the recorder states what it can vouch
+  through, complete, reasons?}, baseline?, capabilities? }` — the recorder states what it can vouch
   for, so consumers can tell an empty stream from a new recorder from a
   trimmed log.
 - `Finding.severity` is the string enum; `evidence[]` mandatory and non-empty;

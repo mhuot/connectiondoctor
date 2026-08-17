@@ -42,7 +42,7 @@ Capability `windows-events` (new); `timeline-view` (root-event kinds);
 Windows `BackgroundCollector.cs`, `Recorder.cs`, new `DeviceNotifications.cs`,
 `EtwListener.cs`, `ContractV1.cs` (`source` on events); `docs/schema-v1.md`
 (`source: kernel|poll|notification` on link and device events — the
-`contract-conformance` rule generalised); dashboard `incidents.ts`.
+`contract-conformance` rule generalised; `analysis.capabilities.linkEvents`); dashboard `incidents.ts`.
 
 ## Depends on
 `contract-conformance` (event `source` field and the incident fixtures it adds
