@@ -170,6 +170,46 @@ describe('conformance corpus', () => {
     expect(stitchIncidents([{ t: at(0), kind: 'deficitStart' }])).toEqual([]);
   });
 
+  // A later timestamp is not proof of continuity, and this is the distinction
+  // that keeps "unresolved for twenty minutes" from being asserted over a hole
+  // in the recording where the deficitEnd may well be sitting.
+  it('an open deficit across incomplete history keeps its start and drops its duration', () => {
+    const { envelope } = load('fault-power-deficit');
+    const at = (minutes: number) => new Date(Date.UTC(2026, 6, 4, 9, minutes)).toISOString();
+    const start = { t: at(0), kind: 'deficitStart' as const };
+    const coverage = (complete: boolean, reasons?: string[]) => ({
+      ...envelope,
+      capturedAt: at(20),
+      analysis: {
+        windowHours: 6,
+        generatedAt: at(20),
+        coverage: { availableFrom: at(0), through: at(20), complete, ...(reasons ? { reasons } : {}) },
+      },
+    });
+
+    // Continuous recording: the supply has been short the whole twenty minutes
+    // and saying so is a fact, not an inference.
+    const proven = stitchIncidents([start], coverage(true));
+    expect(proven).toHaveLength(1);
+    expect(proven[0].openDeficit).toEqual({ since: at(0), durationProven: true });
+
+    // A gap in the same window: the end may be inside it. The start is still
+    // worth showing — a deficit began and we lost the recording — but the
+    // duration is not ours to claim.
+    const unproven = stitchIncidents([start], coverage(false, ['gap']));
+    expect(unproven).toHaveLength(1);
+    expect(unproven[0].openDeficit).toEqual({ since: at(0), durationProven: false });
+
+    // No coverage at all is unknown, not health: absent ≠ complete.
+    expect(stitchIncidents([start], { ...envelope, capturedAt: at(20) })[0].openDeficit?.durationProven).toBe(false);
+
+    // A *closed* episode is measured between two recorded facts, so a gap
+    // elsewhere in the window does not make its duration less certain.
+    const closed = stitchIncidents([start, { t: at(5), kind: 'deficitEnd' }], coverage(false, ['gap']));
+    expect(closed).toHaveLength(1);
+    expect(closed[0].openDeficit).toBeUndefined();
+  });
+
   it('an incomplete window is never reported as health', () => {
     const { envelope, expected } = load('control-incomplete-history');
     expect(envelope.analysis?.coverage.complete).toBe(false);

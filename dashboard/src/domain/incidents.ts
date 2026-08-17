@@ -28,6 +28,17 @@ export interface Incident {
   rootEvent?: EventKind;
   devicesLost: Array<{ vidPid?: string; name: string }>;
   sharedParent?: { id: string; name: string };
+  /** Present when a deficit in this run began and never reported an end.
+   *
+   *  `durationProven` separates two situations a timestamp cannot tell apart.
+   *  If the recording is continuous from `since` to the last evidence, the
+   *  supply has been short that whole time and the duration is a fact. If the
+   *  window is incomplete — a gap, a trim, corrupt lines, or simply no
+   *  coverage to vouch for it — the missing `deficitEnd` may be sitting inside
+   *  the hole, and "twenty minutes later there was a snapshot" proves only
+   *  that twenty minutes passed. The start is still evidence worth showing;
+   *  the duration is not ours to claim. */
+  openDeficit?: { since: string; durationProven: boolean };
 }
 
 export function stitchIncidents(
@@ -65,6 +76,11 @@ export function stitchIncidents(
       ...(currentSnapshot ? [Date.parse(currentSnapshot.capturedAt)] : []),
     ].filter((t) => Number.isFinite(t)),
   );
+
+  // Whether the recording is continuous at all. Absent coverage is unknown,
+  // not health (schema § analysis: absent ≠ empty), so only an explicit
+  // `complete: true` licenses measuring a duration across the window.
+  const continuous = currentSnapshot?.analysis?.coverage.complete === true;
 
   const sorted = ordered.filter((e) => e.kind !== 'fullSnapshot');
   if (sorted.length === 0) return [];
@@ -106,7 +122,11 @@ export function stitchIncidents(
     // a desk being used, and reporting it is the false alarm that teaches
     // people to ignore the timeline. (The controls in docs/fixtures hold this
     // line from both sides: a five-second dip is silent, two minutes is not.)
-    .filter((g) => g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)) || sustainedDeficit(g, evidenceThrough))
+    .filter(
+      (g) =>
+        g.some((e) => e.kind === 'deviceRemoved' || ROOT_EVENT_KINDS.has(e.kind)) ||
+        deficitVerdict(g, evidenceThrough, continuous).kind !== 'none',
+    )
     .map((group) => {
       const lost = group
         .filter((e) => e.kind === 'deviceRemoved')
@@ -118,6 +138,10 @@ export function stitchIncidents(
         rootEvent: group.find((e) => ROOT_EVENT_KINDS.has(e.kind))?.kind,
         devicesLost: lost,
       };
+      const deficit = deficitVerdict(group, evidenceThrough, continuous);
+      if (deficit.kind === 'open') {
+        incident.openDeficit = { since: deficit.since, durationProven: deficit.durationProven };
+      }
       const before = topologyBefore(group[0].t);
       if (before && lost.length >= 2) {
         const parent = sharedParent(
@@ -137,18 +161,40 @@ export function stitchIncidents(
  *  goes quiet: `deficitStart`, then nothing but snapshots and heartbeats for
  *  hours. Measuring to the group's last event makes that episode zero
  *  seconds long, so the longer the fault runs unresolved the more certain the
- *  silence — the exact failure the sustained rule exists to prevent. */
-function sustainedDeficit(group: ContractEvent[], evidenceThrough: number): boolean {
-  let start: number | undefined;
+ *  silence — the exact failure the sustained rule exists to prevent.
+ *
+ *  Returns what the evidence supports, which is three answers and not two:
+ *  a closed episode is measured exactly, an open one over a continuous
+ *  recording is measured to the last evidence, and an open one over an
+ *  incomplete recording has a start and no knowable duration. */
+type DeficitVerdict =
+  | { kind: 'none' }
+  | { kind: 'sustained' }
+  | { kind: 'open'; since: string; durationProven: boolean };
+
+function deficitVerdict(
+  group: ContractEvent[],
+  evidenceThrough: number,
+  continuous: boolean,
+): DeficitVerdict {
+  let start: ContractEvent | undefined;
   for (const event of group) {
-    if (event.kind === 'deficitStart') start ??= Date.parse(event.t);
+    if (event.kind === 'deficitStart') start ??= event;
     if (event.kind === 'deficitEnd' && start !== undefined) {
-      if (Date.parse(event.t) - start >= SUSTAINED_DEFICIT_MS) return true;
+      // A closed episode is measured between two recorded facts, so a gap
+      // elsewhere in the window does not make its duration less certain.
+      if (Date.parse(event.t) - Date.parse(start.t) >= SUSTAINED_DEFICIT_MS) return { kind: 'sustained' };
       start = undefined;
     }
   }
-  if (start === undefined) return false;
-  return evidenceThrough - start >= SUSTAINED_DEFICIT_MS;
+  if (start === undefined) return { kind: 'none' };
+
+  // Enough time passed between the start and the last thing we know for this
+  // to be worth showing at all. That is a fact about timestamps and claims
+  // nothing about what happened in between — which is the whole point below.
+  if (evidenceThrough - Date.parse(start.t) < SUSTAINED_DEFICIT_MS) return { kind: 'none' };
+
+  return { kind: 'open', since: start.t, durationProven: continuous };
 }
 
 /** Deepest common ancestor of the removed nodes in the pre-incident tree —

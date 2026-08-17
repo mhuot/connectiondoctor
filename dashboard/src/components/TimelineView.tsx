@@ -89,6 +89,16 @@ export function TimelineView({ events, snapshot, recordedLabel, history, eventsE
             {inc.eventCount > 0 ? `${inc.eventCount} events` : (inc.end !== inc.start ? `until ${inc.end}` : 'single event')}
             {inc.devicesLost.length > 0 && ` · lost ${inc.devicesLost.length}: ${inc.devicesLost.map((d) => d.name).slice(0, 4).join(', ')}`}
           </span>
+          {inc.openDeficit && (
+            <em>
+              {inc.openDeficit.durationProven
+                ? `power deficit since ${inc.openDeficit.since}, never reported resolved`
+                /* A gap may hold the deficitEnd, so the start is evidence and
+                   the duration is not — saying "unresolved for 3 hours" over a
+                   hole in the recording would be inventing the hours. */
+                : `power deficit began ${inc.openDeficit.since}; history incomplete since, so whether it resolved is unknown`}
+            </em>
+          )}
           {inc.sharedParent && (
             <em>all behind {inc.sharedParent.name} — one upstream failure, not {inc.devicesLost.length} device failures</em>
           )}
