@@ -34,8 +34,14 @@ Contract (additive, stays v1):
   missing") flow into `findings[]` like any other. The dashboard gains
   **Capture baseline** / **Replace baseline** (explicit confirmation naming
   the old capture time) backed by `POST /baseline` — the first state-changing
-  route in `docs/embedding.md`, **served only on loopback**: a LAN-bound
-  server answers 403 because unauthenticated telemetry stays read-only.
+  route in `docs/embedding.md` § Mutations: loopback-only **and**
+  same-origin (`Origin` must equal the served origin; custom
+  `X-ConnectionDoctor-Request` header forces a preflight that mutation routes
+  answer without CORS headers; no wildcard `Access-Control-Allow-Origin` on
+  mutations), because CORS gates reads, not writes — any page in the browser
+  could otherwise POST to localhost. Replace is conditional on `If-Match:
+  <capturedAt>` (409 when stale) so a second tab cannot clobber a newer
+  baseline; 403 distinguishes origin/binding rejection.
 Producers:
 - macOS: `Diagnosis` findings + `Collector.deriveIncidents` mapped to schema;
   `Severity` gets string raw values.

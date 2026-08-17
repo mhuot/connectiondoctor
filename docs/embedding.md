@@ -32,7 +32,7 @@ that builds this repo and copies `dist` into its embed directory.
 | `GET /favicon.svg`, `GET /icons.svg` | those files |
 | `GET /contract` | Connection Contract v1 envelope |
 | `GET /events` | v1 events JSONL |
-| `POST /baseline` *(proposed, `contract-findings-incidents`)* | Capture (or, with `?replace=1`, replace) the known-good baseline from the current state; **loopback only** — a LAN-bound server answers `403` so the LAN surface stays read-only. Body empty; response is the stored envelope's `capturedAt` |
+| `POST /baseline` *(proposed, `contract-findings-incidents`)* | Capture, or replace, the known-good baseline from the current state. The first state-changing route, so it has its own rules — see "Mutations" below |
 | anything else | **404** |
 
 Unknown paths must 404 rather than fall back to `index.html`. The app has no
@@ -57,6 +57,39 @@ instead of an honest missing-file error.
   — the product token names the binary, so a fleet can tell them apart).
 - `Access-Control-Allow-Origin: *`, so a dashboard running against a Vite dev
   server can still read a collector on another port.
+
+## Mutations
+
+`POST /baseline` (and any future state-changing route) is **not** covered by
+the read-only rules above. "Loopback only" is necessary but not sufficient: a
+malicious page open in the user's browser can send a simple cross-origin POST
+to `http://localhost:8787` — CORS decides whether it can *read* the response,
+not whether the request is sent. So a mutation:
+
+- is served **only when bound to loopback**; a LAN-bound server answers `403`
+  with `{"error":"read-only-binding"}`;
+- **requires the request to be same-origin**: the `Origin` header must equal
+  the origin the bundle is served from (`http://localhost:<port>` or
+  `http://127.0.0.1:<port>`); missing, `null` or any other origin (a Vite dev
+  server, a LAN address, another site) → `403 {"error":"cross-origin"}`;
+- **requires the custom header `X-ConnectionDoctor-Request: 1`**, which makes
+  the request non-simple so browsers preflight it; the server answers
+  preflights for mutation routes **without** `Access-Control-Allow-Origin`, so
+  a cross-origin caller is blocked before the POST is ever sent (belt and
+  braces with the `Origin` check);
+- **never returns `Access-Control-Allow-Origin: *`** on a mutation response —
+  no CORS headers at all;
+- **replace is conditional**: `?replace=1` must carry `If-Match: "<capturedAt of
+  the baseline the client saw>"`; a mismatch (another tab already replaced it)
+  → `409 {"error":"stale","current":{"capturedAt":"…"}}` — a stale tab cannot
+  overwrite a newer baseline;
+- returns structured metadata: `201 {"baseline":{"capturedAt":"…","nodes":N},"replaced":false}` /
+  `200 …"replaced":true`; capture when a baseline already exists and
+  `replace` is not set → `409 {"error":"exists","current":{…}}`.
+
+Tests both hosts must pass: same-origin capture succeeds; a cross-origin
+simple POST is refused and never mutates; a POST to a LAN-bound server is
+refused; two tabs — the second replace with the old `If-Match` gets 409.
 
 ## Path safety
 
