@@ -233,100 +233,82 @@ internal static class ContractServer
 
     /// <summary>
     /// POST /baseline — capture, or with ?replace=1 replace, the known-good
-    /// baseline. Refused unless bound to loopback, same-origin, and carrying
-    /// X-ConnectionDoctor-Request. Replace is conditional on If-Match matching
-    /// the capture time the client was shown, so a stale tab cannot clobber a
-    /// newer baseline. Pure decision in BaselineDecision so it is testable
-    /// without a listener.
+    /// baseline. Refused unless bound to loopback, exactly same-origin, and
+    /// carrying X-ConnectionDoctor-Request. Replacement is a compare-and-swap:
+    /// If-Match must be the quoted capture time the client was shown, checked
+    /// against the file inside one cross-process lock (BaselineTransaction),
+    /// so a stale tab or a concurrent `baseline save` cannot clobber it.
+    /// See docs/embedding.md § Mutations.
     /// </summary>
     private static Payload Baseline(HttpListenerContext context)
     {
-        var existing = File.Exists(SnapshotStore.DefaultBaselinePath) ? TryLoadBaseline() : null;
-        var decision = BaselineDecision(
-            boundToLan,
-            context.Request.Headers["Origin"],
-            context.Request.Url?.Port ?? 0,
-            context.Request.Headers["X-ConnectionDoctor-Request"],
-            context.Request.Url?.Query.Contains("replace=1", StringComparison.Ordinal) == true,
-            context.Request.Headers["If-Match"],
-            existing?.CapturedAt);
-        if (decision is not null)
-        {
-            return decision;
-        }
-
-        var snapshot = DeviceProbe.Capture();
-        SnapshotStore.Save(snapshot, SnapshotStore.DefaultBaselinePath);
-        // A new baseline resets the fault/recovery history that described the old one.
-        BaselineStateFile.Write(new BaselineStateFile());
-        var nodes = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Count;
-        var replaced = existing is not null ? "true" : "false";
-        return Json(existing is null ? 201 : 200,
-            "{\"baseline\":{\"capturedAt\":\"" + snapshot.CapturedAt.ToString("O") + "\",\"nodes\":" + nodes + "},\"replaced\":" + replaced + "}");
-    }
-
-    /// <summary>
-    /// The refusal, or null when the mutation may proceed. Every rule from
-    /// docs/embedding.md § Mutations, with nothing else in the way.
-    /// </summary>
-    internal static Payload? BaselineDecision(
-        bool lan,
-        string? origin,
-        int port,
-        string? requestHeader,
-        bool replace,
-        string? ifMatch,
-        DateTimeOffset? existingCapturedAt)
-    {
-        if (lan)
+        if (boundToLan)
         {
             return Json(403, "{\"error\":\"read-only-binding\"}");
         }
 
-        string[] allowed = [$"http://localhost:{port}", $"http://127.0.0.1:{port}", $"http://[::1]:{port}"];
-        if (string.IsNullOrEmpty(origin) || !allowed.Contains(origin, StringComparer.OrdinalIgnoreCase))
+        var requestUrl = context.Request.Url;
+        if (requestUrl is null || !IsSameOrigin(context.Request.Headers["Origin"], requestUrl))
         {
             return Json(403, "{\"error\":\"cross-origin\"}");
         }
 
-        if (requestHeader != "1")
+        if (context.Request.Headers["X-ConnectionDoctor-Request"] is not "1")
         {
             return Json(403, "{\"error\":\"missing-request-header\"}");
         }
 
-        if (existingCapturedAt is not { } current)
-        {
-            return null; // nothing to overwrite
-        }
+        var replace = requestUrl.Query.Contains("replace=1", StringComparison.Ordinal);
+        var expected = ParseIfMatch(context.Request.Headers["If-Match"]);
+        var result = BaselineTransaction.Run(replace, expected, DeviceProbe.Capture, requireExpectedOnReplace: true);
 
-        if (!replace)
+        return result.Outcome switch
         {
-            return Json(409, "{\"error\":\"exists\",\"current\":{\"capturedAt\":\"" + current.ToString("O") + "\"}}");
-        }
-
-        var seenText = ifMatch?.Trim('"');
-        if (seenText is null || !DateTimeOffset.TryParse(seenText, out var seen) || seen != current)
-        {
-            return Json(409, "{\"error\":\"stale\",\"current\":{\"capturedAt\":\"" + current.ToString("O") + "\"}}");
-        }
-
-        return null;
+            BaselineTransaction.Outcome.Captured => Json(201, BaselineBody(result, replaced: false)),
+            BaselineTransaction.Outcome.Replaced => Json(200, BaselineBody(result, replaced: true)),
+            BaselineTransaction.Outcome.Exists => Json(409, Current("exists", result.CurrentCapturedAt)),
+            BaselineTransaction.Outcome.Stale => Json(409, Current("stale", result.CurrentCapturedAt)),
+            BaselineTransaction.Outcome.Busy => Json(503, "{\"error\":\"busy\"}"),
+            BaselineTransaction.Outcome.Unreadable => Json(500, "{\"error\":\"baseline-unreadable\"}"),
+            _ => Json(500, "{\"error\":\"write-failed\"}")
+        };
     }
 
-    private static ConnectionSnapshot? TryLoadBaseline()
+    private static string BaselineBody(BaselineTransaction.Result result, bool replaced) =>
+        "{\"baseline\":{\"capturedAt\":\"" + result.CapturedAt?.ToString("O") + "\",\"nodes\":" + result.Nodes + "},\"replaced\":" + (replaced ? "true" : "false") + "}";
+
+    private static string Current(string error, DateTimeOffset? capturedAt) =>
+        "{\"error\":\"" + error + "\",\"current\":{\"capturedAt\":\"" + capturedAt?.ToString("O") + "\"}}";
+
+    /// <summary>
+    /// Origin must equal the scheme and authority this request actually
+    /// arrived on. http://localhost:8787 and http://127.0.0.1:8787 are
+    /// different browser origins; accepting either would let a page served
+    /// from one drive a mutation on the other.
+    /// </summary>
+    internal static bool IsSameOrigin(string? origin, Uri requestUrl) =>
+        !string.IsNullOrEmpty(origin) &&
+        string.Equals(origin, $"{requestUrl.Scheme}://{requestUrl.Authority}", StringComparison.Ordinal);
+
+    /// <summary>
+    /// If-Match is exactly one strong ETag: a quoted timestamp. Unquoted,
+    /// weak (W/"…"), multiple values or `*` are rejected — a client that does
+    /// not send what it was shown does not get to replace anything.
+    /// </summary>
+    internal static DateTimeOffset? ParseIfMatch(string? header)
     {
-        try
-        {
-            return SnapshotStore.Load(SnapshotStore.DefaultBaselinePath);
-        }
-        catch (InvalidDataException)
+        if (header is null)
         {
             return null;
         }
-        catch (IOException)
+
+        var value = header.Trim();
+        if (value.Length < 3 || value[0] != '"' || value[^1] != '"' || value.AsSpan(1, value.Length - 2).Contains('"'))
         {
             return null;
         }
+
+        return DateTimeOffset.TryParse(value[1..^1], out var parsed) ? parsed : null;
     }
 
     private static Payload Json(int status, string body) =>

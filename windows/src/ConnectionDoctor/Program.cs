@@ -126,10 +126,36 @@ internal static class Program
             return 1;
         }
 
-        var destination = args.Skip(1).FirstOrDefault() ?? SnapshotStore.DefaultBaselinePath;
-        SnapshotStore.Save(DeviceProbe.Capture(), destination);
-        Console.WriteLine($"Saved known-good baseline to {Path.GetFullPath(destination)}");
-        return 0;
+        var destination = args.Skip(1).FirstOrDefault();
+        if (destination is not null && Path.GetFullPath(destination) != SnapshotStore.DefaultBaselinePath)
+        {
+            // An explicit path is a file the user manages themselves.
+            SnapshotStore.Save(DeviceProbe.Capture(), destination);
+            Console.WriteLine($"Saved known-good baseline to {Path.GetFullPath(destination)}");
+            return 0;
+        }
+
+        // The default baseline is shared with the dashboard's POST /baseline,
+        // so both writers use one locked, atomic transaction — and both reset
+        // the fault/recovery history that described the old baseline.
+        var result = BaselineTransaction.Run(replace: true, expectedCapturedAt: null, DeviceProbe.Capture, requireExpectedOnReplace: false);
+        switch (result.Outcome)
+        {
+            case BaselineTransaction.Outcome.Captured:
+            case BaselineTransaction.Outcome.Replaced:
+                Console.WriteLine($"Saved known-good baseline to {SnapshotStore.DefaultBaselinePath}" +
+                    (result.Outcome == BaselineTransaction.Outcome.Replaced ? $" (replaced the one captured {result.CurrentCapturedAt:yyyy-MM-dd HH:mm:ss})" : string.Empty));
+                return 0;
+            case BaselineTransaction.Outcome.Busy:
+                Console.Error.WriteLine("Another baseline write is in progress; try again.");
+                return 1;
+            case BaselineTransaction.Outcome.Unreadable:
+                Console.Error.WriteLine($"The existing baseline could not be read ({result.Detail}). Move or delete {SnapshotStore.DefaultBaselinePath} and run this again.");
+                return 1;
+            default:
+                Console.Error.WriteLine($"Could not write the baseline: {result.Detail}");
+                return 1;
+        }
     }
 
     private static int Diff(string? path)

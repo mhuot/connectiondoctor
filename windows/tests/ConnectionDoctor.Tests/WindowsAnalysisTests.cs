@@ -156,36 +156,180 @@ public sealed class WindowsAnalysisTests
     }
 
     [Theory]
-    // lan, origin, header, replace, ifMatch, existing → expected status (0 = allowed)
-    [InlineData(true, "http://localhost:8787", "1", false, null, false, 403)]     // LAN binding
-    [InlineData(false, null, "1", false, null, false, 403)]                        // no Origin (curl, or a simple cross-site POST)
-    [InlineData(false, "https://evil.example", "1", false, null, false, 403)]      // foreign origin
-    [InlineData(false, "http://localhost:8787", null, false, null, false, 403)]    // missing custom header
-    [InlineData(false, "http://localhost:8787", "1", false, null, false, 0)]       // first capture
-    [InlineData(false, "http://127.0.0.1:8787", "1", false, null, true, 409)]      // exists, no replace
-    [InlineData(false, "http://localhost:8787", "1", true, "stale-time", true, 409)] // stale If-Match
-    public void BaselineMutationRules(bool lan, string? origin, string? header, bool replace, string? ifMatch, bool exists, int expected)
-    {
-        var captured = DateTimeOffset.Parse("2026-08-16T09:00:00-05:00");
-        var match = ifMatch == "stale-time" ? captured.AddMinutes(-1).ToString("O") : ifMatch;
-        var decision = ContractServer.BaselineDecision(lan, origin, 8787, header, replace, match, exists ? captured : null);
+    // Origin must equal the scheme+authority the request arrived on — these are
+    // distinct browser origins, and a page on one must not drive the other.
+    [InlineData("http://localhost:8787", "http://localhost:8787/baseline", true)]
+    [InlineData("http://127.0.0.1:8787", "http://localhost:8787/baseline", false)]
+    [InlineData("http://localhost:8787", "http://127.0.0.1:8787/baseline", false)]
+    [InlineData("https://localhost:8787", "http://localhost:8787/baseline", false)]
+    [InlineData("http://localhost:8788", "http://localhost:8787/baseline", false)]
+    [InlineData("null", "http://localhost:8787/baseline", false)]
+    [InlineData(null, "http://localhost:8787/baseline", false)]
+    public void OriginMustMatchTheRequestOriginExactly(string? origin, string requestUrl, bool expected) =>
+        Assert.Equal(expected, ContractServer.IsSameOrigin(origin, new Uri(requestUrl)));
 
-        if (expected == 0)
-        {
-            Assert.Null(decision);
-        }
-        else
-        {
-            Assert.Equal(expected, decision!.Status);
-        }
+    [Theory]
+    // If-Match is exactly one strong ETag: a quoted timestamp.
+    [InlineData("\"2026-08-16T09:00:00.0000000-05:00\"", true)]
+    [InlineData("2026-08-16T09:00:00.0000000-05:00", false)]      // unquoted
+    [InlineData("W/\"2026-08-16T09:00:00.0000000-05:00\"", false)] // weak
+    [InlineData("*", false)]
+    [InlineData("\"a\", \"b\"", false)]                            // multiple
+    [InlineData("\"not-a-time\"", false)]
+    public void IfMatchMustBeOneQuotedTimestamp(string header, bool parses) =>
+        Assert.Equal(parses, ContractServer.ParseIfMatch(header) is not null);
+}
+
+public sealed class WindowsAnalysisIntegrityTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+    private static ConnectionSnapshot Current() =>
+        SnapshotComparerTests.Snapshot() with { CapturedAt = Now, Power = new PowerState(true, 100, 0) };
+    private static CollectorHeartbeat Beat(DateTimeOffset started, DateTimeOffset lastSample) =>
+        new(1234, started, lastSample, "events.jsonl");
+    private static readonly RecorderEntry[] OneChange =
+        [new RecorderEntry(DateTimeOffset.Parse("2026-08-17T09:00:00-05:00"), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null)];
+
+    [Fact]
+    public void ARecordedOutageInsideTheWindowMakesItIncomplete()
+    {
+        // The heartbeat looks healthy now — the collector recovered — but the
+        // gap it recorded is durable, so the window cannot claim completeness.
+        var inputs = new WindowsAnalysis.Inputs(OneChange, Beat(Now.AddHours(-24), Now.AddSeconds(-2)), null, null, null,
+            0, [new CollectorGap(Now.AddHours(-2), Now.AddHours(-1), "collector-not-running")]);
+        var result = WindowsAnalysis.Run(inputs, Current(), 6, Now)!;
+
+        Assert.False(result.Complete);
+        Assert.Contains("gap", result.Reasons);
     }
 
     [Fact]
-    public void CorrectIfMatchAllowsTheReplacement()
+    public void AnOutageOutsideTheWindowDoesNotTaintIt()
     {
-        var captured = DateTimeOffset.Parse("2026-08-16T09:00:00-05:00");
-        Assert.Null(ContractServer.BaselineDecision(false, "http://localhost:8787", 8787, "1", true, captured.ToString("O"), captured));
-        // Quoted ETag form too.
-        Assert.Null(ContractServer.BaselineDecision(false, "http://localhost:8787", 8787, "1", true, $"\"{captured:O}\"", captured));
+        var inputs = new WindowsAnalysis.Inputs(OneChange, Beat(Now.AddHours(-24), Now.AddSeconds(-2)), null, null, null,
+            0, [new CollectorGap(Now.AddHours(-20), Now.AddHours(-19), "collector-not-running")]);
+        Assert.True(WindowsAnalysis.Run(inputs, Current(), 6, Now)!.Complete);
+    }
+
+    [Fact]
+    public void CorruptEventLinesForceIncompleteCoverage()
+    {
+        var inputs = new WindowsAnalysis.Inputs(OneChange, Beat(Now.AddHours(-24), Now.AddSeconds(-2)), null, null, null, 4);
+        var result = WindowsAnalysis.Run(inputs, Current(), 6, Now)!;
+
+        Assert.False(result.Complete);
+        Assert.Contains("corrupt-lines", result.Reasons);
+    }
+
+    [Fact]
+    public void ContinuousRecorderVouchesForTheWholeWindowEvenWhenNothingChanged()
+    {
+        // One change three hours ago; the recorder has been up for a day. The
+        // window is complete and availableFrom is the window, not the change.
+        var inputs = new WindowsAnalysis.Inputs(OneChange, Beat(Now.AddDays(-1), Now.AddSeconds(-2)), null, null, null);
+        var result = WindowsAnalysis.Run(inputs, Current(), 6, Now)!;
+
+        Assert.True(result.Complete);
+        Assert.Equal(Now.AddHours(-6), result.AvailableFrom);
+    }
+
+    [Fact]
+    public void ADeficitThatDeepensWithoutOtherTransitionsStillQualifies()
+    {
+        // -3 W start (below the sustained threshold) deepening to -20 W, with no
+        // other transition until it ends: the deepening entries carry the evidence.
+        var start = Now.AddMinutes(-10);
+        var entries = new[]
+        {
+            new RecorderEntry(start, RecorderEntryKinds.DeficitStarted, null, new PowerState(true, 99, -3000), null),
+            new RecorderEntry(start.AddSeconds(20), RecorderEntryKinds.DeficitDeepened, null, new PowerState(true, 98, -12000), null),
+            new RecorderEntry(start.AddSeconds(40), RecorderEntryKinds.DeficitDeepened, null, new PowerState(true, 97, -20000), null),
+            new RecorderEntry(start.AddMinutes(2), RecorderEntryKinds.DeficitEnded, null, new PowerState(true, 96, -500), null)
+        };
+        var finding = Assert.Single(WindowsAnalysis.SustainedDeficit(entries, Now));
+        Assert.Contains(finding.Evidence, line => line.Contains("20.0 W"));
+    }
+
+    [Fact]
+    public void RecorderEmitsADeepeningEntryOnlyWhenItMattered()
+    {
+        var deviceless = SnapshotComparerTests.Snapshot();
+        ConnectionSnapshot WithPower(int rate) => deviceless with { CapturedAt = Now, Power = new PowerState(true, 90, rate) };
+
+        // Deepened by 5 W: worth recording.
+        Assert.Contains(Recorder.DetectChanges(WithPower(-5000), WithPower(-10000)),
+            entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
+        // Jitter of 200 mW: not worth a line.
+        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-5000), WithPower(-5200)),
+            entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
+        // Recovering, not deepening.
+        Assert.DoesNotContain(Recorder.DetectChanges(WithPower(-10000), WithPower(-5000)),
+            entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
+    }
+}
+
+public sealed class BaselineFaultEvidenceTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+
+    /// <summary>A dock branch present in the baseline and gone now.</summary>
+    private static (ConnectionSnapshot Baseline, ConnectionSnapshot Current) DockMissing()
+    {
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub", dock.InstanceId);
+        var mouse = SnapshotComparerTests.Device(@"USB\VID_046D&PID_C08A\MOUSE", "Mouse", "MX Vertical", hub.InstanceId);
+        return (SnapshotComparerTests.Snapshot(dock, hub, mouse) with { CapturedAt = Now.AddDays(-1) },
+                SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now });
+    }
+
+    [Fact]
+    public void AStaleRecorderStillReportsTheLiveBaselineFaultWithEvidence()
+    {
+        // The real Surface case: the recorder stopped days ago, so history is
+        // unknown — but the baseline mismatch in front of the user must still
+        // be explained, not swallowed by the coverage early return.
+        var (baseline, current) = DockMissing();
+        var stale = new WindowsAnalysis.Inputs(
+            [new RecorderEntry(Now.AddDays(-2), RecorderEntryKinds.DeviceDisappeared, null, new PowerState(true, 100, 0), null)],
+            new CollectorHeartbeat(1, Now.AddDays(-2).AddHours(-1), Now.AddDays(-2), "events.jsonl"),
+            null, baseline, null);
+
+        var result = WindowsAnalysis.Run(stale, current, 6, Now)!;
+
+        Assert.Equal(["recorder-stopped-before-window"], result.Reasons);
+        Assert.False(result.Complete);
+        Assert.Equal("active-fault", result.Baseline.State);
+        var finding = Assert.Single(result.Findings);            // the fault is explained
+        Assert.NotEmpty(finding.Evidence);
+        Assert.NotEmpty(finding.Recommendation);
+    }
+
+    [Fact]
+    public void EveryActiveFaultCarriesAFinding()
+    {
+        var (baseline, current) = DockMissing();
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
+            null, baseline, null);
+
+        var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
+        Assert.Equal("active-fault", result.Baseline.State);
+        Assert.NotEmpty(result.Findings);
+        Assert.All(result.Findings, finding =>
+        {
+            Assert.NotEmpty(finding.Evidence);
+            Assert.NotEmpty(finding.Recommendation);
+        });
+    }
+
+    [Fact]
+    public void AMatchingBaselineIsHealthyAndSaysNothing()
+    {
+        var (baseline, _) = DockMissing();
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddHours(-24), Now.AddSeconds(-2), "events.jsonl"),
+            null, baseline, null);
+
+        var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
+        Assert.Equal("healthy", result.Baseline.State);
+        Assert.Empty(result.Findings);
     }
 }

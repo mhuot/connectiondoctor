@@ -80,9 +80,20 @@ not whether the request is sent. So a mutation:
 - **never returns `Access-Control-Allow-Origin: *`** on a mutation response —
   no CORS headers at all;
 - **replace is conditional**: `?replace=1` must carry `If-Match: "<capturedAt of
-  the baseline the client saw>"`; a mismatch (another tab already replaced it)
-  → `409 {"error":"stale","current":{"capturedAt":"…"}}` — a stale tab cannot
-  overwrite a newer baseline;
+  the baseline the client saw>"` — **exactly one strong ETag**: a quoted
+  timestamp. Unquoted, weak (`W/"…"`), `*` or multiple values are refused. A
+  mismatch (another tab already replaced it) →
+  `409 {"error":"stale","current":{"capturedAt":"…"}}`;
+- **the `Origin` must equal the scheme and authority the request arrived on**;
+  `http://localhost:8787` and `http://127.0.0.1:8787` are different browser
+  origins and are not interchangeable;
+- **read, decide and write are one transaction** under a named cross-process
+  lock, so the CLI's `baseline save` and this route cannot interleave; the
+  write is atomic (temp file, then replace). It is **fail-closed**: an
+  existing baseline that cannot be read is `500 {"error":"baseline-unreadable"}`,
+  never treated as absent — treating it as absent would let a replace bypass
+  the check and discard a known-good state. A lock that cannot be taken in
+  time is `503 {"error":"busy"}`;
 - returns structured metadata: `201 {"baseline":{"capturedAt":"…","nodes":N},"replaced":false}` /
   `200 …"replaced":true`; capture when a baseline already exists and
   `replace` is not set → `409 {"error":"exists","current":{…}}`.
