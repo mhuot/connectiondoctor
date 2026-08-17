@@ -23,6 +23,69 @@
 - **WHEN** `tbdoctor install` returns 0
 - **THEN** a heartbeat newer than the install time exists — registration alone is not success
 
+### Requirement: Install composes the interfaces
+`install` and `uninstall` SHALL accept `--recorder`, `--dashboard`, `--mcp`, `--cli` and `--all`, acting on exactly the components named; bare `install` SHALL install the recorder and the dashboard, and bare `uninstall` SHALL remove every component this tool installed. `uninstall` SHALL NOT delete recorded history or a saved baseline. `status` SHALL report each component's state separately.
+
+#### Scenario: Nothing could be installed
+- **WHEN** `install --mcp` runs where no agent registration command and no writable agent config exist
+- **THEN** the exact registration line is printed, nothing is changed, and the command exits 1 — a script must not read "nothing happened" as success
+
+#### Scenario: Already installed is success, and says so
+- **WHEN** `install --cli` runs on a machine where this build's CLI is already on PATH
+- **THEN** nothing is written, the component line reads `already installed`, and the command exits **0** — the exit code answers whether the desired state is satisfied, not whether this run changed anything, so running `install` twice is not a failure
+
+#### Scenario: Uninstalling reports what it removed and what was already gone
+- **WHEN** `uninstall --recorder --mcp` runs on a machine where the recorder is installed and no MCP registration exists
+- **THEN** the recorder line reads `removed`, the MCP line reads `already absent`, and the command exits **0** — both components are in the requested state, and a script distinguishing "this machine had it" from "this machine never did" reads the words rather than the code
+
+#### Scenario: Some of it could not be removed
+- **WHEN** `uninstall --all` removes the recorder and dashboard but cannot remove the MCP registration because the agent's config is not writable
+- **THEN** the removed components stay removed, the failing line reads `not removed: <reason>` naming the file, and the command exits 4 (partial)
+
+#### Scenario: A PATH entry the user owns survives an uninstall
+- **WHEN** `uninstall --cli` runs on Windows where `%LOCALAPPDATA%\Programs\ConnectionDoctor` was added to the user PATH by the user rather than by `install`
+- **THEN** the exe is deleted, the PATH entry is left in place, the line reads `removed` rather than a partial or failed status — leaving a PATH we did not set is the correct outcome, not an incomplete one — and the output names both what was removed and what was deliberately left
+
+#### Scenario: A script asks whether anything is installed
+- **WHEN** a script needs to distinguish "everything I asked for", "none of it" and "some of it"
+- **THEN** it SHALL test the exit code as a set membership — `0` all, `1` none, `4` partial, `0` or `4` for "at least something" — and SHALL NOT order-compare the codes, and it SHALL read the per-component status words when it needs to know what actually changed — `installed` / `already installed` / `not installed: <reason>` for `install`, and `removed` / `already absent` / `not removed: <reason>` for `uninstall`
+
+#### Scenario: Some of it worked
+- **WHEN** `install --all` installs the recorder, dashboard and CLI but cannot register with an agent
+- **THEN** the successful components remain installed, the output names what did and did not happen, and the command exits 4 (partial), distinct from both success and total failure
+
+#### Scenario: No writable system PATH, and no elevation (macOS)
+- **WHEN** `install --cli` runs on macOS where `/usr/local/bin` is not writable
+- **THEN** the command creates a symlink in `~/.local/bin`, never prompts for elevation, exits 0, and — if that directory is not on the user's PATH — prints the exact line to add it
+
+#### Scenario: A standard non-admin Windows account
+- **WHEN** `install --cli` runs on Windows as a standard user with no Developer Mode and no `SeCreateSymbolicLinkPrivilege`
+- **THEN** the exe is **copied** to `%LOCALAPPDATA%\Programs\ConnectionDoctor` and that directory is appended to the user PATH under `HKCU\Environment`, no symlink is attempted, nothing is written to `%LOCALAPPDATA%\Microsoft\WindowsApps` (an App Execution Alias location, not a general binary target), no elevation is requested, and the output names the directory and states that the PATH change applies to a new shell
+
+#### Scenario: Uninstalling does not edit a PATH we did not set
+- **WHEN** `uninstall --cli` runs on Windows
+- **THEN** the copied exe is removed, and the user PATH entry is removed **only if this installation added it** — a PATH entry the user configured is left untouched
+
+#### Scenario: An agent config that is not ours
+- **WHEN** `--mcp` edits an agent's configuration file directly because no registration command exists
+- **THEN** the write is atomic with a backup kept, unrelated servers and unknown keys are preserved, the changed file is named in the output, and `uninstall --mcp` later removes only the entry this installation created
+
+#### Scenario: A headless recorder
+- **WHEN** `install --recorder` runs on a machine with no display session
+- **THEN** collection starts at login, nothing serves the dashboard, and `status` says recorder installed, dashboard not installed
+
+#### Scenario: An agent-only machine
+- **WHEN** `install --mcp` runs where an agent config exists
+- **THEN** the MCP server is registered as `connectiondoctor`, no resident process is installed, and `status` reflects both
+
+#### Scenario: No agent to register with
+- **WHEN** `install --mcp` runs where no agent config can be found or written
+- **THEN** the exact registration line is printed for the user to paste, and the command reports that nothing was installed rather than reporting success
+
+#### Scenario: Uninstalling one door
+- **WHEN** `uninstall --dashboard` runs on a machine with both installed
+- **THEN** the dashboard stops being served at login, the recorder keeps recording, and recorded history and any baseline are untouched
+
 ### Requirement: macOS gains baseline and diff
 `tbdoctor baseline save [path]` SHALL write a v1 envelope and `tbdoctor diff [baseline]` SHALL compare the current envelope against it by cross-platform identity (vidPid + parent), reporting findings, missing and added nodes.
 
