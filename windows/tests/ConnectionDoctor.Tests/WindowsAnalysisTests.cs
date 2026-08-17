@@ -726,3 +726,26 @@ public sealed class NothingToSayTests
             new WindowsAnalysis.Inputs([], null, null, new MemoryBaselineStore()), Quiet(), 6, Now));
     }
 }
+
+public sealed class HistoryStampRetentionTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+
+    [Fact]
+    public void RecoveryKeepsTheGenerationStampSoALaterCrashIsStillDetectable()
+    {
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var baseline = SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now.AddDays(-1) };
+        var faulted = new BaselineStateFile(FaultSince: Now.AddHours(-2), BaselineCapturedAt: baseline.CapturedAt);
+        var store = new MemoryBaselineStore(baseline, faulted);
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"), null, store);
+
+        // The devices came back: the state recovers…
+        var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
+        Assert.Equal("recovered", Assert.IsType<ContractBaselineState>(result.Baseline).State);
+
+        // …and the persisted history still names its baseline, so a later
+        // crash between a baseline write and its reset is still detectable.
+        Assert.Equal(baseline.CapturedAt, store.ReadHistory()!.BaselineCapturedAt);
+    }
+}

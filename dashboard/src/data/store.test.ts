@@ -184,3 +184,23 @@ describe('baseline mutation client shape (review of #55)', () => {
     expect(ifMatchHeader('2026-08-16T09:00:00.0000000-05:00')).toBe('"2026-08-16T09:00:00.0000000-05:00"');
   });
 });
+
+describe('baseline availability is separate from history coverage (review of #57)', () => {
+  it('parses capabilities.baseline and keeps coverage untouched', () => {
+    const env = parseEnvelope({
+      schema: 'connection-contract/v1', capturedAt: '2026-08-17T00:00:00Z',
+      host: { name: 'surface', os: 'windows', arch: 'arm64' },
+      power: { source: 'dock', externalConnected: true, batteryPresent: true },
+      nodes: [{ id: 'host', kind: 'host', name: 'surface', protocol: 'power' }],
+      analysis: {
+        windowHours: 6, generatedAt: '2026-08-17T00:00:00Z',
+        coverage: { availableFrom: '2026-08-16T18:00:00Z', through: '2026-08-17T00:00:00Z', complete: true },
+        capabilities: { linkEvents: 'unavailable', baseline: 'busy' },
+      },
+      findings: [],
+    });
+    expect(env.analysis?.coverage.complete).toBe(true);       // history is complete…
+    expect(env.analysis?.capabilities?.baseline).toBe('busy'); // …and the baseline is unknown
+    expect(env.analysis?.baseline).toBeUndefined();
+  });
+});

@@ -347,14 +347,10 @@ internal sealed class DeviceToolHost : IMcpToolHost
         var current = DeviceProbe.Capture();
         var analysis = WindowsAnalysis.Run(WindowsAnalysis.ReadInputs(), current, hours);
 
-        // No history at all: still say what the live state shows.
-        var findings = analysis?.Findings.ToList() ?? new List<Finding>(PowerDiagnosis.Analyze(current.Power));
-        if (analysis is null && File.Exists(SnapshotStore.DefaultBaselinePath))
-        {
-            var baseline = SnapshotStore.Load(SnapshotStore.DefaultBaselinePath);
-            findings.AddRange(SnapshotComparer.Compare(baseline, current).Findings
-                .Where(finding => findings.All(existing => existing.Title != finding.Title)));
-        }
+        // No analysis at all means nothing to say — the live findings and the
+        // baseline verdict already come from WindowsAnalysis, which is the one
+        // place that reads the baseline (fail-closed, under its lock).
+        var findings = analysis?.Findings.ToList() ?? [];
 
         var report = new ContractReport
         {
@@ -403,7 +399,20 @@ internal sealed class DeviceToolHost : IMcpToolHost
                 $"No baseline at {Path.GetFullPath(path)}. Save one while the setup works: `ConnectionDoctor.exe baseline save`.");
         }
 
-        var baseline = SnapshotStore.Load(path);
+        ConnectionSnapshot baseline;
+        try
+        {
+            baseline = SnapshotStore.Load(path);
+        }
+        catch (Exception exception) when (exception is InvalidDataException or JsonException or IOException or UnauthorizedAccessException)
+        {
+            // Same fail-closed rule as the analysis: an unreadable baseline is
+            // a message, never an exception out of a tool call.
+            return McpToolResult.Error(
+                $"The baseline at {Path.GetFullPath(path)} could not be read ({exception.Message}). " +
+                "Save a new one with `ConnectionDoctor.exe baseline save` once the setup is known good.");
+        }
+
         var current = DeviceProbe.Capture();
         return McpToolResult.Ok(ContractV1.SerializeDocument(BuildDiff(baseline, current)));
     }

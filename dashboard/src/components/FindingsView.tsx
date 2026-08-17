@@ -65,6 +65,11 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
   const cov = analysis.coverage;
   const window = `last ${analysis.windowHours} h · generated ${fmt(analysis.generatedAt)}`;
   const historyOk = cov.complete && (history === undefined || history.state === 'complete');
+  // The baseline is a separate question from the recording: it can be unknown
+  // (being replaced, unreadable) while the history is complete. Either one
+  // being unknown means "no findings" is not a claim this panel may make.
+  const baselineAvailability = analysis.capabilities?.baseline ?? 'available';
+  const baselineKnown = baselineAvailability === 'available';
   const whyIncomplete = [...(cov.complete ? [] : (cov.reasons ?? ['unknown'])), ...(history?.reasons ?? [])];
 
   return (
@@ -76,6 +81,11 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
         <span className={`chip ${historyOk ? 'ok' : 'warn'}`} role="status" aria-live="polite">
           {historyOk ? 'window complete' : `history incomplete: ${[...new Set(whyIncomplete)].join(', ')}`}
         </span>
+        {!baselineKnown && (
+          <span className="chip warn" role="status" aria-live="polite">
+            baseline unknown ({baselineAvailability.replace(/-/g, ' ')})
+          </span>
+        )}
         {analysis.baseline && (
           <span className={`chip ${baselineTone(analysis.baseline.state)}`} role="status" aria-live="polite">
             baseline: {analysis.baseline.state}
@@ -92,7 +102,13 @@ export function FindingsView({ findings, analysis, hostName, eventCount = 0, las
           are what is *known right now* (live power, baseline comparison), and
           they are rendered regardless — a stale recorder must never hide the
           fault in front of the user. */}
-      {findings !== undefined && ranked.length === 0 && (
+      {findings !== undefined && ranked.length === 0 && !baselineKnown && (
+        <p className="empty">
+          Unknown — the known-good baseline could not be evaluated ({baselineAvailability.replace(/-/g, ' ')}),
+          so a comparison against it was not made. {historyOk ? 'Recorded history is complete for this window.' : ''}
+        </p>
+      )}
+      {findings !== undefined && ranked.length === 0 && baselineKnown && (
         historyOk
           ? <p className="empty">No findings in the last {analysis.windowHours} h — the recording covers the whole window.</p>
           : <p className="empty">Unknown — history is incomplete ({[...new Set(whyIncomplete)].join(', ') || 'no reason given'}), covering {fmt(cov.availableFrom)} → {fmt(cov.through)}. "No findings" cannot be claimed for this window.</p>

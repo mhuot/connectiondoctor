@@ -124,8 +124,14 @@ export interface ContractAnalysis {
   generatedAt: string;
   coverage: ContractCoverage;
   baseline?: { state: BaselineState; capturedAt?: string; faultSince?: string; recoveredAt?: string };
-  /** What the collector can attribute — a separate axis from coverage. */
-  capabilities?: { linkEvents?: 'kernel' | 'notification' | 'poll' | 'unavailable' };
+  /** What the collector can attribute or evaluate — a separate axis from
+   *  temporal coverage. `baseline` says whether the known-good comparison
+   *  could be made at all; anything but `available` means the baseline state
+   *  is unknown, even when the history is complete. */
+  capabilities?: {
+    linkEvents?: 'kernel' | 'notification' | 'poll' | 'unavailable';
+    baseline?: 'available' | 'busy' | 'unreadable' | 'history-unreadable' | 'history-unwritable';
+  };
 }
 
 export type EventKind =

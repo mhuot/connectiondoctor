@@ -413,10 +413,13 @@ internal static class WindowsAnalysis
                 ? new BaselineStateFile(BaselineCapturedAt: baseline.CapturedAt)
                 : stored with { BaselineCapturedAt = baseline.CapturedAt };
 
+            // Every transition keeps the stamp: an unstamped history would be
+            // accepted for whatever baseline came next, which is exactly the
+            // stale pairing the stamp exists to catch.
             var updated = faulted
                 ? history with { FaultSince = history.FaultSince ?? now, RecoveredAt = null }
                 : history.FaultSince is not null
-                    ? new BaselineStateFile(null, now, history.FaultSince)
+                    ? history with { FaultSince = null, RecoveredAt = now, LastFaultSince = history.FaultSince }
                     : history;
             if (updated != (stored ?? history) && !store.WriteHistory(updated))
             {
