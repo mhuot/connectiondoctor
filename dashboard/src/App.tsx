@@ -126,7 +126,8 @@ export function App() {
           ) : <p className="empty">Selected host has no envelope loaded.</p>)}
           {tab === 'findings' && (
             <FindingsView findings={active?.envelope?.findings} analysis={active?.envelope?.analysis}
-              hostName={active?.name} />
+              hostName={active?.name} eventCount={active?.events.length ?? 0}
+              lastEventAt={active?.events.at(-1)?.t} />
           )}
           {tab === 'timeline' && (
             <TimelineView events={active?.events ?? []} snapshot={active?.envelope}
