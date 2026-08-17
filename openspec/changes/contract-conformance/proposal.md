@@ -53,9 +53,12 @@ USB root under the first TB device, disagreeing with TBDoctor's own topology.
      from hardware identifiers**; the dashboard keys hosts on it and falls
      back to `host.name`. `node.unitKey` (opt) = HMAC of the serial under a
      per-installation secret, so two same-model docks are distinguishable
-     *locally* without exporting or globally-hashing the serial. `contract
-     --redact` replaces `host.id` with an export-scoped pseudonym and drops
-     `unitKey` for bundles that leave the machine. Tenant-scoped or
+     *locally* without exporting or globally-hashing the serial. `--redact`
+     and a `bundle` verb apply a **share scope** (`schema-v1.md` § Redaction):
+     one random token per bundle, `host.id` pseudonymised under it
+     consistently across the envelope, report and events of that bundle,
+     `platform{}`/`unitKey`/serials removed **recursively** including inside
+     `fullSnapshot` events; a different bundle is unlinkable. Tenant-scoped or
      platform-supplied identity is a fleet-integration concern. Both fields
      additive.
 5. **Layout copies converge.** Excalidraw export moves to

@@ -18,7 +18,10 @@ would encode as `0/1/2` instead of `info/warning/critical`.
 ## What
 Contract (additive, stays v1):
 - Envelope gains optional `findings: Finding[]` and `incidents: Incident[]`
-  and `analysis: { windowHours, generatedAt }`.
+  and `analysis: { windowHours, generatedAt, coverage: {availableFrom,
+  through, complete, reasons?} }` — the recorder states what it can vouch
+  for, so consumers can tell an empty stream from a new recorder from a
+  trimmed log.
 - `Finding.severity` is the string enum; `evidence[]` mandatory and non-empty;
   `confidence` optional string; `Incident` per the existing section, with
   `devicesLost[{vidPid,name}]`, optional `rootEvent`, `sharedParent`, `power`.
@@ -33,13 +36,16 @@ Producers:
   the Surface gets "Power supply under-served" too.
 Dashboard:
 - Parse optional `findings`/`incidents` (tolerant: absent ≠ empty).
-- **Per-host freshness and completeness (issue #29).** `/contract` and
-  `/events` tracked independently per host with last successful contact;
-  `skippedLines`, parse failures and `/events` fetch failures surfaced on that
-  host (today `sources.ts` swallows them, contradicting the archived
-  `contract-ingest` spec); each host shown as live / stale / offline /
-  envelope-only / history-incomplete with documented thresholds; retained
-  stale data visibly stale.
+- **Per-host contact and history quality, as two axes (issue #29, refined
+  in review of #34).** `/contract` and `/events` tracked independently per
+  host with last-success timestamps; **contact** = `live | stale | offline`;
+  **history** = `complete | no-history | envelope-only | incomplete` with
+  durable reasons (`skippedLines`, truncation, fetch failure, recorder
+  coverage shorter than the window). Completeness comes from the producer's
+  `analysis.coverage`, not from guessing at the first event; an incomplete
+  reason clears only when a later payload proves the requested window
+  complete. Today `sources.ts` swallows `/events` failures and drops
+  `skippedLines`, contradicting the archived `contract-ingest` spec.
 - New **Findings** panel next to the timeline: ranked by severity then
   confidence, each with evidence list and recommendation; "recorded" label;
   when a collector sends none, say "this collector reports no findings" (and

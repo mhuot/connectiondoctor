@@ -38,9 +38,9 @@ only; breaking changes bump the version.
 | `schema` | Literal `connection-contract/v1` |
 | `host.os` | `macos` \| `windows` |
 | `host.model` *(opt)* | Hardware model identifier |
-| `host.id` *(opt, proposed)* | **Opaque, random, per-installation** endpoint identity (UUIDv4 generated on first run, persisted in the data directory). Survives hostname changes; regenerates on reinstall or when the data directory is removed. **Not derived from hardware** — never a hash of IOPlatformUUID / MachineGuid, which would be a global tracking identifier. Consumers key hosts on it when present, `host.name` otherwise. Portable exports may replace it with an export-scoped pseudonym so two shared bundles are not linkable (`contract --redact`, `contract-conformance`). Managed-fleet correlation uses a platform-supplied endpoint ID or a tenant-keyed HMAC — fleet-integration milestone, not this field. (issue #27) |
+| `host.id` *(opt, proposed)* | **Opaque, random, per-installation** endpoint identity (UUIDv4 generated on first run, persisted in the data directory). Survives hostname changes and normal upgrades/reinstalls (which keep the data directory); regenerates only when identity state or the data directory is reset. **Not derived from hardware** — never a hash of IOPlatformUUID / MachineGuid, which would be a global tracking identifier. Consumers key hosts on it when present, `host.name` otherwise. Portable exports replace it with a **share-scoped** pseudonym (see § Redaction and share scope) so two shared bundles are not linkable while documents inside one bundle still join. Managed-fleet correlation uses a platform-supplied endpoint ID or a tenant-keyed HMAC — fleet-integration milestone, not this field. (issue #27) |
 | `displaysKnown` | `false` when the producer had no display session (SSH on macOS); distinct from "no displays attached" |
-| `findings` / `incidents` / `analysis` *(opt, proposed)* | Added by `contract-findings-incidents`: `analysis: {windowHours, generatedAt}` plus the two arrays, present only when recorded history exists. Absent ≠ empty |
+| `findings` / `incidents` / `analysis` *(opt, proposed)* | Added by `contract-findings-incidents`: `analysis: {windowHours, generatedAt, coverage}` plus the two arrays, present only when recorded history exists. Absent ≠ empty. **`coverage`** = `{availableFrom, through, complete: bool, reasons?: string[]}` — what the recorder can actually vouch for: `complete` is true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; `reasons` names why not (`recorder-started-inside-window`, `trimmed`, `gap`, `no-history`). Consumers show "unknown" rather than "none" whenever `complete` is false — an empty valid stream, a newly installed recorder and a trimmed log are indistinguishable without this |
 | `producer` *(opt, proposed)* | `{name: "tbdoctor"\|"connectiondoctor", version, commit?, dashboard?}` — added by `release-pipeline` |
 
 ## Power
@@ -101,6 +101,7 @@ grouped-loss attribution) works on that alone.
 | `tunneled` | Only for what USB4 genuinely tunnels (DP, USB3, PCIe). USB 2.0 is carried natively and must be `false` |
 | `usbClass` *(opt)* | bDeviceClass; 9 = hub even when the name says nothing |
 | `platform` *(opt)* | Untranslated native identifiers (locationID / instanceId), for debugging; consumers must not depend on it |
+| `nameRedacted` *(opt, proposed)* | `true` when a redacted export replaced a user-assigned name with a conservative label (see § Redaction). Explicit in the JSON Schema, not left to unknown-field tolerance |
 | `unitKey` *(opt, proposed)* | Distinguishes two units of the same VID:PID **within one collector's data**: `HMAC-SHA256(serial, installationKey)` truncated to 16 hex chars, where `installationKey` is a random secret stored beside `host.id`. Keyed per installation, so it is not linkable across machines or exports and does not expose the serial (a plain serial hash is neither redaction nor safe for enumerable serials). The raw serial never leaves the machine. Cross-endpoint unit correlation ("the same bad dock following users") is a fleet-integration concern with a tenant-scoped key. (issue #27) |
 
 Thunderbolt/USB4 routers are nodes of kind `thunderbolt` with *(opt)*
@@ -228,6 +229,73 @@ platforms; until then a producer that matches otherwise says so in `note`.
 [Excalidraw document](https://github.com/excalidraw/excalidraw/blob/master/packages/excalidraw/data/types.ts)
 (`{type: "excalidraw", version: 2, source, elements[], appState}`) — an
 external format, referenced not redefined here.
+
+### Redaction and share scope
+
+Documents that leave the machine — a support case, an issue attachment, a
+bundle for a colleague — are redacted under a **share scope**. Redaction
+**pseudonymises relational identity and removes non-relational identity**; it
+never breaks the graph.
+
+- **Scope token.** A generated high-entropy random token, one per bundle,
+  managed by the `bundle` verb and never shown to a home user by default.
+  `--scope <token>` exists so separate commands can join one bundle; a
+  friendly case label is **not** a valid token (it is not the HMAC key), and
+  reusing a token across bundles makes them linkable — the CLI warns.
+- **Pseudonymised, consistently within the scope** (HMAC under the token,
+  truncated, prefixed so the kind stays readable):
+  - `host.id` and **`host.name`** (`host-3f9a…`) — a hostname such as
+    `mikes-macbook` or an asset tag identifies the person as surely as an ID;
+  - **every `nodes[].id`**, which embeds locationIDs / instance IDs, and every
+    field that references one — `parentId`, `displays[].attachedTo`,
+    `incidents[].sharedParent`, `incidents[].devicesLost[].nodeId` where
+    present, event `nodeId`, diff `missing[]`/`added[]` ids — rewritten
+    **recursively**, including inside every `fullSnapshot` envelope in the
+    events, so topology, evidence and diffs still resolve;
+  - `unitKey` is dropped (it is already scoped to the installation and adds
+    nothing a recipient can use).
+- **Removed** recursively: `platform{}`, raw serials, `adapter.serial`, and any
+  other field the schema marks as native or personal.
+- **Names.** Product strings from device descriptors (`4-Port USB 2.0 Hub`,
+  `MX Vertical`) are model identity and are kept with `vidPid`/`vendorName`.
+  Names that the OS reports as **user-assigned** — display names, Bluetooth and
+  Apple device names such as `Mike's iPhone`, renamed peripherals — are
+  replaced by a conservative label built from evidence that stays
+  (`<vendorName> <kind>` or `<vidPid>`), and the node gains
+  `nameRedacted: true`. Producers classify which name fields are user-assigned
+  per platform; the manifest lists them.
+- **Manifest.** Every bundle carries `manifest.json`, versioned and
+  schema-checked:
+
+  ```json
+  { "schema": "connection-contract/v1", "kind": "bundle-manifest",
+    "generatedAt": "...", "host": { "id": "<pseudonym>", "name": "<pseudonym>" },
+    "files": ["contract.v1.json", "report.v1.json", "events.v1.jsonl"],
+    "coverage": { "availableFrom": "...", "through": "...", "complete": true },
+    "transformed": { "host.id": "pseudonymised", "host.name": "pseudonymised",
+                     "nodes[].id": "pseudonymised", "userAssignedNames": 2 },
+    "removed": ["platform", "unitKey", "serial", "adapter.serial"] }
+  ```
+
+  It contains only pseudonyms, categories, counts, filenames, times and
+  coverage. It **never** contains the scope token, the installation key, any
+  original identifier or name, or a before/after mapping; the manifest schema
+  test asserts that none of those appear. Because a file inside a zip cannot
+  be inspected "before sharing" without opening it, `bundle` **prints the same
+  safe summary to the terminal after creation** (and the dashboard shows it),
+  so the user sees what they are about to share.
+- `contract --redact` / `report --redact` / `diff --redact` on their own use an
+  implicit one-document scope. `bundle <out.zip> [--hours N] [--scope token]`
+  produces the envelope, the report, the events window and the manifest under
+  one scope.
+- The identity state itself (`identity.json`: `host.id`, `installationKey`)
+  never leaves the machine and is not part of any bundle.
+
+Tests a redacted bundle must pass: validates against the JSON Schema; every
+reference resolves; the topology (tree shape, kinds, protocols, vidPids) is
+unchanged from the unredacted source; no original id, hostname or serial
+substring survives anywhere in the archive; two bundles from one machine do
+not correlate; documents inside one bundle do.
 
 ### Machine-checkable schema
 

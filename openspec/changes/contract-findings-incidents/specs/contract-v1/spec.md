@@ -1,7 +1,11 @@
 ## ADDED Requirements
 
 ### Requirement: Envelope carries findings and incidents
-Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string}` in the v1 envelope when recorded history exists, and SHALL omit all three when it does not. This is additive within v1.
+Producers SHALL include optional `findings: Finding[]`, `incidents: Incident[]` and `analysis: {windowHours: number, generatedAt: string, coverage: {availableFrom, through, complete: boolean, reasons?: string[]}}` in the v1 envelope when recorded history exists, and SHALL omit all three when it does not. `coverage.complete` SHALL be true only when the recording spans the whole requested window with no trim inside it and no gap longer than 3× the sample interval; otherwise `reasons` SHALL say why. This is additive within v1.
+
+#### Scenario: Trimmed log
+- **WHEN** the JSONL was trimmed inside the requested window
+- **THEN** `coverage.complete` is false with reason `trimmed` and `availableFrom` is the first retained sample, so a consumer shows "unknown before <time>", not "no incidents"
 
 #### Scenario: Collector with history
 - **WHEN** `GET /contract` (or `probe --json`, or `connection_probe`) is served on a machine whose recorder has run
