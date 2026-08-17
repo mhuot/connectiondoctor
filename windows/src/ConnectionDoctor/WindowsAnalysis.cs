@@ -140,8 +140,12 @@ internal static class WindowsAnalysis
                 : ["no-history"];
 
             // With nothing to say at all — no live fault, no unreadable
-            // evidence — the envelope carries no analysis (absent ≠ empty).
-            if (liveFindings.Count == 0 && integrityReasons.Count == 0 && recordedGaps.Count == 0)
+            // evidence, and a baseline we could actually evaluate — the
+            // envelope carries no analysis (absent ≠ empty). An unknown
+            // baseline is itself something to report, so it counts as
+            // something to say.
+            if (liveFindings.Count == 0 && integrityReasons.Count == 0 && recordedGaps.Count == 0 &&
+                baseline.UnavailableReason is null)
             {
                 return null;
             }

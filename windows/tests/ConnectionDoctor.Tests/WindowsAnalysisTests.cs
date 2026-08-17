@@ -698,3 +698,31 @@ public sealed class BaselineHistoryStampTests
         Assert.Equal("busy", result.BaselineAvailability);
     }
 }
+
+public sealed class NothingToSayTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+    private static ConnectionSnapshot Quiet() =>
+        SnapshotComparerTests.Snapshot() with { CapturedAt = Now, Power = new PowerState(true, 100, 0) };
+
+    [Fact]
+    public void NoHistoryAndAnUnknownBaselineStillReportsTheUnknownBaseline()
+    {
+        // Nothing recorded and nothing wrong — but the baseline could not be
+        // read, and that is a fact worth exporting rather than silence.
+        var result = WindowsAnalysis.Run(
+            new WindowsAnalysis.Inputs([], null, null, new MemoryBaselineStore(unreadable: true)), Quiet(), 6, Now);
+
+        Assert.NotNull(result);
+        Assert.Equal("unreadable", result!.BaselineAvailability);
+        Assert.Null(result.Baseline);
+        Assert.Equal(["no-history"], result.Reasons);
+    }
+
+    [Fact]
+    public void NoHistoryNothingWrongAndAReadableAbsentBaselineSaysNothingAtAll()
+    {
+        Assert.Null(WindowsAnalysis.Run(
+            new WindowsAnalysis.Inputs([], null, null, new MemoryBaselineStore()), Quiet(), 6, Now));
+    }
+}
