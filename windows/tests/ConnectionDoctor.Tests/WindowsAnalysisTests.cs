@@ -314,10 +314,35 @@ internal sealed class MemoryBaselineStore : IBaselineStore
         this.unreadable = unreadable;
     }
 
+    /// <summary>Simulate a replacement holding the lock, an unreadable history, or a failing write.</summary>
+    public bool LockBusy { get; set; }
+    public bool HistoryUnreadable { get; set; }
+    public bool HistoryWritable { get; set; } = true;
+
     public BaselineRead ReadBaseline() => unreadable ? new BaselineRead(null, true) : new BaselineRead(baseline);
-    public BaselineStateFile? ReadHistory() => state;
-    public bool WriteHistory(BaselineStateFile value) { state = value; return true; }
-    public void WithLock(Action work) { OnLock?.Invoke(); work(); }
+    public BaselineStateFile? ReadHistory() => HistoryUnreadable ? null : state;
+    public bool WriteHistory(BaselineStateFile value)
+    {
+        if (!HistoryWritable)
+        {
+            return false;
+        }
+
+        state = value;
+        return true;
+    }
+
+    public bool WithLock(Action work)
+    {
+        if (LockBusy)
+        {
+            return false;
+        }
+
+        OnLock?.Invoke();
+        work();
+        return true;
+    }
 }
 
 public sealed class BaselineFaultEvidenceTests
@@ -546,5 +571,69 @@ public sealed class EvidenceBoundaryTests
         var deepened = Recorder.DetectChanges(WithPower(-3000), WithPower(-8000), tracker);
 
         Assert.Contains(deepened, entry => entry.Kind == RecorderEntryKinds.DeficitDeepened);
+    }
+}
+
+public sealed class BaselineUnavailabilityTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+    private static (ConnectionSnapshot Baseline, ConnectionSnapshot Current) DockMissing()
+    {
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub", dock.InstanceId);
+        return (SnapshotComparerTests.Snapshot(dock, hub) with { CapturedAt = Now.AddDays(-1) },
+                SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now });
+    }
+    private static WindowsAnalysis.Inputs With(MemoryBaselineStore store) =>
+        new([], new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"), null, store);
+
+    [Fact]
+    public void ABusyLockPublishesNoBaselineStateAtAll()
+    {
+        // A replacement is in progress: we cannot read the pair consistently,
+        // so we say nothing rather than defaulting to "no baseline".
+        var (baseline, current) = DockMissing();
+        var result = WindowsAnalysis.Run(With(new MemoryBaselineStore(baseline) { LockBusy = true }), current, 6, Now)!;
+
+        Assert.Null(result.Baseline);
+        Assert.Contains("baseline-busy", result.Reasons);
+        Assert.False(result.Complete);
+    }
+
+    [Fact]
+    public void AnUnwritableHistoryDoesNotPublishATransitionButKeepsTheFindings()
+    {
+        var (baseline, current) = DockMissing();
+        var store = new MemoryBaselineStore(baseline) { HistoryWritable = false };
+        var result = WindowsAnalysis.Run(With(store), current, 6, Now)!;
+
+        Assert.Null(result.Baseline);                                   // no fault time we cannot back up
+        Assert.Contains("baseline-history-unwritable", result.Reasons);
+        Assert.NotEmpty(result.Findings);                               // the comparison still stands
+    }
+
+    [Fact]
+    public void AnUnreadableHistoryIsUnavailableNotHealthy()
+    {
+        var (baseline, current) = DockMissing();
+        var store = new MemoryBaselineStore(baseline) { HistoryUnreadable = true };
+        var result = WindowsAnalysis.Run(With(store), current, 6, Now)!;
+
+        Assert.Null(result.Baseline);
+        Assert.Contains("baseline-history-unreadable", result.Reasons);
+    }
+
+    [Fact]
+    public void APowerFindingDoesNotHideAMissingDock()
+    {
+        // A deficit and a vanished dock at once: the power finding must not
+        // suppress the missing-device evidence the baseline state rests on.
+        var (baseline, current) = DockMissing();
+        var deficit = current with { Power = new PowerState(true, 80, -9000) };
+        var result = WindowsAnalysis.Run(With(new MemoryBaselineStore(baseline)), deficit, 6, Now)!;
+
+        Assert.Equal("active-fault", result.Baseline!.State);
+        Assert.Contains(result.Findings, finding => finding.Title.Contains("missing", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Findings, finding => finding.Title.Contains("battery", StringComparison.OrdinalIgnoreCase));
     }
 }

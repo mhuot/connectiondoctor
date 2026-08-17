@@ -140,7 +140,17 @@ internal static class BackgroundCollector
     public static IncrementalEventRead ReadEntriesWithIntegrity()
     {
         var cursor = new EventLogCursor();
-        return ReadEntriesIncremental(EventsPath, cursor);
+        try
+        {
+            return ReadEntriesIncremental(EventsPath, cursor);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            // The log exists but cannot be read: unknown evidence, never an
+            // exception out of a request handler and never "nothing recorded".
+            RecordError(exception);
+            return new IncrementalEventRead([], false, SkippedLines: 1);
+        }
     }
 
     public static IncrementalEventRead ReadEntriesIncremental(string path, EventLogCursor cursor)
@@ -406,12 +416,9 @@ internal static class BackgroundCollector
         {
             return JsonSerializer.Deserialize<CollectorHeartbeat>(File.ReadAllText(HeartbeatPath), JsonOptions);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
-            return null;
-        }
-        catch (IOException)
-        {
+            // Exists but unreadable — the caller distinguishes this from absent.
             return null;
         }
     }

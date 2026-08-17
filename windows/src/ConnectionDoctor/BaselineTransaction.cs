@@ -157,6 +157,10 @@ internal static class BaselineTransaction
                 }
             }
 
+            // Keep the history as it was, so a failed commit can put the pair
+            // back exactly as it was found.
+            var previousHistory = BaselineStateFile.Read();
+
             var snapshot = capture();
             try
             {
@@ -175,10 +179,13 @@ internal static class BaselineTransaction
             // (and its old ETag still matches).
             if (!BaselineStateFile.Write(new BaselineStateFile()))
             {
-                var rolledBack = Restore(existing, path);
-                return new Result(Outcome.WriteFailed, Detail: rolledBack
-                    ? "the baseline's fault history could not be reset; the previous baseline was restored"
-                    : "the baseline's fault history could not be reset and the previous baseline could not be restored");
+                var baselineRestored = Restore(existing, path);
+                var historyRestored = previousHistory is null || BaselineStateFile.Write(previousHistory);
+                return new Result(Outcome.WriteFailed, Detail: baselineRestored && historyRestored
+                    ? "the baseline's fault history could not be reset; nothing was changed"
+                    : $"the baseline's fault history could not be reset, and the previous state could not be fully restored " +
+                      $"(baseline {(baselineRestored ? "restored" : "MAY HAVE CHANGED")}, " +
+                      $"history {(historyRestored ? "restored" : "MAY HAVE CHANGED")}) — check `connectiondoctor diff` before relying on it");
             }
 
             var nodes = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Count;

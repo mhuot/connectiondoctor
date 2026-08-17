@@ -109,7 +109,17 @@ internal sealed record Finding(
 internal sealed record ComparisonReport(
     IReadOnlyList<DeviceNode> Missing,
     IReadOnlyList<DeviceNode> Added,
-    IReadOnlyList<Finding> Findings);
+    IReadOnlyList<Finding> Findings,
+    /// <summary>
+    /// Instance ids of missing devices that the findings above actually
+    /// account for. Anything missing and not in here still needs saying —
+    /// a power finding does not explain a vanished dock.
+    /// </summary>
+    IReadOnlySet<string>? ExplainedMissing = null)
+{
+    public IReadOnlyList<DeviceNode> UnexplainedMissing =>
+        Missing.Where(device => ExplainedMissing is null || !ExplainedMissing.Contains(device.InstanceId)).ToList();
+}
 
 internal static class DeviceFilters
 {
