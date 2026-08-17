@@ -135,6 +135,7 @@ tests (#31 → `contract-conformance`), and stable `host.id` / hashed serials
 6 conformance fixtures → drift fixes  (informed by 2, 3, 5)
 7 release pipeline (docs/distribution.md)
 8 windows-event-ingest — sub-poll device notifications, ETW link/port events (after 6)
+9 dashboard-topology-controls — mode feedback, built-in filter via nodes[].builtIn (small, any time)
 ```
 
 `1 → 2` and `4 → 3` are the only hard orderings; 1 and 4 start together. Each
