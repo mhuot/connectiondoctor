@@ -32,6 +32,7 @@ that builds this repo and copies `dist` into its embed directory.
 | `GET /favicon.svg`, `GET /icons.svg` | those files |
 | `GET /contract` | Connection Contract v1 envelope |
 | `GET /events` | v1 events JSONL |
+| `POST /baseline` *(proposed, `contract-findings-incidents`)* | Capture (or, with `?replace=1`, replace) the known-good baseline from the current state; **loopback only** — a LAN-bound server answers `403` so the LAN surface stays read-only. Body empty; response is the stored envelope's `capturedAt` |
 | anything else | **404** |
 
 Unknown paths must 404 rather than fall back to `index.html`. The app has no

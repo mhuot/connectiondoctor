@@ -6,5 +6,7 @@
 - [ ] 1.5 Dashboard: `FindingsView` panel; Timeline prefers producer incidents and labels source
 - [ ] 1.5b Dashboard: per-host **contact** (live/stale/offline) and **history** (complete/no-history/envelope-only/incomplete + reasons) as two chips; surface skippedLines and fetch errors per host; "none" only when `coverage.complete`; tests for online-envelope-failed-events, corrupt JSONL, stale retained data, trimmed log, new recorder, and recovery that clears only on a proven-complete payload — issue #29
 - [ ] 1.2b/1.3b Both producers: `analysis.coverage {availableFrom, through, complete, reasons}` from the recorder's real span, trims and gaps
+- [ ] 1.5c Both producers: `analysis.baseline{state,…}`; `POST /baseline` (loopback only, 403 on LAN binding) captures/replaces the known-good envelope; dashboard Capture/Replace control with confirmation; UI states no-baseline / healthy / active-fault / recovered; tests for all four incl. recovery after the branch returns — issue #36
+- [ ] 1.5d Manual: validate under Teams load (camera + mic + Ethernet + share) and attach healthy/fault/recovered screenshots — issue #36
 - [ ] 1.6 Regenerate `surface-chain.v1.json` and add a findings-bearing fixture from a real recording
 - [ ] 1.7 READMEs: dashboard "What works today" gains findings; TBDoctor's screenshot of native Timeline replaced later by the dashboard's

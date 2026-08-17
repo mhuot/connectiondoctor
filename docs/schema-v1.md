@@ -101,7 +101,7 @@ grouped-loss attribution) works on that alone.
 | `tunneled` | Only for what USB4 genuinely tunnels (DP, USB3, PCIe). USB 2.0 is carried natively and must be `false` |
 | `usbClass` *(opt)* | bDeviceClass; 9 = hub even when the name says nothing |
 | `platform` *(opt)* | Untranslated native identifiers (locationID / instanceId), for debugging; consumers must not depend on it |
-| `nameRedacted` *(opt, proposed)* | `true` when a redacted export replaced a user-assigned name with a conservative label (see § Redaction). Explicit in the JSON Schema, not left to unknown-field tolerance |
+| `nameRedacted` *(opt, proposed)* | `true` when a redacted export replaced a user-assigned name with a conservative label (see § Redaction). Explicit in the JSON Schema, not left to unknown-field tolerance. The same optional field exists on Display, IncidentDevice, Event and Adapter |
 | `unitKey` *(opt, proposed)* | Distinguishes two units of the same VID:PID **within one collector's data**: `HMAC-SHA256(serial, installationKey)` truncated to 16 hex chars, where `installationKey` is a random secret stored beside `host.id`. Keyed per installation, so it is not linkable across machines or exports and does not expose the serial (a plain serial hash is neither redaction nor safe for enumerable serials). The raw serial never leaves the machine. Cross-endpoint unit correlation ("the same bad dock following users") is a fleet-integration concern with a tenant-scoped key. (issue #27) |
 
 Thunderbolt/USB4 routers are nodes of kind `thunderbolt` with *(opt)*
@@ -256,14 +256,26 @@ never breaks the graph.
     nothing a recipient can use).
 - **Removed** recursively: `platform{}`, raw serials, `adapter.serial`, and any
   other field the schema marks as native or personal.
-- **Names.** Product strings from device descriptors (`4-Port USB 2.0 Hub`,
-  `MX Vertical`) are model identity and are kept with `vidPid`/`vendorName`.
-  Names that the OS reports as **user-assigned** — display names, Bluetooth and
-  Apple device names such as `Mike's iPhone`, renamed peripherals — are
-  replaced by a conservative label built from evidence that stays
-  (`<vendorName> <kind>` or `<vidPid>`), and the node gains
-  `nameRedacted: true`. Producers classify which name fields are user-assigned
-  per platform; the manifest lists them.
+- **Names and free text — every field, not only nodes.** Product strings
+  from device descriptors (`4-Port USB 2.0 Hub`, `MX Vertical`) are model
+  identity and are kept with `vidPid`/`vendorName`. Names that the OS reports
+  as **user-assigned** — display names, Bluetooth and Apple device names such
+  as `Mike's iPhone`, renamed peripherals — are replaced by a conservative
+  label built from evidence that stays (`<vendorName> <kind>` or `<vidPid>`),
+  and the carrying object gains `nameRedacted: true`. This applies to
+  **`nodes[].name`, `displays[].name`, `incidents[].devicesLost[].name`, event
+  `name`, `power.adapter.name`** — `nameRedacted?` is an explicit optional
+  field on each of those shapes. Producers classify which name fields are
+  user-assigned per platform; the manifest lists them.
+- **Prose is generated from redacted values.** Finding `title` /
+  `explanation` / `evidence[]` / `recommendation`, report and diff `note`, and
+  incident text embed device names, hostnames and node ids. Under a share
+  scope they are produced **from the already-redacted structured values**, or
+  passed through the same replacement map (original id/name → pseudonym or
+  label) before serialization — never emitted from raw values and patched
+  after. A conformance fixture puts a user-assigned name, the hostname and a
+  native node id into evidence and note text and asserts none survive
+  anywhere in the bundle.
 - **Manifest.** Every bundle carries `manifest.json`, versioned and
   schema-checked:
 

@@ -27,6 +27,15 @@ Contract (additive, stays v1):
   `devicesLost[{vidPid,name}]`, optional `rootEvent`, `sharedParent`, `power`.
 - `GET /contract` includes them when the recorder has history; producers keep
   it cheap (analysis is over the on-disk JSONL, no re-probe).
+- **Baseline state and control (issue #36).** `analysis.baseline:
+  {state: "no-baseline" | "healthy" | "active-fault" | "recovered", capturedAt?,
+  faultSince?, recoveredAt?}` so the dashboard never reads "no baseline" as
+  healthy; the Windows baseline-diff findings ("display active but hub branch
+  missing") flow into `findings[]` like any other. The dashboard gains
+  **Capture baseline** / **Replace baseline** (explicit confirmation naming
+  the old capture time) backed by `POST /baseline` — the first state-changing
+  route in `docs/embedding.md`, **served only on loopback**: a LAN-bound
+  server answers 403 because unauthenticated telemetry stays read-only.
 Producers:
 - macOS: `Diagnosis` findings + `Collector.deriveIncidents` mapped to schema;
   `Severity` gets string raw values.

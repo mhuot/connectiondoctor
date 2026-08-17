@@ -15,6 +15,17 @@ The dashboard SHALL show a Findings panel listing the active host's findings ran
 - **WHEN** the host's history status is `incomplete`, `envelope-only` or `no-history`
 - **THEN** the panel says "unknown — <reason>" (from `coverage.reasons` or the fetch failure), never "no findings"
 
+### Requirement: Baseline capture and state
+The dashboard SHALL show the baseline state (no baseline / healthy / active fault / recovered since fault) and SHALL offer Capture baseline and Replace baseline actions via `POST /baseline` when the collector is reached over loopback, with replacement requiring confirmation that names the existing capture time.
+
+#### Scenario: Missing hub branch on a Surface
+- **WHEN** the LG hub branch present in the baseline is absent
+- **THEN** the finding "display active but hub branch missing" appears with evidence and the recommendation to power-cycle, and the state reads active fault; when the branch returns the state reads recovered
+
+#### Scenario: Reached over the LAN
+- **WHEN** the dashboard is served from a LAN-bound collector
+- **THEN** the baseline actions are shown disabled with the reason, and `POST /baseline` answers 403
+
 ### Requirement: Timeline prefers producer incidents
 The Timeline SHALL use `incidents[]` from the envelope when present and its own stitching otherwise, and SHALL label which it is showing.
 
