@@ -89,6 +89,42 @@ The bolder option — one analysis core in Rust (static lib for Swift/C#, wasm
 for the dashboard) — is deferred until conformance tests show the
 two-implementation cost is actually biting.
 
+## Fleet integration (later) — the boundary
+
+A second review (issues [#26](https://github.com/mhuot/connectiondoctor/issues/26),
+[#28](https://github.com/mhuot/connectiondoctor/issues/28),
+[#30](https://github.com/mhuot/connectiondoctor/issues/30),
+[#32](https://github.com/mhuot/connectiondoctor/issues/32),
+[#33](https://github.com/mhuot/connectiondoctor/issues/33), milestone
+`fleet-integration`) asked what a managed endpoint team would need: durable
+fleet history, a triage queue across machines, Intune/Jamf lifecycle,
+authenticated transport, SIEM/service-desk hand-off. The decision:
+
+- **The local-first path is the product.** One download, no account, no
+  cloud, the dashboard opens itself, a few trusted LAN hosts added by hand if
+  wanted, full diagnosis offline. Anything managed is an **optional layer with
+  progressive disclosure** and adds no setup step or enterprise vocabulary to
+  that path.
+- **Complement, don't recreate.** No ConnectionDoctor control plane. The
+  managed layer is a *bounded export* — the **report document**
+  (`schema-v1.md` § Documents) plus stable endpoint identity, freshness and
+  collector version — delivered through the platforms teams already run
+  (management-platform inventory/remediation output, log/OTel, scheduled
+  support bundles), with connector recipes rather than a service. Summarised
+  and privacy-filtered by default; raw event history stays on the machine.
+- **MCP stays local-only:** stdio, read-only, no fleet credentials, no remote
+  enrollment. It is a door for a coding agent on this machine, not a transport.
+- **It starts after the seven changes below**, because everything it would
+  export is produced by them (`host.id` and freshness from
+  `contract-conformance` / `contract-findings-incidents`, `producer{}` from
+  `release-pipeline`). Filed, labelled `scope:fleet-integration`, not designed.
+
+Three items from that review were small enough and local-first enough to fold
+into the changes below: per-host freshness and history completeness (#29 →
+`contract-findings-incidents`), negative-control fixtures and parity-vs-quality
+tests (#31 → `contract-conformance`), and stable `host.id` / hashed serials
+(#27 → `contract-conformance`).
+
 ## Order of work
 
 ```

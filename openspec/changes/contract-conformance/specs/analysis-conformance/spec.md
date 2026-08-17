@@ -11,6 +11,17 @@ The repository SHALL hold recorded fixtures (`docs/fixtures/<case>/`) with an `e
 - **WHEN** the Surface-dock-chain fixture is analysed on all three
 - **THEN** the same findings appear with the same severities and the same incident count and shared parents
 
+### Requirement: Negative controls and diagnostic quality
+The fixture set SHALL include cases whose expected result is no finding or an unattributed incident (normal unplug/replug, sleep/wake, KVM migration, duplicate VID:PID, incomplete history), and the conformance suite SHALL report parity ("engines agree") separately from diagnostic quality ("expected cause and confidence") so a wrong-but-consistent answer is visible.
+
+#### Scenario: Normal unplug
+- **WHEN** the unplug/replug control is analysed
+- **THEN** no engine emits a `warning` or `critical` finding, and any incident is unattributed
+
+#### Scenario: Consistently wrong
+- **WHEN** all three engines blame the dock on the sleep/wake control
+- **THEN** parity passes and diagnostic quality fails — the report names the case
+
 ### Requirement: Documents are machine-validated
 JSON Schema files under `docs/schema/v1/` SHALL define the envelope, report and diff documents, and every conformance test and the dashboard parser tests SHALL validate their inputs and outputs against them.
 
