@@ -134,6 +134,7 @@ tests (#31 → `contract-conformance`), and stable `host.id` / hashed serials
                                    ──▶ 3 macOS resident process serves the dashboard; retire native windows
 6 conformance fixtures → drift fixes  (informed by 2, 3, 5)
 7 release pipeline (docs/distribution.md)
+8 windows-event-ingest — sub-poll device notifications, ETW link/port events (after 6)
 ```
 
 `1 → 2` and `4 → 3` are the only hard orderings; 1 and 4 start together. Each
