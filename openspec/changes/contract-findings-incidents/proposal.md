@@ -33,10 +33,19 @@ Producers:
   the Surface gets "Power supply under-served" too.
 Dashboard:
 - Parse optional `findings`/`incidents` (tolerant: absent ≠ empty).
+- **Per-host freshness and completeness (issue #29).** `/contract` and
+  `/events` tracked independently per host with last successful contact;
+  `skippedLines`, parse failures and `/events` fetch failures surfaced on that
+  host (today `sources.ts` swallows them, contradicting the archived
+  `contract-ingest` spec); each host shown as live / stale / offline /
+  envelope-only / history-incomplete with documented thresholds; retained
+  stale data visibly stale.
 - New **Findings** panel next to the timeline: ranked by severity then
   confidence, each with evidence list and recommendation; "recorded" label;
   when a collector sends none, say "this collector reports no findings" (and
-  distinguish "no recording yet" via `analysis` absent).
+  distinguish "no recording yet" via `analysis` absent). "No findings" / "no
+  incidents" is claimed **only when the analysis window is complete**;
+  otherwise the panel says unknown / incomplete and why.
 - Timeline uses producer incidents when present, its own stitching otherwise,
   and says which.
 

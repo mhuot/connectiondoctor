@@ -29,6 +29,17 @@ evidence on both OSes. The event-log deficit rule (−2 W instantaneous) stays a
 is — spec already distinguishes them once `contract-conformance` writes it
 down.
 
+## Host state (issue #29)
+`HostData` gains `contact: {contractAt?, eventsAt?, contractError?, eventsError?,
+skippedLines}` and a derived `state`: **live** (both fetched within 2×refresh
+interval), **stale** (last success older than that, data retained),
+**offline** (last refresh failed for both), **envelope-only** (`/events`
+failed or absent), **history-incomplete** (`skippedLines > 0`, or the events
+window is shorter than `analysis.windowHours`). Fleet cards and the host
+selector show the state as a chip; the Findings/Timeline panels read it to
+decide whether "none" is a claim they can make. Thresholds are constants in
+one place and named in the spec.
+
 ## Dashboard panel
 `FindingsView`: list, not cards; severity chip; title; explanation; evidence as
 a bulleted list in monospace; recommendation; confidence muted. Sorted

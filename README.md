@@ -73,10 +73,12 @@ openspec/    spec-driven change history (OpenSpec); .claude/ holds the /opsx com
 
 Spec-driven with [OpenSpec](https://github.com/Fission-AI/OpenSpec). The open
 changes under [`openspec/changes/`](openspec/changes/) are the plan, in order:
-`define-interface-contracts` → `add-windows-mcp` · `align-cli-verbs`;
-`contract-findings-incidents` → `macos-resident-serves-dashboard`;
+`add-windows-mcp` · `align-cli-verbs` (their interface contracts,
+`define-interface-contracts`, are reviewed and archived — `docs/cli.md`,
+`docs/mcp.md`); `contract-findings-incidents` → `macos-resident-serves-dashboard`;
 `contract-conformance`; `release-pipeline`. Each has a proposal, design, spec
-deltas and tasks.
+deltas and tasks. Managed-fleet work is a later, optional layer — milestone
+`fleet-integration`, boundary recorded in `docs/architecture.md`.
 
 ## License
 
