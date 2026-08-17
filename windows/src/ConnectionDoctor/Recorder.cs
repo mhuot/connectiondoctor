@@ -8,7 +8,14 @@ internal static class RecorderEntryKinds
     public const string PowerChanged = "power-changed";
     public const string DeficitStarted = "deficit-started";
     public const string DeficitEnded = "deficit-ended";
-    /// <summary>An active deficit got materially deeper — internal evidence, not a contract event kind.</summary>
+    /// <summary>
+    /// An active deficit got materially deeper. Deliberately **internal**: the
+    /// contract has deficitStart/deficitEnd and no "deepened" kind, and
+    /// inventing one would be a private extension of a shared schema. It exists
+    /// so the analysis can see how deep a deficit actually went (a -3 W start
+    /// that becomes -20 W leaves no other trace), and it is filtered out of the
+    /// served /events stream by ContractV1.EventKinds.
+    /// </summary>
     public const string DeficitDeepened = "deficit-deepened";
 }
 

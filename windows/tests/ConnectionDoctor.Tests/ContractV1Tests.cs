@@ -235,8 +235,14 @@ public sealed class ContractV1Tests
     }
 
     [Fact]
-    public void EveryRecordedKindHasAContractEventKind()
+    public void EveryRecordedKindIsEitherAContractEventKindOrDeliberatelyInternal()
     {
+        // Recorded kinds either map to a Connection Contract v1 event kind, or
+        // are listed here as internal evidence that must NOT reach /events —
+        // inventing a kind the shared schema does not have would break the
+        // other platform's reader. Adding a kind forces this decision.
+        string[] internalOnly = [RecorderEntryKinds.DeficitDeepened];
+
         var recorded = typeof(RecorderEntryKinds)
             .GetFields()
             .Where(field => field.IsLiteral && field.FieldType == typeof(string))
@@ -245,8 +251,17 @@ public sealed class ContractV1Tests
 
         Assert.NotEmpty(recorded);
         Assert.All(recorded, kind => Assert.True(
-            ContractV1.EventKinds.ContainsKey(kind),
-            $"RecorderEntryKinds.{kind} has no Connection Contract v1 event kind"));
+            ContractV1.EventKinds.ContainsKey(kind) || internalOnly.Contains(kind),
+            $"RecorderEntryKinds.{kind} is neither a Connection Contract v1 event kind nor declared internal"));
+
+        // And the internal ones really are filtered out of the served stream.
+        Assert.All(internalOnly, kind =>
+        {
+            Assert.False(ContractV1.EventKinds.ContainsKey(kind));
+            var stream = ContractV1.ToEventStream(
+                [new RecorderEntry(DateTimeOffset.Now, kind, null, new PowerState(true, 90, -20000), null)]);
+            Assert.Equal(string.Empty, stream);
+        });
     }
 
     [Fact]
