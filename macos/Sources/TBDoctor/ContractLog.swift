@@ -8,6 +8,14 @@ final class ContractLog {
 
     static let filename = "contract-events.jsonl"
     static var path: URL { Store.directory.appendingPathComponent(filename) }
+    /// When the served stream was last cut, so coverage can say `trimmed`:
+    /// raw samples can be complete while /events is truncated, and a consumer
+    /// reading the served stream must not call that window whole.
+    static var trimMarkerPath: URL { Store.directory.appendingPathComponent("contract-events.trimmed-at") }
+    static var lastTrimmedAt: Date? {
+        guard let text = try? String(contentsOf: trimMarkerPath, encoding: .utf8) else { return nil }
+        return ISO8601DateFormatter().date(from: text.trimmingCharacters(in: .whitespacesAndNewlines))
+    }
 
     private let queue = DispatchQueue(label: "tbdoctor.contractlog")
     private let maxBytes = 24 * 1024 * 1024
@@ -61,7 +69,9 @@ final class ContractLog {
             // A sync point is a *complete* envelope (schema § Events), so it
             // carries the analysis group whenever history exists; the
             // dashboard anchors on it and replays only later deltas.
-            lines.append(["t": stamp, "kind": "fullSnapshot", "snapshot": Contract.envelope(from: sample, analysis: Analysis.run(now: sample.t))])
+            lines.append(["t": stamp, "kind": "fullSnapshot",
+                          "snapshot": Contract.envelope(from: sample,
+                                                        analysis: Analysis.run(now: sample.t, includingSample: sample))])
             lastFullSnapshot = sample.t
         }
 
@@ -110,5 +120,9 @@ final class ContractLog {
         let kept = lines.suffix(lines.count / 2).joined(separator: "\n") + "\n"
         try? kept.write(to: url, atomically: true, encoding: .utf8)
         lastFullSnapshot = nil
+        // Durable marker: the served stream was cut here, so coverage says
+        // `trimmed` even when the raw sample store is untouched.
+        try? ISO8601DateFormatter().string(from: Date())
+            .write(to: ContractLog.trimMarkerPath, atomically: true, encoding: .utf8)
     }
 }

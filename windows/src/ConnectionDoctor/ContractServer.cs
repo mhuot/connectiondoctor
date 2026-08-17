@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Text;
 
 namespace ConnectionDoctor;
@@ -22,8 +23,12 @@ internal static class ContractServer
 {
     public const int DefaultPort = 8787;
 
+    /// <summary>Set while a LAN-bound server is running: mutations are refused there.</summary>
+    private static bool boundToLan;
+
     public static int Run(int port, bool lan, bool openBrowser = false)
     {
+        boundToLan = lan;
         using var listener = new HttpListener();
 
         // "localhost" is reserved for unelevated processes by default; a
@@ -169,23 +174,49 @@ internal static class ContractServer
     private static void Respond(HttpListenerContext context)
     {
         var path = context.Request.Url?.AbsolutePath ?? "/";
-        var isGet = string.Equals(context.Request.HttpMethod, "GET", StringComparison.Ordinal);
+        var method = context.Request.HttpMethod;
+        var isGet = string.Equals(method, "GET", StringComparison.Ordinal);
+        var isMutation = path == "/baseline";
 
-        var response = !isGet
-            ? Text(405, "method not allowed\n")
-            : path switch
-            {
-                "/contract" => Contract(),
-                "/events" => Events(),
-                _ => Ui(path)
-            };
+        Payload response;
+        if (isMutation)
+        {
+            // The one state-changing route: loopback-only, same-origin, custom
+            // header, and no CORS headers at all (docs/embedding.md
+            // § Mutations). CORS gates reads, not writes: any page open in the
+            // browser can POST to localhost, so the request itself must prove
+            // it came from our own page.
+            response = string.Equals(method, "OPTIONS", StringComparison.Ordinal)
+                ? new Payload(204, "text/plain; charset=utf-8", [], null)
+                : string.Equals(method, "POST", StringComparison.Ordinal)
+                    ? Baseline(context)
+                    : Text(405, "method not allowed\n");
+        }
+        else
+        {
+            response = !isGet
+                ? Text(405, "method not allowed\n")
+                : path switch
+                {
+                    "/contract" => Contract(),
+                    "/events" => Events(),
+                    _ => Ui(path)
+                };
+        }
 
         context.Response.StatusCode = response.Status;
         context.Response.ContentType = response.ContentType;
         context.Response.ContentLength64 = response.Body.Length;
 
-        // The dashboard may also be served from a dev Vite origin.
-        context.Response.AddHeader("Access-Control-Allow-Origin", "*");
+        // Product identity on every response: `ui` and the resident process
+        // reuse a port only when they see it (docs/embedding.md).
+        context.Response.AddHeader("Server", $"connectiondoctor/{ProductVersion}");
+        if (!isMutation)
+        {
+            // The dashboard may also be served from a dev Vite origin — reads only.
+            context.Response.AddHeader("Access-Control-Allow-Origin", "*");
+        }
+
         if (response.CacheControl is not null)
         {
             context.Response.AddHeader("Cache-Control", response.CacheControl);
@@ -194,6 +225,112 @@ internal static class ContractServer
         context.Response.OutputStream.Write(response.Body, 0, response.Body.Length);
         context.Response.Close();
     }
+
+    private static string ProductVersion =>
+        System.Reflection.Assembly.GetExecutingAssembly()
+            .GetCustomAttribute<System.Reflection.AssemblyInformationalVersionAttribute>()?.InformationalVersion
+        ?? "0.0.0";
+
+    /// <summary>
+    /// POST /baseline — capture, or with ?replace=1 replace, the known-good
+    /// baseline. Refused unless bound to loopback, same-origin, and carrying
+    /// X-ConnectionDoctor-Request. Replace is conditional on If-Match matching
+    /// the capture time the client was shown, so a stale tab cannot clobber a
+    /// newer baseline. Pure decision in BaselineDecision so it is testable
+    /// without a listener.
+    /// </summary>
+    private static Payload Baseline(HttpListenerContext context)
+    {
+        var existing = File.Exists(SnapshotStore.DefaultBaselinePath) ? TryLoadBaseline() : null;
+        var decision = BaselineDecision(
+            boundToLan,
+            context.Request.Headers["Origin"],
+            context.Request.Url?.Port ?? 0,
+            context.Request.Headers["X-ConnectionDoctor-Request"],
+            context.Request.Url?.Query.Contains("replace=1", StringComparison.Ordinal) == true,
+            context.Request.Headers["If-Match"],
+            existing?.CapturedAt);
+        if (decision is not null)
+        {
+            return decision;
+        }
+
+        var snapshot = DeviceProbe.Capture();
+        SnapshotStore.Save(snapshot, SnapshotStore.DefaultBaselinePath);
+        // A new baseline resets the fault/recovery history that described the old one.
+        BaselineStateFile.Write(new BaselineStateFile());
+        var nodes = DeviceFilters.TopologyDevices(snapshot, includeBuiltIn: true).Count;
+        var replaced = existing is not null ? "true" : "false";
+        return Json(existing is null ? 201 : 200,
+            "{\"baseline\":{\"capturedAt\":\"" + snapshot.CapturedAt.ToString("O") + "\",\"nodes\":" + nodes + "},\"replaced\":" + replaced + "}");
+    }
+
+    /// <summary>
+    /// The refusal, or null when the mutation may proceed. Every rule from
+    /// docs/embedding.md § Mutations, with nothing else in the way.
+    /// </summary>
+    internal static Payload? BaselineDecision(
+        bool lan,
+        string? origin,
+        int port,
+        string? requestHeader,
+        bool replace,
+        string? ifMatch,
+        DateTimeOffset? existingCapturedAt)
+    {
+        if (lan)
+        {
+            return Json(403, "{\"error\":\"read-only-binding\"}");
+        }
+
+        string[] allowed = [$"http://localhost:{port}", $"http://127.0.0.1:{port}", $"http://[::1]:{port}"];
+        if (string.IsNullOrEmpty(origin) || !allowed.Contains(origin, StringComparer.OrdinalIgnoreCase))
+        {
+            return Json(403, "{\"error\":\"cross-origin\"}");
+        }
+
+        if (requestHeader != "1")
+        {
+            return Json(403, "{\"error\":\"missing-request-header\"}");
+        }
+
+        if (existingCapturedAt is not { } current)
+        {
+            return null; // nothing to overwrite
+        }
+
+        if (!replace)
+        {
+            return Json(409, "{\"error\":\"exists\",\"current\":{\"capturedAt\":\"" + current.ToString("O") + "\"}}");
+        }
+
+        var seenText = ifMatch?.Trim('"');
+        if (seenText is null || !DateTimeOffset.TryParse(seenText, out var seen) || seen != current)
+        {
+            return Json(409, "{\"error\":\"stale\",\"current\":{\"capturedAt\":\"" + current.ToString("O") + "\"}}");
+        }
+
+        return null;
+    }
+
+    private static ConnectionSnapshot? TryLoadBaseline()
+    {
+        try
+        {
+            return SnapshotStore.Load(SnapshotStore.DefaultBaselinePath);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+    }
+
+    private static Payload Json(int status, string body) =>
+        new(status, "application/json; charset=utf-8", Encoding.UTF8.GetBytes(body + "\n"), null);
 
     private static Payload Ui(string path)
     {
@@ -224,7 +361,7 @@ internal static class ContractServer
         {
             return Text(
                 200,
-                ContractV1.Serialize(ContractV1.ToEnvelope(DeviceProbe.Capture())),
+                ContractV1.Serialize(ContractV1.ToEnvelopeWithAnalysis(DeviceProbe.Capture())),
                 "application/json");
         }
         catch (Win32Exception exception)
@@ -251,5 +388,5 @@ internal static class ContractServer
     private static Payload Text(int status, string body, string contentType = "text/plain; charset=utf-8") =>
         new(status, contentType, Encoding.UTF8.GetBytes(body), null);
 
-    private sealed record Payload(int Status, string ContentType, byte[] Body, string? CacheControl);
+    internal sealed record Payload(int Status, string ContentType, byte[] Body, string? CacheControl);
 }

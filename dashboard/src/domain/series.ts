@@ -5,6 +5,10 @@ export interface CountSeries {
   points: CountPoint[];
   /** ISO time of the fullSnapshot the series is anchored on, when one exists. */
   anchoredAt?: string;
+  /** Set when the series cannot be drawn honestly: no anchor, and the deltas
+   *  contradict the current envelope (more removals than devices that exist).
+   *  Callers show "unknown" rather than a line that disagrees with the tree. */
+  contradiction?: string;
 }
 
 const countable = (env: ContractEnvelope): number =>
@@ -36,7 +40,20 @@ export function deviceCountSeries(events: ContractEvent[], snapshot?: ContractEn
   }
 
   const net = sorted.reduce((s, e) => s + delta(e), 0);
-  let count = Math.max(0, (snapshot ? countable(snapshot) : 0) - net);
+  const current = snapshot ? countable(snapshot) : 0;
+  const inferredStart = current - net;
+  if (inferredStart < 0) {
+    // The events say more devices left than the current envelope can account
+    // for: history is missing (trimmed, or fetched from a different window).
+    // Clamping and replaying would draw a line whose endpoint contradicts the
+    // topology on screen, so say unknown instead.
+    return {
+      points: [],
+      contradiction: `events imply ${-inferredStart} more device${inferredStart === -1 ? '' : 's'} than the current state has — history is incomplete`,
+    };
+  }
+
+  let count = inferredStart;
   const points: CountPoint[] = [{ t: sorted[0]?.t ?? new Date().toISOString(), count }];
   for (const e of sorted) {
     count = Math.max(0, count + delta(e));

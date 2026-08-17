@@ -31,14 +31,24 @@ enum Analysis {
 
     /// Runs the engines over the recorded history inside the window. Returns
     /// nil when there is no history at all (the envelope then omits analysis).
+    /// - Parameter includingSample: a sample the caller has just taken but may
+    ///   not have persisted yet (the collector appends asynchronously). Passing
+    ///   it keeps a `fullSnapshot`'s topology and its analysis on one evidence
+    ///   boundary instead of racing the store.
     static func run(windowHours: Double = defaultWindowHours,
                     now: Date = Date(),
-                    liveSample: Sample? = nil) -> Result? {
+                    liveSample: Sample? = nil,
+                    includingSample: Sample? = nil) -> Result? {
         let windowStart = now.addingTimeInterval(-windowHours * 3600)
         let sampleStore = Store(filename: "samples.jsonl")
         let eventStore = Store(filename: "events.jsonl")
         var samples = sampleStore.load(Sample.self, since: windowStart) { $0.t }
         let events = eventStore.load(KernelEvent.self, since: windowStart) { $0.t }
+        // The caller's own sample, if the store has not caught up with it yet.
+        if let sample = includingSample, !samples.contains(where: { $0.t == sample.t }) {
+            samples.append(sample)
+            samples.sort { $0.t < $1.t }
+        }
 
         if samples.isEmpty && events.isEmpty {
             // Nothing inside the window. Two very different situations: the
@@ -80,9 +90,13 @@ enum Analysis {
         // Either store trimmed inside the window means the window is not
         // whole — a complete sample stream cannot vouch for incidents whose
         // kernel events were cut, and vice versa.
+        // Any of the three logs being cut inside the window shortens what can
+        // be vouched for — including the served contract-events stream, which
+        // the dashboard reads directly.
         for store in [sampleStore, eventStore] {
             if let trimmedAt = store.lastTrimmedAt, trimmedAt > windowStart { reasons.append("trimmed") }
         }
+        if let contractTrim = ContractLog.lastTrimmedAt, contractTrim > windowStart { reasons.append("trimmed") }
 
         return Result(findings: findings,
                       incidents: incidents,
