@@ -101,6 +101,7 @@ grouped-loss attribution) works on that alone.
 | `tunneled` | Only for what USB4 genuinely tunnels (DP, USB3, PCIe). USB 2.0 is carried natively and must be `false` |
 | `usbClass` *(opt)* | bDeviceClass; 9 = hub even when the name says nothing |
 | `platform` *(opt)* | Untranslated native identifiers (locationID / instanceId), for debugging; consumers must not depend on it |
+| `nameRedacted` *(opt, proposed)* | `true` when a redacted export replaced a user-assigned name with a conservative label (see § Redaction). Explicit in the JSON Schema, not left to unknown-field tolerance |
 | `unitKey` *(opt, proposed)* | Distinguishes two units of the same VID:PID **within one collector's data**: `HMAC-SHA256(serial, installationKey)` truncated to 16 hex chars, where `installationKey` is a random secret stored beside `host.id`. Keyed per installation, so it is not linkable across machines or exports and does not expose the serial (a plain serial hash is neither redaction nor safe for enumerable serials). The raw serial never leaves the machine. Cross-endpoint unit correlation ("the same bad dock following users") is a fleet-integration concern with a tenant-scoped key. (issue #27) |
 
 Thunderbolt/USB4 routers are nodes of kind `thunderbolt` with *(opt)*
@@ -263,10 +264,26 @@ never breaks the graph.
   (`<vendorName> <kind>` or `<vidPid>`), and the node gains
   `nameRedacted: true`. Producers classify which name fields are user-assigned
   per platform; the manifest lists them.
-- **Manifest.** Every bundle carries `manifest.json`: scope pseudonym for the
-  host, the list of fields transformed and removed, counts of names replaced,
-  the documents included and their coverage — so the user can see exactly what
-  they are about to share, before they share it.
+- **Manifest.** Every bundle carries `manifest.json`, versioned and
+  schema-checked:
+
+  ```json
+  { "schema": "connection-contract/v1", "kind": "bundle-manifest",
+    "generatedAt": "...", "host": { "id": "<pseudonym>", "name": "<pseudonym>" },
+    "files": ["contract.v1.json", "report.v1.json", "events.v1.jsonl"],
+    "coverage": { "availableFrom": "...", "through": "...", "complete": true },
+    "transformed": { "host.id": "pseudonymised", "host.name": "pseudonymised",
+                     "nodes[].id": "pseudonymised", "userAssignedNames": 2 },
+    "removed": ["platform", "unitKey", "serial", "adapter.serial"] }
+  ```
+
+  It contains only pseudonyms, categories, counts, filenames, times and
+  coverage. It **never** contains the scope token, the installation key, any
+  original identifier or name, or a before/after mapping; the manifest schema
+  test asserts that none of those appear. Because a file inside a zip cannot
+  be inspected "before sharing" without opening it, `bundle` **prints the same
+  safe summary to the terminal after creation** (and the dashboard shows it),
+  so the user sees what they are about to share.
 - `contract --redact` / `report --redact` / `diff --redact` on their own use an
   implicit one-document scope. `bundle <out.zip> [--hours N] [--scope token]`
   produces the envelope, the report, the events window and the manifest under
