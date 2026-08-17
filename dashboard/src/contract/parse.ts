@@ -248,6 +248,7 @@ function normalizeNode(json: unknown, index: number): ContractNode {
     // USB 2.0 is carried natively, never tunneled — enforce rather than trust.
     tunneled:
       (protocol === 'usb2' || protocol === 'usbLow') ? false : Boolean(doc.tunneled),
+    builtIn: typeof doc.builtIn === 'boolean' ? doc.builtIn : undefined,
   };
 }
 

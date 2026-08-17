@@ -92,6 +92,12 @@ enum Contract {
 
     // MARK: - Pieces
 
+    private static let builtInMarkers = ["Internal", "FaceTime", "Ambient Light", "Touch Bar", "iBridge", "Built-in", "Headset"]
+    static func isBuiltIn(_ device: USBDevice) -> Bool {
+        guard device.vendorID == 0x05AC else { return false }
+        return builtInMarkers.contains { device.name.localizedCaseInsensitiveContains($0) }
+    }
+
     private static func hostInfo() -> [String: Any] {
         var info: [String: Any] = [
             "name": Host.current().localizedName ?? ProcessInfo.processInfo.hostName,
@@ -196,6 +202,12 @@ enum Contract {
         if let vidPid = device.vidPid { node["vidPid"] = vidPid }
         if let bits { node["linkBitsPerSecond"] = bits }
         if let usbClass = device.deviceClass { node["usbClass"] = usbClass }
+        // Producer classification of integrated devices (dashboard-topology-
+        // controls): Apple's internal keyboard/trackpad, camera, ambient light
+        // sensor, Touch Bar and bridge silicon enumerate as USB devices on
+        // every Mac; nobody plugged them in. Absent means unknown, never
+        // external, so only assert true.
+        if isBuiltIn(device) { node["builtIn"] = true }
         node["platform"] = ["locationID": Int(device.locationID)]
         return node
     }

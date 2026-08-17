@@ -15,7 +15,7 @@ The first supported case came from a Surface Laptop 7 connected to an LG UltraWi
 - Detects the initial high-value signature: an LG display remains active while its expected USB hub branch is missing.
 - Continuously records connection changes to bounded JSONL, with hourly full snapshots as sync points.
 - Registers itself per-user to start collecting at login.
-- Hides built-in laptop devices in the dashboard by default, with an **Include built-in devices** toggle.
+- Marks integrated devices `builtIn` in the contract; the dashboard hides them by default, with an **Include built-in devices** toggle.
 - Emits **Connection Contract v1**, the schema shared with TBDoctor, either as a
   one-shot export or over HTTP for the [Connection Dashboard](../dashboard/README.md).
 - Runs natively on Windows ARM64 and x64 with .NET 8.

@@ -77,6 +77,12 @@ internal static class ContractV1
                 Protocol = ProtocolOf(kind, device.LinkSpeed),
                 LinkBitsPerSecond = BitsPerSecond(device.LinkSpeed),
                 UsbClass = device.UsbClass,
+                // The producer's classification (dashboard-topology-controls):
+                // integrated panel/touch/HID and the internal buses they hang
+                // off are built-in; anything reached through an external bus
+                // node is not. The dashboard filters on this flag as a view
+                // choice; nodes are always exported.
+                BuiltIn = !DeviceFilters.IsExternalDevice(device, byId),
                 Platform = new Dictionary<string, string> { ["instanceId"] = device.InstanceId }
             });
         }
@@ -400,6 +406,8 @@ internal sealed record ContractNode
     public long? LinkBitsPerSecond { get; init; }
     public bool Tunneled { get; init; }
     public int? UsbClass { get; init; }
+    /// <summary>Producer classification of integrated devices; absent means unknown.</summary>
+    public bool? BuiltIn { get; init; }
     public IReadOnlyDictionary<string, string>? Platform { get; init; }
 }
 

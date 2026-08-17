@@ -72,3 +72,8 @@ input { background: var(--panel); color: var(--text); border: 1px solid var(--li
 .evidence li { margin: 2px 0; }
 .evidence code { font-size: 11.5px; }
 .recommendation { color: var(--text); }
+
+/* Topology controls (dashboard-topology-controls) */
+.toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text); cursor: pointer; }
+.toggle input { accent-color: #2d63c8; width: auto; margin: 0; }
+.chip.muted { color: var(--muted); }

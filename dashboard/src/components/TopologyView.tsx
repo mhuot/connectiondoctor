@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { ContractEnvelope, LinkProtocol, NodeKind } from '../contract/types';
-import { buildViewTree, type TopoMode, type ViewNode } from '../domain/topology';
+import { buildTopology, builtInChip, modeChip, type TopoMode, type ViewNode } from '../domain/topology';
 import { layoutDiagram, NODE_H, type DiagramStyle } from '../domain/layout';
 import { Inspector } from './Inspector';
 
@@ -42,12 +42,17 @@ export function TopologyView({ envelope, recordedLabel }: {
   const [mode, setMode] = useState<TopoMode>(
     () => (localStorage.getItem('diagramMode') as TopoMode) ?? 'physical',
   );
+  const [includeBuiltIn, setIncludeBuiltIn] = useState<boolean>(
+    () => localStorage.getItem('includeBuiltIn') === 'true',
+  );
   const [selectedId, setSelectedId] = useState<string>();
 
-  const layout = useMemo(
-    () => layoutDiagram(buildViewTree(envelope, mode), style),
-    [envelope, mode, style],
+  const topology = useMemo(
+    () => buildTopology(envelope, mode, { includeBuiltIn }),
+    [envelope, mode, includeBuiltIn],
   );
+  const layout = useMemo(() => layoutDiagram(topology.root, style), [topology, style]);
+  const builtInText = builtInChip(topology.stats);
   const selected = layout.nodes.find((n) => n.id === selectedId)?.node;
 
   return (
@@ -57,8 +62,15 @@ export function TopologyView({ envelope, recordedLabel }: {
           labels={{ cascade: 'Cascade', topDown: 'Top-down', flow: 'Flow' }}
           onChange={(v) => { localStorage.setItem('diagramStyle', v); setStyle(v); }} />
         <Segmented options={['physical', 'full'] as const} value={mode}
-          labels={{ physical: 'Physical', full: '+ logical' }}
+          labels={{ physical: 'Physical', full: 'All device nodes' }}
           onChange={(v) => { localStorage.setItem('diagramMode', v); setMode(v); }} />
+        <span className="chip" data-testid="mode-chip">{modeChip(mode, topology.stats)}</span>
+        <label className="toggle">
+          <input type="checkbox" checked={includeBuiltIn}
+            onChange={(e) => { localStorage.setItem('includeBuiltIn', String(e.target.checked)); setIncludeBuiltIn(e.target.checked); }} />
+          Include built-in devices
+        </label>
+        {builtInText && <span className="chip muted" data-testid="builtin-chip">{builtInText}</span>}
         <span className="spacer" />
         <span className="recorded">{recordedLabel}</span>
       </div>
