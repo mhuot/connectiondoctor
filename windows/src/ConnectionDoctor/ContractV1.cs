@@ -484,6 +484,13 @@ internal sealed record ContractBaselineState
 internal sealed record ContractCapabilities
 {
     public required string LinkEvents { get; init; }
+    /// <summary>
+    /// Whether the known-good baseline could be evaluated: `available`, or
+    /// `busy` / `unreadable` / `history-unreadable` / `history-unwritable`.
+    /// Deliberately here and not in coverage.reasons — coverage is temporal,
+    /// and a complete history with an unknown baseline is a real state.
+    /// </summary>
+    public string? Baseline { get; init; }
 }
 
 internal sealed record ContractHost

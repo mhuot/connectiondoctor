@@ -177,7 +177,10 @@ internal static class BaselineTransaction
             // baseline carrying the old baseline's fault. Roll the baseline
             // back so the caller's next attempt sees the state it expects
             // (and its old ETag still matches).
-            if (!BaselineStateFile.Write(new BaselineStateFile()))
+            // The history names the baseline it belongs to, so a crash between
+            // these two writes leaves a recognisably stale pair rather than a
+            // silently mismatched one (the reader discards it).
+            if (!BaselineStateFile.Write(new BaselineStateFile(BaselineCapturedAt: snapshot.CapturedAt)))
             {
                 var baselineRestored = Restore(existing, path);
                 var historyRestored = previousHistory is null || BaselineStateFile.Write(previousHistory);

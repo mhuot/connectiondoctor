@@ -44,7 +44,9 @@ internal static class WindowsAnalysis
         IReadOnlyList<string> Reasons,
         /// <summary>Null when the baseline could not be evaluated; the envelope then omits it.</summary>
         ContractBaselineState? Baseline,
-        string LinkEvents);
+        string LinkEvents,
+        /// <summary>`available` or why not — busy, unreadable, history-unreadable, history-unwritable.</summary>
+        string BaselineAvailability = "available");
 
     /// <summary>What the analysis reads; injectable so tests need no disk.</summary>
     public sealed record Inputs(
@@ -122,7 +124,11 @@ internal static class WindowsAnalysis
         if (inputs.SkippedLines > 0) integrityReasons.Add("corrupt-lines");
         if (inputs.GapEvidenceUnreadable) integrityReasons.Add("gap-evidence-unreadable");
         if (inputs.HeartbeatUnreadable) integrityReasons.Add("heartbeat-unreadable");
-        if (baseline.UnavailableReason is { } unavailable) integrityReasons.Add(unavailable);
+        // NOT a coverage reason: coverage is temporal (what the recording can
+        // vouch for). Whether the baseline could be evaluated is an
+        // availability fact, reported next to linkEvents — a complete history
+        // with an unknown baseline is a real and sayable state.
+
         if (inputs.TrimmedAt == DateTimeOffset.MaxValue) integrityReasons.Add("trim-evidence-unreadable");
         var recordedGaps = (inputs.Gaps ?? []).Where(gap => gap.To >= windowStart && gap.From <= at).ToList();
 
@@ -141,7 +147,7 @@ internal static class WindowsAnalysis
             }
 
             return new Result(liveFindings.OrderBy(Rank).ToList(), [], windowHours, at, at, at, false,
-                reasonsWithoutHistory, baseline.State, LinkEventsCapability);
+                reasonsWithoutHistory, baseline.State, LinkEventsCapability, Availability(baseline));
         }
 
         var reasons = new List<string>(integrityReasons);
@@ -163,7 +169,7 @@ internal static class WindowsAnalysis
             var last = all.LastOrDefault()?.At ?? lastSample;
             return new Result(liveFindings.OrderBy(Rank).ToList(), [], windowHours, at, last, last, false,
                 reasons.Append("recorder-stopped-before-window").Distinct().Order().ToList(),
-                baseline.State, LinkEventsCapability);
+                baseline.State, LinkEventsCapability, Availability(baseline));
         }
 
         // Coverage: the recorder must have been running from the start of the
@@ -215,7 +221,7 @@ internal static class WindowsAnalysis
 
         var ranked = findings.OrderBy(Rank).ThenBy(finding => finding.Title, StringComparer.Ordinal).ToList();
         return new Result(ranked, incidents, windowHours, at, availableFrom, through,
-            reasons.Count == 0, reasons.Distinct().Order().ToList(), baseline.State, LinkEventsCapability);
+            reasons.Count == 0, reasons.Distinct().Order().ToList(), baseline.State, LinkEventsCapability, Availability(baseline));
     }
 
     /// <summary>
@@ -225,6 +231,8 @@ internal static class WindowsAnalysis
     /// <c>complete</c> and can still say "no device findings".
     /// </summary>
     public const string LinkEventsCapability = "unavailable";
+
+    private static string Availability(BaselineEvaluation baseline) => baseline.UnavailableReason ?? "available";
 
     // MARK: - Engines
 
@@ -375,7 +383,7 @@ internal static class WindowsAnalysis
             if (read.Unreadable)
             {
                 // Unknown: not healthy, not absent. Publish no state at all.
-                evaluation = new BaselineEvaluation(null, [], "baseline-unreadable");
+                evaluation = new BaselineEvaluation(null, [], "unreadable");
                 return;
             }
 
@@ -387,25 +395,32 @@ internal static class WindowsAnalysis
             var report = SnapshotComparer.Compare(baseline, current);
             var faulted = report.Findings.Count > 0 || report.Missing.Count > 0;
 
-            var history = store.ReadHistory() ?? new BaselineStateFile();
+            var stored = store.ReadHistory();
             if (store.HistoryUnreadable)
             {
-                evaluation = new BaselineEvaluation(null, BaselineFindings(baseline, report), "baseline-history-unreadable");
+                evaluation = new BaselineEvaluation(null, BaselineFindings(baseline, report), "history-unreadable");
                 return;
             }
+
+            // A history that names a different baseline is left over from a
+            // crash between the two writes: it describes a snapshot that is no
+            // longer there, so it starts again rather than being reported.
+            var history = stored is null || (stored.BaselineCapturedAt is { } stamp && stamp != baseline.CapturedAt)
+                ? new BaselineStateFile(BaselineCapturedAt: baseline.CapturedAt)
+                : stored with { BaselineCapturedAt = baseline.CapturedAt };
 
             var updated = faulted
                 ? history with { FaultSince = history.FaultSince ?? now, RecoveredAt = null }
                 : history.FaultSince is not null
                     ? new BaselineStateFile(null, now, history.FaultSince)
                     : history;
-            if (updated != history && !store.WriteHistory(updated))
+            if (updated != (stored ?? history) && !store.WriteHistory(updated))
             {
                 // The transition could not be persisted: publishing it would
                 // report a fault time (or a recovery) that vanishes on the next
                 // request. The findings still stand — they come from the
                 // comparison, not from the history.
-                evaluation = new BaselineEvaluation(null, BaselineFindings(baseline, report), "baseline-history-unwritable");
+                evaluation = new BaselineEvaluation(null, BaselineFindings(baseline, report), "history-unwritable");
                 return;
             }
 
@@ -427,7 +442,7 @@ internal static class WindowsAnalysis
         // The lock is held by a replacement in progress: we cannot read the
         // pair consistently, so we say nothing about it rather than defaulting
         // to "no baseline".
-        return acquired ? evaluation : new BaselineEvaluation(null, [], "baseline-busy");
+        return acquired ? evaluation : new BaselineEvaluation(null, [], "busy");
     }
 
     /// <summary>
@@ -492,7 +507,11 @@ internal static class WindowsAnalysis
             Reasons = result.Reasons.Count == 0 ? null : result.Reasons
         },
         Baseline = result.Baseline,
-        Capabilities = new ContractCapabilities { LinkEvents = result.LinkEvents }
+        Capabilities = new ContractCapabilities
+        {
+            LinkEvents = result.LinkEvents,
+            Baseline = result.BaselineAvailability
+        }
     };
 
     private static int Rank(Finding finding) => finding.Severity switch
@@ -573,7 +592,15 @@ internal sealed class FileBaselineStore : IBaselineStore
 internal sealed record BaselineStateFile(
     DateTimeOffset? FaultSince = null,
     DateTimeOffset? RecoveredAt = null,
-    DateTimeOffset? LastFaultSince = null)
+    DateTimeOffset? LastFaultSince = null,
+    /// <summary>
+    /// The capture time of the baseline this history describes. Two files
+    /// cannot be written in one atomic step, so instead of a journal the
+    /// history *names its baseline*: after a crash between the two writes, a
+    /// history whose stamp does not match the baseline on disk is recognisably
+    /// stale and is discarded rather than reported as that baseline's history.
+    /// </summary>
+    DateTimeOffset? BaselineCapturedAt = null)
 {
     private static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, WriteIndented = true };
     public static string Path => System.IO.Path.Combine(BackgroundCollector.DataDirectory, "baseline-state.json");
@@ -588,7 +615,10 @@ internal sealed record BaselineStateFile(
 
         try
         {
-            return (JsonSerializer.Deserialize<BaselineStateFile>(File.ReadAllText(Path), Options), false);
+            var state = JsonSerializer.Deserialize<BaselineStateFile>(File.ReadAllText(Path), Options);
+            // A file containing `null` deserialises without throwing; it is a
+            // history we cannot read, not the absence of one.
+            return state is null ? (null, true) : (state, false);
         }
         catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
         {

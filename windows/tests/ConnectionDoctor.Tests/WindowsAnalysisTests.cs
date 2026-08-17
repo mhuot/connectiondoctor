@@ -505,8 +505,7 @@ public sealed class EvidenceBoundaryTests
         var inputs = new WindowsAnalysis.Inputs([], null, null, new MemoryBaselineStore(unreadable: true));
         var result = WindowsAnalysis.Run(inputs, Quiet(), 6, Now)!;
 
-        Assert.Contains("baseline-unreadable", result.Reasons);
-        Assert.False(result.Complete);
+        Assert.Equal("unreadable", result.BaselineAvailability);
         // No state at all: unreadable is unknown. "no-baseline" would read as
         // "nothing to compare against", which is a different claim.
         Assert.Null(result.Baseline);
@@ -598,8 +597,8 @@ public sealed class BaselineUnavailabilityTests
         var result = WindowsAnalysis.Run(With(new MemoryBaselineStore(baseline) { LockBusy = true }), current, 6, Now)!;
 
         Assert.Null(result.Baseline);
-        Assert.Contains("baseline-busy", result.Reasons);
-        Assert.False(result.Complete);
+        Assert.Equal("busy", result.BaselineAvailability);
+        Assert.DoesNotContain("busy", result.Reasons);   // coverage stays temporal
     }
 
     [Fact]
@@ -610,7 +609,7 @@ public sealed class BaselineUnavailabilityTests
         var result = WindowsAnalysis.Run(With(store), current, 6, Now)!;
 
         Assert.Null(result.Baseline);                                   // no fault time we cannot back up
-        Assert.Contains("baseline-history-unwritable", result.Reasons);
+        Assert.Equal("history-unwritable", result.BaselineAvailability);
         Assert.NotEmpty(result.Findings);                               // the comparison still stands
     }
 
@@ -622,7 +621,7 @@ public sealed class BaselineUnavailabilityTests
         var result = WindowsAnalysis.Run(With(store), current, 6, Now)!;
 
         Assert.Null(result.Baseline);
-        Assert.Contains("baseline-history-unreadable", result.Reasons);
+        Assert.Equal("history-unreadable", result.BaselineAvailability);
     }
 
     [Fact]
@@ -637,5 +636,65 @@ public sealed class BaselineUnavailabilityTests
         Assert.Equal("active-fault", result.Baseline!.State);
         Assert.Contains(result.Findings, finding => finding.Title.Contains("missing", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Findings, finding => finding.Title.Contains("battery", StringComparison.OrdinalIgnoreCase));
+    }
+}
+
+public sealed class BaselineHistoryStampTests
+{
+    private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-08-17T12:00:00-05:00");
+
+    [Fact]
+    public void HistoryLeftOverFromAnotherBaselineIsDiscardedNotReported()
+    {
+        // Crash between the two writes: the new baseline is on disk with the
+        // previous baseline's fault history beside it. The stamp makes that
+        // pair recognisable, so the stale fault is not reported as this
+        // baseline's.
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var baseline = SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now.AddMinutes(-5) };
+        var orphaned = new BaselineStateFile(FaultSince: Now.AddDays(-3), BaselineCapturedAt: Now.AddDays(-7));
+        var store = new MemoryBaselineStore(baseline, orphaned);
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"), null, store);
+
+        // Current state matches the baseline, so: healthy, and no three-day-old fault.
+        var result = WindowsAnalysis.Run(inputs, baseline with { CapturedAt = Now }, 6, Now)!;
+
+        Assert.Equal("healthy", Assert.IsType<ContractBaselineState>(result.Baseline).State);
+        Assert.Null(result.Baseline!.FaultSince);
+        Assert.Equal(baseline.CapturedAt, store.ReadHistory()!.BaselineCapturedAt);
+    }
+
+    [Fact]
+    public void HistoryForTheSameBaselineIsKept()
+    {
+        var dock = SnapshotComparerTests.Device(@"USB4\VID_045E&PID_0963\DOCK", "USB", "Surface Thunderbolt(TM) 4 Dock");
+        var hub = SnapshotComparerTests.Device(@"USB\VID_043E&PID_9C04\HUB", "USB", "Generic USB Hub", dock.InstanceId);
+        var baseline = SnapshotComparerTests.Snapshot(dock, hub) with { CapturedAt = Now.AddDays(-1) };
+        var current = SnapshotComparerTests.Snapshot(dock) with { CapturedAt = Now };
+        var faultedFiveHoursAgo = new BaselineStateFile(FaultSince: Now.AddHours(-5), BaselineCapturedAt: baseline.CapturedAt);
+        var store = new MemoryBaselineStore(baseline, faultedFiveHoursAgo);
+        var inputs = new WindowsAnalysis.Inputs([], new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"), null, store);
+
+        var result = WindowsAnalysis.Run(inputs, current, 6, Now)!;
+
+        Assert.Equal("active-fault", Assert.IsType<ContractBaselineState>(result.Baseline).State);
+        Assert.Equal(Now.AddHours(-5), result.Baseline!.FaultSince);   // the fault kept its start time
+    }
+
+    [Fact]
+    public void AnUnknownBaselineDoesNotMakeACompleteHistoryIncomplete()
+    {
+        // The recorder covered the whole window; only the baseline is unknown.
+        // Those are different questions and the answers must not contaminate.
+        var entries = new[] { new RecorderEntry(Now.AddHours(-3), RecorderEntryKinds.DeviceAppeared, null, new PowerState(true, 100, 0), null) };
+        var store = new MemoryBaselineStore { LockBusy = true };
+        var inputs = new WindowsAnalysis.Inputs(entries, new CollectorHeartbeat(1, Now.AddDays(-1), Now.AddSeconds(-2), "events.jsonl"), null, store);
+
+        var result = WindowsAnalysis.Run(inputs, SnapshotComparerTests.Snapshot() with { CapturedAt = Now }, 6, Now)!;
+
+        Assert.True(result.Complete);                       // history is complete…
+        Assert.Empty(result.Reasons);
+        Assert.Null(result.Baseline);                       // …and the baseline is unknown
+        Assert.Equal("busy", result.BaselineAvailability);
     }
 }
