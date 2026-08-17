@@ -119,24 +119,33 @@ internal sealed class McpServer
                 continue;
             }
 
+            // JSON-RPC 2.0 shape, checked before anything is dispatched:
+            // "jsonrpc" must be exactly "2.0"; an id, if present, must be a
+            // string, number or null; "method" must be a non-empty string.
             // A request carries an "id" key — even an explicit null id is a
             // request and gets an answer with id null. Only an *absent* id is
-            // a notification, which must not be answered.
+            // a notification, which must not be answered — but a malformed
+            // notification is still an Invalid Request and is answered (id
+            // null) rather than dropped, so a broken client hears about it.
             var isNotification = !message.ContainsKey("id");
             var id = message["id"]?.DeepClone();
-            if (id is JsonObject or JsonArray)
+            if (!IsValidId(id))
             {
                 RespondError(null, -32600, "Invalid Request: id must be a string, number or null");
                 continue;
             }
 
-            var methodNode = message["method"];
-            if (methodNode is not JsonValue methodValue || !methodValue.TryGetValue<string>(out var method) || method.Length == 0)
+            if (message["jsonrpc"] is not JsonValue versionValue ||
+                !versionValue.TryGetValue<string>(out var version) || version != "2.0")
             {
-                if (!isNotification)
-                {
-                    RespondError(id, -32600, "Invalid Request: method must be a non-empty string");
-                }
+                RespondError(isNotification ? null : id, -32600, "Invalid Request: jsonrpc must be \"2.0\"");
+                continue;
+            }
+
+            if (message["method"] is not JsonValue methodValue ||
+                !methodValue.TryGetValue<string>(out var method) || method.Length == 0)
+            {
+                RespondError(isNotification ? null : id, -32600, "Invalid Request: method must be a non-empty string");
                 continue;
             }
 
@@ -226,6 +235,22 @@ internal sealed class McpServer
                 RespondError(id, -32601, $"Unknown method: {method}");
                 break;
         }
+    }
+
+    /// <summary>JSON-RPC ids are strings, numbers or null — not booleans, objects or arrays.</summary>
+    private static bool IsValidId(JsonNode? id)
+    {
+        if (id is null)
+        {
+            return true;
+        }
+
+        if (id is not JsonValue value)
+        {
+            return false;
+        }
+
+        return value.TryGetValue<string>(out _) || value.TryGetValue<double>(out _);
     }
 
     private void Respond(JsonNode? id, JsonObject result)
