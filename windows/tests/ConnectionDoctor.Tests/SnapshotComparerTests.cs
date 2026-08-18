@@ -102,6 +102,7 @@ public sealed class SnapshotComparerTests
         string id,
         string className,
         string name,
-        string? parentId = null) =>
-        new(id, className, name, null, parentId);
+        string? parentId = null,
+        bool? embeddedPanel = null) =>
+        new(id, className, name, null, parentId, EmbeddedPanel: embeddedPanel);
 }

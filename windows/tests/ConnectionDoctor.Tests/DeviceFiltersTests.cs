@@ -87,4 +87,67 @@ public sealed class DeviceFiltersTests
         Assert.Contains(internalKeyboard, all);
         Assert.Contains(internalPanel, all);
     }
+    // Issue #14. The markers were right on a Surface and wrong nearly
+    // everywhere else, in both directions at once.
+    [Fact]
+    public void WindowsOwnAnswerBeatsTheNameOnBuiltInPanels()
+    {
+        var byId = new Dictionary<string, DeviceNode>(StringComparer.OrdinalIgnoreCase);
+
+        // The case that made this issue: most laptops enumerate their own
+        // panel as "Generic PnP Monitor", which matches no marker, so the
+        // panel was shown even with built-ins hidden.
+        var genericPanel = SnapshotComparerTests.Device(
+            @"DISPLAY\GPN0001\4&1a2b3c&0&UID4353", "Monitor", "Generic PnP Monitor",
+            embeddedPanel: true);
+        Assert.False(DeviceFilters.IsExternalDevice(genericPanel, byId));
+
+        // And the other direction: an external monitor whose marketing name
+        // contains a marker was silently hidden.
+        var externalWithMarker = SnapshotComparerTests.Device(
+            @"DISPLAY\GSM5B09\5&2b3c4d&0&UID4354", "Monitor", "LG UltraFine Integrated Hub Display",
+            embeddedPanel: false);
+        Assert.True(DeviceFilters.IsExternalDevice(externalWithMarker, byId));
+    }
+
+    [Fact]
+    public void AMonitorWindowsDidNotReportOnFallsBackToTheNameRatherThanGuessing()
+    {
+        var byId = new Dictionary<string, DeviceNode>(StringComparer.OrdinalIgnoreCase);
+
+        // QueryDisplayConfig covers active targets only, so a powered-off or
+        // unplugged monitor is absent from it. Absent must not read as
+        // "external" — it means no opinion, and the old heuristic answers.
+        var unknownSurface = SnapshotComparerTests.Device(
+            @"DISPLAY\SUR0001\4&1a2b3c&0&UID4355", "Monitor", "Surface Display");
+        Assert.False(DeviceFilters.IsExternalDevice(unknownSurface, byId));
+
+        var unknownExternal = SnapshotComparerTests.Device(
+            @"DISPLAY\DEL4321\4&1a2b3c&0&UID4356", "Monitor", "DELL U2723QE");
+        Assert.True(DeviceFilters.IsExternalDevice(unknownExternal, byId));
+    }
+
+    [Theory]
+    // The device path and the instance id are the same three fields in
+    // different punctuation.
+    [InlineData(@"\\?\DISPLAY#GSM5B09#5&1a2b3c&0&UID4353#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}",
+                @"DISPLAY\GSM5B09\5&1a2b3c&0&UID4353")]
+    [InlineData(@"DISPLAY#GPN0001#4&1a2b&0&UID256", @"DISPLAY\GPN0001\4&1a2b&0&UID256")]
+    // Anything not that shape returns null — no opinion — rather than a
+    // correlation that could hide someone's external monitor.
+    [InlineData(@"\\?\DISPLAY#GSM5B09#{e6f07b5f-ee97-4a90-b076-33f57bf4eaa7}", null)]
+    [InlineData("", null)]
+    [InlineData(null, null)]
+    public void ADevicePathCorrelatesToAnInstanceIdOrToNothing(string? path, string? expected) =>
+        Assert.Equal(expected, DisplayConfig.InstanceIdFromDevicePath(path));
+
+    [Theory]
+    [InlineData(0x80000000u, true)]   // INTERNAL
+    [InlineData(4u, true)]            // DISPLAYPORT_EMBEDDED
+    [InlineData(6u, true)]            // UDI_EMBEDDED
+    [InlineData(5u, false)]           // UDI_EXTERNAL
+    [InlineData(10u, false)]          // DISPLAYPORT_EXTERNAL
+    public void OnlyEmbeddedOutputTechnologiesAreThePanel(uint technology, bool expected) =>
+        Assert.Equal(expected, DisplayConfig.IsEmbedded(technology));
+
 }
