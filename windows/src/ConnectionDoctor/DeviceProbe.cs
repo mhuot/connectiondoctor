@@ -45,6 +45,10 @@ internal static class DeviceProbe
         try
         {
             var devices = new List<DeviceNode>();
+            // Asked once per enumeration rather than per monitor: the query
+            // returns the whole active topology in one call, and asking again
+            // for each device would let the answer change mid-snapshot.
+            var embeddedPanels = DisplayConfig.EmbeddedPanels();
             for (uint index = 0; ; index++)
             {
                 var data = new SpDevInfoData { Size = (uint)Marshal.SizeOf<SpDevInfoData>() };
@@ -70,8 +74,13 @@ internal static class DeviceProbe
                 var compatibleIds = ReadRegistryMultiString(deviceInfoSet, ref data, SpdrpCompatibleIds);
                 var address = ReadRegistryDword(deviceInfoSet, ref data, SpdrpAddress);
 
+                bool? embedded = embeddedPanels.TryGetValue(instanceId, out var isEmbedded)
+                    ? isEmbedded
+                    : null;
+
                 devices.Add(new DeviceNode(
-                    instanceId, className, name, manufacturer, parent, compatibleIds, address));
+                    instanceId, className, name, manufacturer, parent, compatibleIds, address,
+                    EmbeddedPanel: embedded));
             }
 
             return devices;

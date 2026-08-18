@@ -24,7 +24,14 @@ internal sealed record DeviceNode(
     string? ParentInstanceId,
     string? CompatibleIds = null,
     int? Address = null,
-    UsbLinkSpeed LinkSpeed = UsbLinkSpeed.Unknown)
+    UsbLinkSpeed LinkSpeed = UsbLinkSpeed.Unknown,
+    /// <summary>
+    /// Whether Windows reports this monitor as the machine's own panel.
+    /// Three-valued on purpose: null means the display config had nothing to
+    /// say — it only covers active targets, so a powered-off monitor is absent
+    /// rather than external — and the name heuristic answers instead.
+    /// </summary>
+    bool? EmbeddedPanel = null)
 {
     /// <summary>bDeviceClass 9 - a hub even when the friendly name says nothing.</summary>
     public const int UsbHubClass = 9;
@@ -297,8 +304,24 @@ internal static class DeviceFilters
         instanceId.StartsWith(@"USB\VID_", StringComparison.OrdinalIgnoreCase) ||
         instanceId.StartsWith(@"USB4\VID_", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Windows' answer when there is one, the name heuristic when there is not.
+    ///
+    /// The markers are kept only as a fallback because they are wrong in both
+    /// directions: most laptops enumerate their own panel as "Generic PnP
+    /// Monitor", which matches nothing and so reads as external, while any
+    /// external monitor with "Integrated" in its marketing name reads as
+    /// built-in and disappears from the view. They survive because a monitor
+    /// the display config never mentioned still needs an answer, and a bad
+    /// guess that has been in use for a while beats a new one.
+    /// </summary>
     private static bool LooksLikeBuiltInDisplay(DeviceNode device)
     {
+        if (device.EmbeddedPanel is { } embedded)
+        {
+            return embedded;
+        }
+
         string[] markers = ["Surface", "Internal", "Integrated", "Built-in"];
         return markers.Any(marker =>
             device.FriendlyName.Contains(marker, StringComparison.OrdinalIgnoreCase));
