@@ -1,0 +1,33 @@
+{
+  "schema": "connection-contract/v1",
+  "capturedAt": "2026-08-17T09:00:00-05:00",
+  "host": {
+    "id": "e5f60718-293a-44c5-a6d7-e8f901234567",
+    "name": "surface-a",
+    "os": "macos",
+    "arch": "arm64"
+  },
+  "power": {
+    "source": "mains",
+    "externalConnected": true,
+    "batteryPresent": false
+  },
+  "displaysKnown": true,
+  "nodes": [
+    {
+      "id": "host",
+      "kind": "host",
+      "name": "surface-a",
+      "protocol": "power"
+    },
+    {
+      "id": "usb:0x01100000",
+      "parentId": "host",
+      "kind": "hub",
+      "name": "Surface Thunderbolt(TM) 4 Dock",
+      "vidPid": "045E:0963",
+      "protocol": "usb3",
+      "unitKey": "7a8b9c0d1e2f3041"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "kind": "identity",
+  "hosts": 3,
+  "unattributed": {
+    "events": 1,
+    "reasonMatches": "2 hosts named \"surface\""
+  },
+  "findings": [],
+  "incidents": [],
+  "notes": "Two machines that share a hostname stay two endpoints, and a bare event stream named only for that hostname belongs to neither of them. Attaching it to whichever arrived first would put one machine's history on another, which is the mistake that makes a timeline lie about a device that never left. The third entry is the stream itself, held unattributed and carrying the reason, because losing the events silently would be the other way to get this wrong."
+}

@@ -1,0 +1,7 @@
+{
+  "kind": "identity",
+  "hosts": 1,
+  "findings": [],
+  "incidents": [],
+  "notes": "One machine renamed mid-day. Both documents carry the same host.id, so a consumer must show one endpoint with one history, not two endpoints each holding half of it. The hostname is the thing that changed and is therefore the thing that must not be the key. The dock keeps its unitKey across the rename because the key depends on the installation, not on what the machine is called."
+}

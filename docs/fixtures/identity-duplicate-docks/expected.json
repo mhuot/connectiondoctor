@@ -1,0 +1,7 @@
+{
+  "kind": "identity",
+  "hosts": 2,
+  "findings": [],
+  "incidents": [],
+  "notes": "The same dock model on two different machines, each reporting the same serial to its own collector. The unitKeys differ because the key is an HMAC under a secret that never leaves the machine that generated it, so two installations cannot produce the same key for the same hardware. That is the privacy property working as designed, and it is also the limit: these keys are meaningful beside their own host and are not evidence about whether one physical dock moved between the two."
+}

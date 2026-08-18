@@ -54,11 +54,18 @@ weakest claim is worth — so the state is written down rather than implied:
 | | Status |
 |---|---|
 | Incident stitching (TypeScript) | **Executed.** `dashboard/src/domain/conformance.test.ts` runs the real engine over every case and compares against `expected.json`. The shallow-vs-sustained deficit pair pins both edges of the rule that decides whether a power dip reaches the timeline. |
+| Identity keying (TypeScript) | **Executed.** The `identity-*` cases run through the real `loadFiles` + `hostKey`: a renamed machine stays one endpoint, two machines sharing a hostname stay two, and a bare stream that could belong to either joins neither. Each is asserted in both file orders, because a drag-and-drop says nothing about which file arrives first. |
 | Fixture contract validity | **Executed.** `host.id` must be a UUIDv4, `unitKey` 16 hex characters, no corrupt event lines. |
 | Finding quality | **Asserted, not executed.** Findings come from the Swift and C# engines; nothing recomputes them in TypeScript. The tests check that each case *declares* a coherent answer (control → silence, fault → something loud) and that findings carried in a fixture envelope agree with it. A fixture whose expected findings were simply wrong would pass. |
 | Parity | **Not attempted.** Needs the other two engines reading contract data. |
 
-Both gaps close the same way: `contract-conformance` tasks 1.3 and 1.4, which
+The identity cases are **consumer** cases: they describe what happens when two
+documents meet, which is a situation no producer is ever in — a collector emits
+one document about one machine and never sees a rename as an event. So 1.3/1.4
+parity does not apply to them, and their absence from a producer run is correct
+rather than a gap.
+
+Both finding gaps close the same way: `contract-conformance` tasks 1.3 and 1.4, which
 point the macOS and Windows analysis at envelope + events so this corpus can be
 run through all three engines.
 
