@@ -1,0 +1,32 @@
+{
+  "schema": "connection-contract/v1",
+  "capturedAt": "2026-08-17T09:00:30-05:00",
+  "host": {
+    "id": "d4e5f607-1829-43b4-95c6-d7e8f9012345",
+    "name": "surface",
+    "os": "macos",
+    "arch": "arm64"
+  },
+  "power": {
+    "source": "mains",
+    "externalConnected": true,
+    "batteryPresent": false
+  },
+  "displaysKnown": true,
+  "nodes": [
+    {
+      "id": "host",
+      "kind": "host",
+      "name": "surface",
+      "protocol": "power"
+    },
+    {
+      "id": "usb:1",
+      "parentId": "host",
+      "kind": "device",
+      "name": "Surface Type Cover",
+      "vidPid": "045E:09C2",
+      "protocol": "usbLow"
+    }
+  ]
+}

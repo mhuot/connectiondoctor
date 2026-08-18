@@ -26,6 +26,12 @@ export interface HostData {
   /** Durable history-quality reasons for this host; cleared only when a later
    *  payload proves the window complete (see hostHistory). */
   historyReasons: string[];
+  /** True when these events reached this host by *name* rather than by an id
+   *  either side carried. That attribution is provisional: it is correct while
+   *  the name identifies one machine, and becomes a guess the moment a second
+   *  machine claims it. The loader uses this to take the events back rather
+   *  than leave one machine holding another's history — see loadFiles. */
+  eventsByName?: boolean;
 }
 
 export const emptyContact = (): HostContact => ({ skippedLines: 0 });

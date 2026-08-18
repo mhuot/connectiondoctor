@@ -3,6 +3,8 @@ import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseEnvelope, parseEventStream } from '../contract/parse';
 import { stitchIncidents } from './incidents';
+import { loadFiles } from '../data/sources';
+import { hostKey } from '../data/store';
 import type { ContractEnvelope } from '../contract/types';
 
 /**
@@ -34,7 +36,11 @@ import type { ContractEnvelope } from '../contract/types';
 const FIXTURES = join(__dirname, '..', '..', '..', 'docs', 'fixtures');
 
 interface Expected {
-  kind: 'fault' | 'control';
+  kind: 'fault' | 'control' | 'identity';
+  /** Identity cases only: what the loader must make of the documents. */
+  hosts?: number;
+  /** Identity cases only: reasons the unattributed entry must carry. */
+  unattributed?: { events: number; reasonMatches: string };
   findings: Array<{ severity: string; title: string }>;
   incidents: Array<{ rootEvent: string | null; devicesLost: number; sharedParent: string | null }>;
   notes: string;
@@ -45,23 +51,46 @@ const cases = readdirSync(FIXTURES, { withFileTypes: true })
   .map((e) => e.name)
   .sort();
 
+/** Cases about *one* machine, which is every case that describes a diagnosis.
+ *  The identity cases are about telling machines apart and carry two hosts, so
+ *  they are held out of the single-envelope assertions rather than bent to
+ *  fit them. */
+const diagnosisCases = cases.filter((c) => !c.startsWith('identity-'));
+
+/** Every contract document in a case, in filename order. Most cases have one
+ *  (`contract.v1.json`); an identity case has `a.` and `b.` because the thing
+ *  under test only exists between two documents. */
+const contractsIn = (name: string): string[] =>
+  readdirSync(join(FIXTURES, name))
+    .filter((f) => f.endsWith('contract.v1.json'))
+    .sort();
+
 const load = (name: string) => {
   const dir = join(FIXTURES, name);
-  const raw = JSON.parse(readFileSync(join(dir, 'contract.v1.json'), 'utf8')) as Record<string, any>;
-  const envelope = parseEnvelope(raw) as ContractEnvelope;
-  const events = parseEventStream(readFileSync(join(dir, 'events.v1.jsonl'), 'utf8'));
+  const files = contractsIn(name);
+  const raws = files.map((f) => JSON.parse(readFileSync(join(dir, f), 'utf8')) as Record<string, any>);
+  const eventsFile = join(dir, 'events.v1.jsonl');
+  const events = parseEventStream(existsSync(eventsFile) ? readFileSync(eventsFile, 'utf8') : '');
   const expected = JSON.parse(readFileSync(join(dir, 'expected.json'), 'utf8')) as Expected;
-  return { raw, envelope, events, expected };
+  return {
+    raw: raws[0],
+    raws,
+    files,
+    envelope: parseEnvelope(raws[0]) as ContractEnvelope,
+    events,
+    expected,
+  };
 };
 
 describe('conformance corpus', () => {
   it('has both fault and control cases — controls are the half that stops false alarms', () => {
     expect(cases.filter((c) => c.startsWith('fault-')).length).toBeGreaterThan(0);
     expect(cases.filter((c) => c.startsWith('control-')).length).toBeGreaterThanOrEqual(5);
+    expect(cases.filter((c) => c.startsWith('identity-')).length).toBeGreaterThanOrEqual(3);
   });
 
   it.each(cases)('%s: fixture is well formed and self-describing', (name) => {
-    const { raw, envelope, events, expected } = load(name);
+    const { raws, envelope, events, expected } = load(name);
     expect(envelope.schema).toBe('connection-contract/v1');
     // A corpus that is not itself contract-valid proves nothing about an
     // engine that consumes the contract, so the identity rules from
@@ -73,12 +102,18 @@ describe('conformance corpus', () => {
     // envelope: both fields are still `opt, proposed` (issue #27) and the TS
     // parser does not model them yet, so parsing first would silently drop
     // exactly the values under test.
-    expect(raw.host.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    for (const node of (raw.nodes ?? []) as Array<Record<string, unknown>>) {
-      if (node.unitKey !== undefined) expect(node.unitKey).toMatch(/^[0-9a-f]{16}$/);
+    // Every document in the case, not just the first: an identity case's whole
+    // point lives in the second one, and checking only the first would leave
+    // the document under test unvalidated.
+    for (const doc of raws) {
+      expect(doc.schema).toBe('connection-contract/v1');
+      expect(doc.host.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      for (const node of (doc.nodes ?? []) as Array<Record<string, unknown>>) {
+        if (node.unitKey !== undefined) expect(node.unitKey).toMatch(/^[0-9a-f]{16}$/);
+      }
     }
     expect(events.skippedLines).toBe(0);                 // a corrupt fixture would silently weaken every assertion
-    expect(['fault', 'control']).toContain(expected.kind);
+    expect(['fault', 'control', 'identity']).toContain(expected.kind);
     expect(expected.notes.length).toBeGreaterThan(40);   // why this answer is right, not just what it is
     expect(existsSync(join(FIXTURES, name, 'README.md'))).toBe(true);
     // Every case must state its provenance: a constructed case proves the
@@ -87,7 +122,7 @@ describe('conformance corpus', () => {
     expect(readme).toMatch(/\((constructed|recorded)[^)]*\)/);
   });
 
-  it.each(cases)('%s: incident stitching (executed) matches expected shape', (name) => {
+  it.each(diagnosisCases)('%s: incident stitching (executed) matches expected shape', (name) => {
     const { envelope, events, expected } = load(name);
     const incidents = stitchIncidents(events.events, envelope);
 
@@ -291,5 +326,88 @@ describe('conformance corpus', () => {
     expect(expected.findings).toEqual([]);
     // The emptiness means "unknown", and the envelope carries the reason why.
     expect(envelope.analysis?.coverage.reasons?.length).toBeGreaterThan(0);
+  });
+
+  // Identity cases run through the real loader, so unlike finding quality this
+  // is *executed*: `loadFiles` + `hostKey` are the engine, the fixtures are the
+  // input, and a regression in either shows up here rather than in a comment.
+  describe('identity (executed: loadFiles + hostKey)', () => {
+    const identityCases = cases.filter((c) => c.startsWith('identity-'));
+
+    const filesFor = (name: string): File[] => {
+      const dir = join(FIXTURES, name);
+      return readdirSync(dir)
+        .filter((f) => f.endsWith('.json') && f !== 'expected.json')
+        .concat(readdirSync(dir).filter((f) => f.endsWith('.jsonl')))
+        .sort()
+        .map((f) => new File([readFileSync(join(dir, f), 'utf8')], f));
+    };
+
+    it.each(identityCases)('%s: the loader reaches the expected host count', async (name) => {
+      const { expected } = load(name);
+      const files = filesFor(name);
+      const hosts = await loadFiles(files, []);
+      expect(hosts).toHaveLength(expected.hosts!);
+    });
+
+    // Dropping several files at once says nothing about which the browser
+    // hands over first, so any answer that depends on the order is a bug that
+    // reproduces on someone else's machine and not on ours.
+    it.each(identityCases)('%s: the answer does not depend on file order', async (name) => {
+      const files = filesFor(name);
+      const forwards = await loadFiles(files, []);
+      const backwards = await loadFiles([...files].reverse(), []);
+
+      const keys = (hosts: Awaited<ReturnType<typeof loadFiles>>) =>
+        hosts.map((h) => `${hostKey(h)}:${h.events.length}`).sort();
+      expect(keys(backwards)).toEqual(keys(forwards));
+    });
+
+    it('a renamed machine is one endpoint that keeps its history', async () => {
+      const hosts = await loadFiles(filesFor('identity-rename'), []);
+      const { raws } = load('identity-rename');
+
+      expect(hosts).toHaveLength(1);
+      expect(hostKey(hosts[0])).toBe(raws[0].host.id);
+      // The later document wins the display name; the id is what joined them.
+      expect(hosts[0].name).toBe('mac-mini-office');
+      expect(hosts[0].events).toHaveLength(1);
+      expect(raws[0].host.id).toBe(raws[1].host.id);
+      expect(raws[0].host.name).not.toBe(raws[1].host.name);
+    });
+
+    it('two machines sharing a hostname stay two, and their stream joins neither', async () => {
+      const { expected } = load('identity-hostname-reuse');
+      const hosts = await loadFiles(filesFor('identity-hostname-reuse'), []);
+
+      const identified = hosts.filter((h) => h.envelope);
+      expect(identified).toHaveLength(2);
+      expect(new Set(identified.map(hostKey)).size).toBe(2);
+      // Neither machine absorbed history that might not be its own.
+      expect(identified.every((h) => h.events.length === 0)).toBe(true);
+
+      const orphan = hosts.find((h) => !h.envelope)!;
+      expect(orphan.events).toHaveLength(expected.unattributed!.events);
+      expect(orphan.historyReasons.join(' ')).toContain(expected.unattributed!.reasonMatches);
+    });
+
+    it('the same dock on two endpoints keys differently, and that is the limit not the answer', async () => {
+      const { raws } = load('identity-duplicate-docks');
+      const hosts = await loadFiles(filesFor('identity-duplicate-docks'), []);
+      expect(hosts).toHaveLength(2);
+
+      const keyOf = (doc: Record<string, any>) =>
+        (doc.nodes as Array<Record<string, any>>).find((n) => n.unitKey)!.unitKey as string;
+      const [a, b] = raws.map(keyOf);
+
+      // Same model, same reported serial, different installations: the keys
+      // must differ, because a shared secret would make two people's docks
+      // correlate across exports.
+      expect(a).not.toBe(b);
+      expect(raws[0].nodes[1].vidPid).toBe(raws[1].nodes[1].vidPid);
+      // And nothing in this repo joins them back up — asserted by absence,
+      // which is why the README says so rather than the test proving it.
+      expect(new Set([a, b]).size).toBe(2);
+    });
   });
 });

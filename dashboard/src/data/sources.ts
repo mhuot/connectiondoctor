@@ -57,6 +57,10 @@ export async function loadFiles(files: File[], existing: HostData[]): Promise<Ho
         host.historyReasons = [...new Set([...host.historyReasons, ambiguity(file.name, name, rivals)])];
       }
       host.events = [...host.events, ...events];
+      // Remember *how* this attribution was reached. Matching a single host by
+      // name is right until a second machine answers to that name, and the
+      // envelope branch below needs to know which events it may take back.
+      if (candidates.length === 1 && fromStream?.id === undefined) host.eventsByName = true;
       host.origin = `${host.origin === file.name ? '' : `${host.origin}, `}${file.name}`;
       host.contact = { ...host.contact, eventsAt: new Date().toISOString(), skippedLines: host.contact.skippedLines + skippedLines };
       if (skippedLines > 0) host.historyReasons = [...new Set([...host.historyReasons, `${skippedLines} skipped lines`])];
@@ -83,12 +87,34 @@ export async function loadFiles(files: File[], existing: HostData[]): Promise<Ho
         ?? (contested ? undefined : unattributed)
         ?? { name, events: [], origin: file.name, contact: emptyContact(), historyReasons: [] };
       if (envelope.host.id && host === unattributed) hosts.delete(`name:${host.name}`);
+      // Adopting an entry the envelope did not bring with it is the same
+      // provisional attribution the stream branch makes, reached from the
+      // other side: these events arrived under a bare name and this document
+      // is claiming them. Mark it so, or a later same-named machine cannot
+      // take them back.
+      if (host === unattributed && host.events.length > 0) host.eventsByName = true;
+
+      // A name-only attribution made earlier is only as good as the name being
+      // unambiguous, and that can stop being true later: drop a stream, then
+      // one envelope, then a second envelope with the same hostname, and the
+      // first machine is now holding history that might be the second's. The
+      // events are taken back rather than left where a guess put them —
+      // otherwise the answer depends on which file the browser handed over
+      // first, which is a bug that reproduces on someone else's machine.
+      if (contested) {
+        for (const other of hosts.values()) {
+          if (other.name !== name || !other.eventsByName || other.events.length === 0) continue;
+          const parked = orphanFor(hosts, name, other.origin);
+          parked.events = [...parked.events, ...other.events];
+          parked.historyReasons = [...new Set([...parked.historyReasons, contestedReason(name)])];
+          other.events = [];
+          other.eventsByName = false;
+          hosts.set(`name:${name}`, parked);
+        }
+      }
       if (envelope.host.id && contested && unattributed && unattributed !== host) {
         unattributed.historyReasons = [
-          ...new Set([
-            ...unattributed.historyReasons,
-            `more than one host is named "${name}" — these events are not attributed to any of them`,
-          ]),
+          ...new Set([...unattributed.historyReasons, contestedReason(name)]),
         ];
       }
       host.name = name;
@@ -127,6 +153,22 @@ function hostFromSnapshot(events: ContractEvent[]): { id?: string; name: string 
     if (host) return { id: host.id, name: host.name };
   }
   return undefined;
+}
+
+const contestedReason = (name: string): string =>
+  `more than one host is named "${name}" — these events are not attributed to any of them`;
+
+/** The place a contested name's events live: reuse the existing unattributed
+ *  entry if there is one, so two rounds of ambiguity accumulate rather than
+ *  overwrite each other. */
+function orphanFor(
+  hosts: Map<string, HostData>,
+  name: string,
+  origin: string,
+): HostData {
+  const existing = hosts.get(`name:${name}`);
+  if (existing && existing.envelope === undefined) return existing;
+  return { name, events: [], origin, contact: emptyContact(), historyReasons: [] };
 }
 
 function ambiguity(filename: string, name: string | undefined, count: number): string {

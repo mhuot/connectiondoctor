@@ -1,0 +1,33 @@
+{
+  "schema": "connection-contract/v1",
+  "capturedAt": "2026-08-17T09:00:00-05:00",
+  "host": {
+    "id": "b2c3d4e5-f607-4182-93a4-b5c6d7e8f901",
+    "name": "mini",
+    "os": "macos",
+    "arch": "arm64"
+  },
+  "power": {
+    "source": "mains",
+    "externalConnected": true,
+    "batteryPresent": false
+  },
+  "displaysKnown": true,
+  "nodes": [
+    {
+      "id": "host",
+      "kind": "host",
+      "name": "mini",
+      "protocol": "power"
+    },
+    {
+      "id": "usb:1",
+      "parentId": "host",
+      "kind": "hub",
+      "name": "CalDigit TS4",
+      "vidPid": "2109:0822",
+      "protocol": "usb3",
+      "unitKey": "3c4d5e6f70819a2b"
+    }
+  ]
+}
