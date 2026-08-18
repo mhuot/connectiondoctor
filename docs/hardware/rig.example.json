@@ -1,0 +1,36 @@
+{
+  "rig": "example-desk",
+  "notes": "Ground truth for one physical desk, declared once so the kit compares mechanically instead of a person deciding the output looks about right. Copy this, describe your own hardware, and keep your copy out of git if the strings identify you.",
+
+  "devices": [
+    {
+      "label": "internal panel",
+      "match": "Generic PnP Monitor|Built-in|Color LCD",
+      "expect": { "builtIn": true },
+      "why": "The case from issue #14: most laptops enumerate their own panel with a generic name, and the old heuristic read that as external."
+    },
+    {
+      "label": "external monitor",
+      "match": "U2723QE|UltraWide|LG",
+      "expect": { "builtIn": false },
+      "why": "Must stay visible regardless of what its marketing name contains."
+    },
+    {
+      "label": "dock",
+      "match": "Thunderbolt.*Dock|CalDigit",
+      "expect": { "keyed": true },
+      "why": "An external unit that reports a serial should get exactly one unit key."
+    },
+    {
+      "label": "USB4 retimer",
+      "match": "Retimer",
+      "expect": { "keyed": false },
+      "why": "A negative assertion, and the one that would have caught the shipped bug: retimer instance ids end in location tokens, which are not serials. Three of these once shared a single key."
+    }
+  ],
+
+  "neverExport": [
+    "PUT-YOUR-DOCK-SERIAL-HERE",
+    "PUT-YOUR-MONITOR-SERIAL-HERE"
+  ]
+}
