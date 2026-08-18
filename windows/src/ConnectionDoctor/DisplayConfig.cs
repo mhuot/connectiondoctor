@@ -71,9 +71,19 @@ internal static class DisplayConfig
                 }
             }
         }
-        catch (Exception exception) when (exception is DllNotFoundException or EntryPointNotFoundException)
+        catch (Exception exception) when (exception is not OutOfMemoryException
+                                          and not StackOverflowException)
         {
-            // An older or trimmed Windows without the API: no opinion.
+            // Deliberately broad. This is display-layer cosmetics sitting in
+            // the middle of device enumeration, so anything it throws — a
+            // missing API on an older Windows, a marshalling mistake in the
+            // struct layouts below, an unexpected shape from a driver — would
+            // otherwise take out the whole snapshot and with it the diagnosis
+            // this tool exists to produce. Losing the answer to "which panel
+            // is built in" costs a checkbox; losing the device list costs
+            // everything. Reported once so a wrong layout is findable rather
+            // than silent.
+            Report(exception);
         }
 
         return found;
@@ -120,6 +130,28 @@ internal static class DisplayConfig
         return segments.Length == 3 && segments.All(segment => segment.Length > 0)
             ? string.Join('\\', segments)
             : null;
+    }
+
+    private static bool reported;
+
+    /// <summary>Say it once: a machine where this always fails should not fill the log with it.</summary>
+    private static void Report(Exception exception)
+    {
+        if (reported)
+        {
+            return;
+        }
+
+        reported = true;
+        try
+        {
+            Console.Error.WriteLine(
+                $"ConnectionDoctor: could not read the display configuration ({exception.Message}) — "
+                + "built-in panel detection falls back to device names");
+        }
+        catch (IOException)
+        {
+        }
     }
 
     private const uint QdcOnlyActivePaths = 2;
