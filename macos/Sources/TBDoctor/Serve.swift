@@ -11,6 +11,15 @@ import Network
 /// data is topology and power telemetry with no authentication, which is fine
 /// for a home lab fleet and explicitly opt-in for anything else.
 enum Serve {
+    /// `<product>/<version>`, per embedding.md § Headers. The product token
+    /// names the binary so a fleet can tell the two collectors apart. A source
+    /// build has no bundle to read a version from and says so rather than
+    /// claiming a release number it does not have.
+    static let productIdentity: String = {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0-dev"
+        return "tbdoctor/\(version)"
+    }()
+
 
     static func run(port: UInt16, lan: Bool) {
         let params = NWParameters.tcp
@@ -101,6 +110,13 @@ enum Serve {
             head += "Content-Type: \(response.type)\r\n"
             head += "Content-Length: \(response.body.count)\r\n"
             head += "Access-Control-Allow-Origin: *\r\n"  // the dashboard is a browser app
+            // Product identity on *every* response (embedding.md § Headers).
+            // It is how `ui` decides whether something already answering on
+            // this port is us before reusing it — any other service returning
+            // a 2xx must not be mistaken for a collector. It is also the only
+            // provenance a test harness can read without being told what it
+            // is talking to, which is how its absence here was noticed.
+            head += "Server: \(Serve.productIdentity)\r\n"
             if let cacheControl { head += "Cache-Control: \(cacheControl)\r\n" }
             head += "Connection: close\r\n\r\n"
             var payload = Data(head.utf8)
