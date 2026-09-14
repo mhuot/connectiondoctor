@@ -126,7 +126,7 @@ struct DiagramView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         guard let data = ExcalidrawExport.document(
             layout: layout,
-            caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))") else { return }
+            caption: "ConnectionDoctor — connections as of \(Diagnosis.stamp(sample.t))") else { return }
         try? data.write(to: url)
     }
 

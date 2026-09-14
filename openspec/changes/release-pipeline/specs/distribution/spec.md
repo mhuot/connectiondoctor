@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: One release per tag, from one commit
-Pushing a tag `vX.Y.Z` SHALL produce a GitHub Release containing `TBDoctor-X.Y.Z.dmg`, `TBDoctor-X.Y.Z.zip`, `ConnectionDoctor-X.Y.Z-win-arm64.exe`, `ConnectionDoctor-X.Y.Z-win-x64.exe` and `SHA256SUMS`, all built from that commit with one dashboard build shared by both collectors.
+Pushing a tag `vX.Y.Z` SHALL produce a GitHub Release containing `ConnectionDoctor-X.Y.Z.dmg`, `ConnectionDoctor-X.Y.Z.zip`, `ConnectionDoctor-X.Y.Z-win-arm64.exe`, `ConnectionDoctor-X.Y.Z-win-x64.exe` and `SHA256SUMS`, all built from that commit with one dashboard build shared by both collectors.
 
 #### Scenario: Tag pushed
 - **WHEN** `v0.1.0` is pushed
@@ -13,7 +13,7 @@ Pushing a tag `vX.Y.Z` SHALL produce a GitHub Release containing `TBDoctor-X.Y.Z
 
 #### Scenario: Architecture is what the docs say
 - **WHEN** the macOS job finishes
-- **THEN** it has asserted with `lipo -info` that `TBDoctor` contains exactly the architectures `docs/distribution.md` lists (arm64)
+- **THEN** it has asserted with `lipo -info` that `ConnectionDoctor` contains exactly the architectures `docs/distribution.md` lists (arm64)
 
 ### Requirement: Signed and notarized when secrets exist, honest when not
 The macOS artifacts SHALL be Developer ID signed and notarized, and the Windows executables Authenticode-signed via SignPath, whenever the corresponding secrets are configured; when they are not, the job SHALL still produce unsigned artifacts and state in its summary that signing was skipped.

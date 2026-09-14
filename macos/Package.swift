@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "TBDoctor",
+    name: "ConnectionDoctor",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "TBDoctor",
-            path: "Sources/TBDoctor",
+            name: "ConnectionDoctor",
+            path: "Sources/ConnectionDoctor",
             // Connection Dashboard bundle, staged by scripts/build-ui.sh. The
             // directory is committed empty so a plain source build still works;
             // Serve reports an absent bundle rather than failing.
@@ -21,9 +21,9 @@ let package = Package(
         // dashboard's parser exactly. Wider producer coverage is
         // contract-conformance 1.6b.
         .testTarget(
-            name: "TBDoctorTests",
-            dependencies: ["TBDoctor"],
-            path: "Tests/TBDoctorTests",
+            name: "ConnectionDoctorTests",
+            dependencies: ["ConnectionDoctor"],
+            path: "Tests/ConnectionDoctorTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         )
     ]

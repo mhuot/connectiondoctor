@@ -1,8 +1,8 @@
 # Connection Contract v1
 
 One JSON shape for connection-diagnostic data, shared by
-[TBDoctor](../macos/README.md) (macOS) and
-[ConnectionDoctor](../windows/README.md) (Windows).
+[ConnectionDoctor on macOS](../macos/README.md) and
+[ConnectionDoctor on Windows](../windows/README.md).
 
 The two tools independently converged on the same semantics — topology,
 root-vs-fallout, baseline diff, power deficit — implemented twice, in Swift and
@@ -46,7 +46,7 @@ only; breaking changes bump the version.
 - **integrity** — evidence exists but cannot be trusted or read: `corrupt-lines`, `gap-evidence-unreadable`, `heartbeat-unreadable`, `trim-evidence-unreadable`, `no-heartbeat`.
 
 The list is the canonical set at v1 and is **extensible**: producers may add reasons for evidence problems this list does not name, and consumers MUST treat an unknown reason as "incomplete for a reason I do not recognise" — displaying it verbatim — rather than rejecting the envelope or ignoring the incompleteness. What consumers may rely on is `complete` itself. Consumers show "unknown" rather than "none" whenever `complete` is false — an empty valid stream, a newly installed recorder and a trimmed log are indistinguishable without this |
-| `producer` *(opt, proposed)* | `{name: "tbdoctor"\|"connectiondoctor", version, commit?, dashboard?}` — added by `release-pipeline` |
+| `producer` *(opt)* | `{name: "connectiondoctor", version, commit?, dashboard?}`. Consumers continue accepting `tbdoctor` in historical recordings. |
 
 ## Power
 
@@ -334,7 +334,7 @@ field or renamed key fails a test rather than passing silently.
 
 ## Source mapping
 
-| Contract field | macOS (TBDoctor) | Windows (ConnectionDoctor) |
+| Contract field | ConnectionDoctor (macOS) | ConnectionDoctor (Windows) |
 |---|---|---|
 | `nodes[].id` / `parentId` | `locationID` + nibble parent walk | `InstanceId` + `CM_Get_Parent` |
 | `nodes[].vidPid` | `idVendor`/`idProduct` | `VID_xxxx&PID_xxxx` in instance ID |

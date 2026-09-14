@@ -13,7 +13,7 @@ and can never drift.
 - `docs/distribution.md`: artifacts, why not MSI/MSIX/pkg, signing, version
   flow, later Homebrew/winget.
 - `.github/workflows/ci.yml`: on PR and push to `main` — dashboard test+build
-  (ubuntu), TBDoctor build with the staged bundle (macos-15), ConnectionDoctor
+  (ubuntu), ConnectionDoctor macOS build with the staged bundle (macos-15), ConnectionDoctor
   build+test with the staged bundle (windows-latest). Unsigned, no artifacts
   published.
 - `.github/workflows/release.yml`: on tag `v*` — same three builds, then

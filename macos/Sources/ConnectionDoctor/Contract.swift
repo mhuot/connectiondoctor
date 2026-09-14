@@ -67,6 +67,11 @@ enum Contract {
         var envelope: [String: Any] = [
             "schema": schema,
             "capturedAt": ISO8601DateFormatter().string(from: sample.t),
+            "producer": [
+                "name": "connectiondoctor",
+                "version": Bundle.main.object(
+                    forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "dev",
+            ],
             "host": hostInfo(identity),
             "power": power(sample),
             "nodes": nodes,

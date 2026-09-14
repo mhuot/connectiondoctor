@@ -15,8 +15,8 @@ One GitHub Release per tag `vX.Y.Z`, built by CI from that tag (see
 
 | Platform | Artifact | Why this form |
 |---|---|---|
-| macOS (Apple silicon, arm64) | `TBDoctor-X.Y.Z.dmg` — drag to Applications | What Mac users expect for an app; opens, drag, done. Signed with Developer ID and **notarized**, so Gatekeeper opens it without ceremony. arm64 only — the fleet is Apple silicon; a universal build is a one-line change (`--arch arm64 --arch x86_64`) if an Intel user appears, and the release job asserts the shipped architecture with `lipo -info`. |
-| macOS | `TBDoctor-X.Y.Z.zip` — the same `.app` | For automation: Homebrew cask, scripted installs, future in-app updates. Same signature and notarization ticket. |
+| macOS (Apple silicon, arm64) | `ConnectionDoctor-X.Y.Z.dmg` — drag to Applications | What Mac users expect for an app; opens, drag, done. Signed with Developer ID and **notarized**, so Gatekeeper opens it without ceremony. arm64 only — the fleet is Apple silicon; a universal build is a one-line change (`--arch arm64 --arch x86_64`) if an Intel user appears, and the release job asserts the shipped architecture with `lipo -info`. |
+| macOS | `ConnectionDoctor-X.Y.Z.zip` — the same `.app` | For automation: Homebrew cask, scripted installs, future in-app updates. Same signature and notarization ticket. |
 | Windows arm64 | `ConnectionDoctor-X.Y.Z-win-arm64.exe` | **Single-file, self-contained** (.NET runtime inside). No prerequisite; runs from a USB stick or a download folder; `install` when you want it resident. Authenticode-signed via SignPath. |
 | Windows x64 | `ConnectionDoctor-X.Y.Z-win-x64.exe` | Same. |
 | all | `SHA256SUMS` | Checksums for every artifact above, for casks/manifests and for anyone who wants to verify. |
@@ -35,7 +35,7 @@ build produced what.
   distribution is wanted — it would just drop the exe under
   `%LOCALAPPDATA%\Programs\ConnectionDoctor` and run `install`.
 - **macOS `.pkg`.** Warranted only for a system-wide LaunchDaemon or writes
-  outside the bundle. TBDoctor is per-user (menu bar, `~/Library/Application
+  outside the bundle. ConnectionDoctor is per-user (menu bar, `~/Library/Application
   Support`), registers its own login item via `SMAppService`, and offers the
   CLI as a symlink — no pkg needed.
 - **Auto-update.** A `version` verb and a "newer release available" note in the
@@ -91,9 +91,10 @@ between tags are `X.Y.Z-dev+<sha>`.
 
 Today: download from the GitHub Release. Planned once releases are regular:
 
-- **Homebrew cask** `tbdoctor` — pulls the `.zip`, installs to
+- **Homebrew cask** `connectiondoctor` — pulls the `.zip`, installs to
   `/Applications`, and its `binary` stanza symlinks
-  `/usr/local/bin/tbdoctor` for the CLI/MCP.
+  `/usr/local/bin/connectiondoctor` for the CLI/MCP. The `tbdoctor` alias is
+  retained for one release with a deprecation notice.
 - **winget** manifest `mhuot.ConnectionDoctor` — pointing at the signed exe;
   winget's `portable` type fits a self-installing single exe with no MSI.
 

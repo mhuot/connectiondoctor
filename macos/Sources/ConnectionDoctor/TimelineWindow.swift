@@ -23,7 +23,7 @@ final class TimelineWindow {
                 defer: false)
             created.title = "Thunderbolt Timeline"
             created.center()
-            created.setFrameAutosaveName("TBDoctorTimeline")
+            created.setFrameAutosaveName("ConnectionDoctorTimeline")
             // Accessory apps outlive their windows; without this the window is
             // deallocated on close and reopening crashes.
             created.isReleasedWhenClosed = false

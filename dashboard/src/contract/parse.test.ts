@@ -106,7 +106,7 @@ describe('isDeficit', () => {
 });
 
 describe('live producer round-trip', () => {
-  it('parses a contract emitted by TBDoctor on an M4 mini (desktop)', () => {
+  it('parses a contract emitted by ConnectionDoctor on an M4 mini (desktop)', () => {
     const env = parseEnvelope(JSON.parse(fixture('mini-desktop.v1.json')));
     expect(env.power.source).toBe('mains');
     expect(env.power.batteryPresent).toBe(false);

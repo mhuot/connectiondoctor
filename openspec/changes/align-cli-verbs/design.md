@@ -149,7 +149,7 @@ vidPid is the cross-platform identity per `schema-v1.md`). Windows'
 
 ## `ui` on both (issue #21)
 Probe `GET /` on the port with a 2 s timeout. Reuse **only** if the response
-carries `Server: connectiondoctor/…` (or `tbdoctor/…`) — the product identity
+carries `Server: connectiondoctor/…` — the product identity
 `docs/embedding.md` now requires on every response. Free port → start `serve`
 and open. Any other 2xx → "port 8787 is held by another service; run `serve
 <port>`", exit 1, nothing opened. Windows `ContractServer.IsAlreadyServing`

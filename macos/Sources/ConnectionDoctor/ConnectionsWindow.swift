@@ -18,7 +18,7 @@ final class ConnectionsWindow {
                 defer: false)
             created.title = "Connections"
             created.center()
-            created.setFrameAutosaveName("TBDoctorConnections")
+            created.setFrameAutosaveName("ConnectionDoctorConnections")
             created.minSize = NSSize(width: 620, height: 420)
             // Accessory apps outlive their windows; without this the window is
             // deallocated on close and reopening crashes.

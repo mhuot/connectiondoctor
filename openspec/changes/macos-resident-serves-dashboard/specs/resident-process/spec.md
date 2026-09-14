@@ -4,7 +4,7 @@
 On both platforms the resident process (macOS menu-bar app, Windows tray) SHALL run the recorder and serve the dashboard on the default port for the whole login session, and SHALL open the browser to it from its menu.
 
 #### Scenario: macOS after login
-- **WHEN** TBDoctor is registered as a login item and the user logs in
+- **WHEN** ConnectionDoctor is registered as a login item and the user logs in
 - **THEN** `http://localhost:8787` serves the dashboard with this Mac already loaded, with no terminal involved
 
 #### Scenario: Port already held by us

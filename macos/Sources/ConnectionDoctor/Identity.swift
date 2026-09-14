@@ -138,7 +138,7 @@ struct Identity: Codable {
     private static func report(_ message: String) {
         guard !failureLogged else { return }
         failureLogged = true
-        FileHandle.standardError.write("TBDoctor: \(message)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("ConnectionDoctor: \(message)\n".data(using: .utf8)!)
     }
 
     /// Test seam: forget the cached identity so a fixture directory gets its own.

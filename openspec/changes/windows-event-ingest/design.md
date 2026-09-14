@@ -3,7 +3,7 @@
 ## Two inputs, one recorder
 The recorder becomes an event merger: a notification channel (immediate,
 timestamped by the OS) and the poll channel (every 5 s, tightening to 1 s for
-a minute after any notification — the same rule TBDoctor uses after a kernel
+a minute after any notification — the same rule ConnectionDoctor uses on macOS after a kernel
 event). Both write to the same JSONL through `Recorder`, which owns dedup.
 
 ## Dedup rule

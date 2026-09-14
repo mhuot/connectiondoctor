@@ -1,5 +1,5 @@
 import XCTest
-@testable import TBDoctor
+@testable import ConnectionDoctor
 
 /// Identity that survives a rename without becoming a tracking identifier.
 ///
@@ -12,7 +12,7 @@ final class IdentityTests: XCTestCase {
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tbdoctor-identity-\(UUID().uuidString)")
+            .appendingPathComponent("connectiondoctor-identity-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     }
 
@@ -114,7 +114,7 @@ final class IdentityTests: XCTestCase {
         // Another installation keys the same serial differently — that is what
         // stops the value correlating one dock across two shared bundles.
         let other = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tbdoctor-identity-\(UUID().uuidString)")
+            .appendingPathComponent("connectiondoctor-identity-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: other) }
         let elsewhere = try XCTUnwrap(Identity.resolve(in: other))

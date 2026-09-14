@@ -1,7 +1,7 @@
 # Embedding the dashboard in a collector
 
 The dashboard is the UI for both collectors — [ConnectionDoctor](../windows/README.md)
-on Windows and [TBDoctor](../macos/README.md) on macOS. Each one
+on Windows and [ConnectionDoctor](../macos/README.md) on macOS. Each one
 compiles this bundle into its own binary and serves it next to the Connection
 Contract v1 endpoints, so a user downloads one file and opens one URL. Node is a
 build-time dependency of whoever cuts the release, never of the user.
@@ -53,8 +53,8 @@ instead of an honest missing-file error.
   404s). This is the product identity the `ui` verb and the resident process's
   "Open dashboard…" check before reusing a port that already answers: any
   other service on 8787 returning a 2xx must not be mistaken for us. `<version>`
-  is the collector's `version` (e.g. `connectiondoctor/0.1.0`, `tbdoctor/0.1.0`
-  — the product token names the binary, so a fleet can tell them apart).
+  is the collector's `version` (for example, `connectiondoctor/0.1.0`);
+  the product token names the binary, so a fleet can identify it.
 - `Access-Control-Allow-Origin: *`, so a dashboard running against a Vite dev
   server can still read a collector on another port.
 

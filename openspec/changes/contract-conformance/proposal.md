@@ -11,7 +11,7 @@ says "No adapter — nothing is supplying power"); Windows emits monitors as
 only the latter; `tunneled` means "any USB3 when a TB device exists" on macOS
 and always `false` on Windows; Windows never writes `linkDown`/`linkUp` so its
 incidents can never have a root event; the macOS contract tree parents every
-USB root under the first TB device, disagreeing with TBDoctor's own topology.
+USB root under the first TB device, disagreeing with ConnectionDoctor's macOS topology.
 
 ## What
 1. **Fixtures.** `docs/fixtures/`: real recordings (envelopes + events JSONL)

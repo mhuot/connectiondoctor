@@ -1,28 +1,72 @@
 import Foundation
 import Combine
+import ServiceManagement
 
 /// Append-only JSONL persistence. The whole point of the tool is catching a
 /// fault you were not watching, so state has to survive on disk rather than
 /// living in a window someone has to have open.
 final class Store {
-    /// Overridable via TBDOCTOR_DIR so fixtures and tests never touch real
-    /// recorded history.
-    static let directory: URL = {
-        let base: URL
-        if let override = ProcessInfo.processInfo.environment["TBDOCTOR_DIR"] {
-            base = URL(fileURLWithPath: override, isDirectory: true)
-        } else {
-            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("TBDoctor", isDirectory: true)
+    /// `CONNECTIONDOCTOR_DIR` is canonical; the old override remains valid for
+    /// one compatibility cycle so existing scripts keep their recorded data.
+    static let directory = resolveDirectory()
+
+    static func resolveDirectory(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        fileManager: FileManager = .default,
+        applicationSupport: URL? = nil,
+        onMigration: (() -> Void)? = nil
+    ) -> URL {
+        if let override = environment["CONNECTIONDOCTOR_DIR"] {
+            let directory = URL(fileURLWithPath: override, isDirectory: true)
+            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            return directory
         }
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        return base
-    }()
+        if let override = environment["TBDOCTOR_DIR"] {
+            let directory = URL(fileURLWithPath: override, isDirectory: true)
+            try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            return directory
+        }
+
+        let root = applicationSupport
+            ?? fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let directory = root.appendingPathComponent("ConnectionDoctor", isDirectory: true)
+        let legacy = root.appendingPathComponent("TBDoctor", isDirectory: true)
+
+        if !fileManager.fileExists(atPath: directory.path),
+           fileManager.fileExists(atPath: legacy.path) {
+            do {
+                try fileManager.moveItem(at: legacy, to: directory)
+                FileHandle.standardError.write(
+                    "ConnectionDoctor: migrated recorded data from \(legacy.path)\n".data(using: .utf8)!)
+                (onMigration ?? unregisterLegacyLoginItem)()
+            } catch {
+                FileHandle.standardError.write(
+                    "ConnectionDoctor: could not migrate \(legacy.path): \(error)\n".data(using: .utf8)!)
+                return legacy
+            }
+        }
+
+        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
+    }
+
+    private static func unregisterLegacyLoginItem() {
+        let service = SMAppService.loginItem(identifier: "net.mhuot.tbdoctor")
+        guard service.status != .notRegistered else { return }
+        do {
+            try service.unregister()
+            FileHandle.standardError.write(
+                "ConnectionDoctor: removed the legacy TBDoctor login item\n".data(using: .utf8)!)
+        } catch {
+            FileHandle.standardError.write(
+                "ConnectionDoctor: could not remove the legacy TBDoctor login item; remove it in System Settings > General > Login Items\n".data(using: .utf8)!)
+        }
+    }
 
     private let url: URL
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
-    private let queue = DispatchQueue(label: "tbdoctor.store")
+    private let queue = DispatchQueue(label: "connectiondoctor.store")
 
     /// Trim when the file passes this size so an always-on agent cannot fill a disk.
     private let maxBytes = 24 * 1024 * 1024
@@ -164,7 +208,7 @@ final class Collector: ObservableObject {
         // stop before writing anything if another collector owns the store.
         guard acquireStoreLock() else {
             storeConflict = true
-            NSLog("TBDoctor: another collector owns \(Store.directory.path); running read-only")
+            NSLog("ConnectionDoctor: another collector owns \(Store.directory.path); running read-only")
             recompute()
             return
         }

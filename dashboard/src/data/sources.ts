@@ -177,7 +177,7 @@ function ambiguity(filename: string, name: string | undefined, count: number): s
     : `${filename}: ${count} hosts named "${name}" — events not attributed to any of them`;
 }
 
-/** Fetch a collector endpoint (TBDoctor --serve): /contract plus /events.
+/** Fetch a ConnectionDoctor collector endpoint: /contract plus /events.
  *  Same Source boundary as files — views never know the difference. Errors
  *  name the URL and the cause so a fleet refresh can fail per-host. */
 export async function loadHttp(baseUrl: string, previous?: HostData): Promise<HostData> {

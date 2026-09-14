@@ -6,9 +6,9 @@ queue; `--serve`/`serve` wraps it in `dispatchMain()` as today; the app calls
 `start()` from `applicationDidFinishLaunching` after `Collector.shared.start()`.
 Port conflict → log once, keep running (the collector still matters). The
 "Open dashboard…" button probes `GET /` and opens it **only if the response
-carries our `Server: tbdoctor/…` / `connectiondoctor/…` header** (issue #21;
+carries our `Server: connectiondoctor/…` header** (issue #21;
 `docs/embedding.md`); an unrelated service on the port is reported in the
-popover ("port 8787 is held by another app — run `tbdoctor serve <port>`"),
+popover ("port 8787 is held by another app — run `connectiondoctor serve <port>`"),
 never opened. Same rule as `ui` in `align-cli-verbs`, which is where the
 header is added to `Serve`.
 

@@ -17,7 +17,7 @@ final class ContractLog {
         return ISO8601DateFormatter().date(from: text.trimmingCharacters(in: .whitespacesAndNewlines))
     }
 
-    private let queue = DispatchQueue(label: "tbdoctor.contractlog")
+    private let queue = DispatchQueue(label: "connectiondoctor.contractlog")
     private let maxBytes = 24 * 1024 * 1024
     private var previous: Sample?
     private var lastFullSnapshot: Date?

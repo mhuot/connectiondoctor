@@ -6,7 +6,7 @@ under `openspec/changes/` are the work that gets each platform there.
 
 ## One binary, three doors
 
-Each platform ships **one binary** — `TBDoctor.app` on macOS,
+Each platform ships **one binary** — `ConnectionDoctor.app` on macOS,
 `ConnectionDoctor.exe` on Windows — with three ways in:
 
 | Door | Who uses it | Transport | Spec |

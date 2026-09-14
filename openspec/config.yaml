@@ -2,8 +2,8 @@ schema: spec-driven
 
 context: |
   Project: ConnectionDoctor monorepo — one repo for the connection-diagnostics
-  family: dashboard/ (React UI, the only UI), macos/ (TBDoctor collector,
-  Swift), windows/ (ConnectionDoctor collector, C#), docs/ (the shared
+  family: dashboard/ (React UI, the only UI), macos/ (ConnectionDoctor
+  collector, Swift), windows/ (ConnectionDoctor collector, C#), docs/ (the shared
   Connection Contract v1 spec and the embedding contract).
   Data source: Connection Contract v1 (connection-contract/v1), specified in
   docs/schema-v1.md at the repo root. Envelope {schema, capturedAt, host, power,

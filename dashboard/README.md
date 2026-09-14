@@ -1,8 +1,8 @@
 # Connection Dashboard
 
-One React UI for the connection-diagnostics family — [TBDoctor](../macos/README.md)
-(macOS) and [ConnectionDoctor](../windows/README.md) (Windows) — reading the
-shared **Connection Contract v1** (`../docs/schema-v1.md`).
+One React UI for [ConnectionDoctor on macOS](../macos/README.md) and
+[ConnectionDoctor on Windows](../windows/README.md), reading the shared
+**Connection Contract v1** (`../docs/schema-v1.md`).
 
 Spec-driven with [OpenSpec](https://github.com/Fission-AI/OpenSpec): see
 `openspec/changes/add-react-dashboard/` for the proposal, design (including the
@@ -17,7 +17,7 @@ evaluated and rejected), capability specs, and task list.
 Most people should never run this repo directly: both collectors compile the
 built bundle into their own binary, so the dashboard arrives with them. Run
 [ConnectionDoctor](../windows/README.md) `ui` on Windows or
-[TBDoctor](../macos/README.md) `--serve` on macOS and open
+[ConnectionDoctor](../macos/README.md) `--serve` on macOS and open
 http://localhost:8787 — the page adopts the machine serving it, so there is
 nothing to configure.
 
@@ -41,8 +41,9 @@ it, so the same build behaves identically on either OS.
   is never tunneled" enforced rather than trusted.
 - **Topology view** — three layouts, physical/logical collapse, protocol
   colours, honest tunneling dashes, text-sized boxes, node inspector with
-  VID:PID lookup. The layout engine is a pure-TS port of TBDoctor's, covered
-  by invariant tests (no overlaps, orthogonal edges, in-canvas).
+  VID:PID lookup. The layout engine is a pure-TS port of ConnectionDoctor's
+  macOS implementation, covered by invariant tests (no overlaps, orthogonal
+  edges, in-canvas).
 - **Timeline view** — event-derived device-count steps, root-event rules,
   incident stitching with shared-parent attribution.
 - **Fleet view** — hosts side by side plus **cross-host migration detection**:
@@ -55,7 +56,6 @@ chain, and the Mac mini's actual KVM flip at 22:19:06Z.
 
 ## Next
 
-ConnectionDoctor emits v1 and serves this bundle; TBDoctor does the same on
-macOS. Remaining: a release pipeline so each collector ships a downloadable
-binary, and retiring the collectors' native dashboards now that this is the UI
-for both.
+ConnectionDoctor emits v1 and serves this bundle on both platforms. Remaining:
+a release pipeline so each collector ships a downloadable binary, and retiring
+the collectors' native dashboards now that this is the UI for both.

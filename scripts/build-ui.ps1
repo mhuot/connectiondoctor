@@ -5,7 +5,7 @@
 .DESCRIPTION
     Stages dashboard/dist into
       windows/src/ConnectionDoctor/ui   (ConnectionDoctor, EmbeddedResource)
-      macos/Sources/TBDoctor/ui         (TBDoctor, SwiftPM resource)
+      macos/Sources/ConnectionDoctor/ui (ConnectionDoctor, SwiftPM resource)
     The staged output is git-ignored on purpose — build output does not belong
     in history. Node is needed to run this script; it is NOT needed to run
     either collector, because the bundle is compiled into the binary.
@@ -59,7 +59,7 @@ function Stage([string]$dir) {
 
 switch ($Target) {
     'windows' { Stage (Join-Path $root 'windows\src\ConnectionDoctor\ui') }
-    'macos'   { Stage (Join-Path $root 'macos\Sources\TBDoctor\ui') }
-    'all'     { Stage (Join-Path $root 'windows\src\ConnectionDoctor\ui'); Stage (Join-Path $root 'macos\Sources\TBDoctor\ui') }
+    'macos'   { Stage (Join-Path $root 'macos\Sources\ConnectionDoctor\ui') }
+    'all'     { Stage (Join-Path $root 'windows\src\ConnectionDoctor\ui'); Stage (Join-Path $root 'macos\Sources\ConnectionDoctor\ui') }
 }
 Write-Host 'Rebuild the collector(s) to embed it.'

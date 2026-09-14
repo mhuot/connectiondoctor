@@ -1,12 +1,12 @@
 #!/bin/bash
-# Assembles TBDoctor.app from the SwiftPM binary.
+# Assembles ConnectionDoctor.app from the SwiftPM binary.
 # SwiftPM produces a bare executable; a menu bar app needs a bundle so macOS
 # gives it an Info.plist, a bundle identifier, and LSUIElement (no Dock icon).
 set -euo pipefail
 
 cd "$(dirname "$0")"
 CONFIG="${1:-release}"
-APP="TBDoctor.app"
+APP="ConnectionDoctor.app"
 # VERSION comes from the release tag in CI (docs/distribution.md); local builds
 # default to a dev marker. SIGN_IDENTITY selects a Developer ID certificate;
 # empty means ad-hoc, which is enough to run locally.
@@ -15,16 +15,17 @@ SIGN_IDENTITY="${SIGN_IDENTITY:-}"
 
 echo "Building ($CONFIG)…"
 swift build -c "$CONFIG"
-BIN="$(swift build -c "$CONFIG" --show-bin-path)/TBDoctor"
+BIN="$(swift build -c "$CONFIG" --show-bin-path)/ConnectionDoctor"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-cp "$BIN" "$APP/Contents/MacOS/TBDoctor"
+cp "$BIN" "$APP/Contents/MacOS/ConnectionDoctor"
+ln -s ConnectionDoctor "$APP/Contents/MacOS/tbdoctor"
 
 # SwiftPM emits target resources as a side-by-side bundle. Bundle.module looks
 # in Bundle.main.resourceURL first, so the dashboard only reaches the .app if
 # that bundle is copied into Contents/Resources.
-RESOURCES="$(swift build -c "$CONFIG" --show-bin-path)/TBDoctor_TBDoctor.bundle"
+RESOURCES="$(swift build -c "$CONFIG" --show-bin-path)/ConnectionDoctor_ConnectionDoctor.bundle"
 if [ -d "$RESOURCES" ]; then
   cp -R "$RESOURCES" "$APP/Contents/Resources/"
   if [ -f "$RESOURCES/ui/index.html" ]; then
@@ -39,10 +40,10 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleName</key>            <string>TBDoctor</string>
-    <key>CFBundleDisplayName</key>     <string>TBDoctor</string>
-    <key>CFBundleExecutable</key>      <string>TBDoctor</string>
-    <key>CFBundleIdentifier</key>      <string>net.mhuot.tbdoctor</string>
+    <key>CFBundleName</key>            <string>ConnectionDoctor</string>
+    <key>CFBundleDisplayName</key>     <string>ConnectionDoctor</string>
+    <key>CFBundleExecutable</key>      <string>ConnectionDoctor</string>
+    <key>CFBundleIdentifier</key>      <string>net.mhuot.connectiondoctor</string>
     <key>CFBundlePackageType</key>     <string>APPL</string>
     <key>CFBundleShortVersionString</key> <string>${VERSION%%-*}</string>
     <key>CFBundleVersion</key>         <string>${VERSION}</string>
@@ -67,6 +68,6 @@ echo "Built $APP"
 echo
 echo "Run it:            open $APP"
 echo "Start at login:    System Settings → General → Login Items → +"
-echo "CLI:               $APP/Contents/MacOS/TBDoctor --report"
+echo "CLI:               $APP/Contents/MacOS/ConnectionDoctor --report"
 echo "Register with Claude Code:"
-echo "  claude mcp add tbdoctor -- $PWD/$APP/Contents/MacOS/TBDoctor --mcp"
+echo "  claude mcp add connectiondoctor -- $PWD/$APP/Contents/MacOS/ConnectionDoctor --mcp"

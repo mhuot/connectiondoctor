@@ -1,7 +1,7 @@
 # Proposal: contract-findings-incidents
 
 ## Why
-TBDoctor's reason to exist is a ranked list of findings, each with the evidence
+ConnectionDoctor's reason to exist is a ranked list of findings, each with the evidence
 that produced it. Today that list reaches only the native Timeline window,
 `--report` and MCP — not the dashboard, which is supposed to be the UI for
 both platforms. `schema-v1.md` defines `Finding` and `Incident` shapes but never

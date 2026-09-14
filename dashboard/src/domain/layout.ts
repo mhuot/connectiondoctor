@@ -1,5 +1,5 @@
 /**
- * Diagram placement: port of TBDoctor's Diagram engine. Three layouts, boxes
+ * Diagram placement: port of ConnectionDoctor's macOS Diagram engine. Three layouts, boxes
  * sized to their text, orthogonal edges, and secondary DisplayPort edges
  * routed outside the tree's footprint (the rule that fixed the unreadable
  * routing in the native app: leave the footprint, travel, come back in).

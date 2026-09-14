@@ -6,8 +6,8 @@ problem — on macOS and Windows, with one dashboard for both.
 
 | | What | Where |
 |---|---|---|
-| **TBDoctor** | macOS collector: menu-bar app, CLI, MCP server (Swift, IOKit) | [`macos/`](macos/README.md) |
-| **ConnectionDoctor** | Windows collector: tray, CLI, MCP server (C#, SetupAPI/CfgMgr32) | [`windows/`](windows/README.md) |
+| **ConnectionDoctor for macOS** | Menu-bar app, CLI, MCP server (Swift, IOKit) | [`macos/`](macos/README.md) |
+| **ConnectionDoctor for Windows** | Tray app, CLI, MCP server (C#, SetupAPI/CfgMgr32) | [`windows/`](windows/README.md) |
 | **Connection Dashboard** | The UI for both — topology, timeline, fleet (React) | [`dashboard/`](dashboard/README.md) |
 | **Connection Contract v1** | The JSON shape both collectors emit and the dashboard reads | [`docs/schema-v1.md`](docs/schema-v1.md) |
 | **Embedding contract** | How a collector serves the dashboard bundle | [`docs/embedding.md`](docs/embedding.md) |
@@ -25,8 +25,8 @@ between hosts is diagnosed as one fleet.
 
 ```sh
 # macOS
-macos/build_app.sh && open macos/TBDoctor.app          # menu bar app, records at login
-macos/TBDoctor.app/Contents/MacOS/TBDoctor --serve      # dashboard on http://localhost:8787
+macos/build_app.sh && open macos/ConnectionDoctor.app
+macos/ConnectionDoctor.app/Contents/MacOS/connectiondoctor --serve
 ```
 
 ```powershell
@@ -62,7 +62,7 @@ npm test
 
 ```
 dashboard/   React + Vite app (src/contract = v1 ingest, src/domain = layout/topology/incidents, src/components = views)
-macos/       SwiftPM package → TBDoctor.app  (Sources/TBDoctor/ui is the staged bundle, git-ignored)
+macos/       SwiftPM package → ConnectionDoctor.app (Sources/ConnectionDoctor/ui is the staged bundle, git-ignored)
 windows/     .NET 8 solution → ConnectionDoctor.exe (src/ConnectionDoctor/ui is the staged bundle, git-ignored)
 docs/        schema-v1.md, embedding.md, images/
 scripts/     build-ui.sh / build-ui.ps1

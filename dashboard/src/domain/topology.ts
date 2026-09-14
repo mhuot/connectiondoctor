@@ -1,6 +1,6 @@
 /**
  * View-model construction: contract nodes → renderable tree, with the physical
- * collapse ported from TBDoctor's Topology engine. The rules each encode a
+ * collapse ported from ConnectionDoctor's macOS Topology engine. The rules each encode a
  * mistake made during the original investigation — see design.md.
  */
 

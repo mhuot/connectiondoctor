@@ -26,7 +26,7 @@ the same steps.
   API key (`AC_API_KEY_ID`, `AC_API_ISSUER_ID`, `AC_API_KEY_P8`), then
   `xcrun stapler staple`. Zip first for submission, staple the `.app`, then
   build the DMG from the stapled app so the DMG contents carry the ticket.
-- **DMG:** `hdiutil create` from a folder holding `TBDoctor.app` and an
+- **DMG:** `hdiutil create` from a folder holding `ConnectionDoctor.app` and an
   `Applications` symlink; no custom background (avoid a design asset that
   drifts). Sign the DMG too.
 - **Local dev unchanged:** `build_app.sh` still ad-hoc signs when no identity
@@ -50,7 +50,8 @@ Tag `vX.Y.Z` → `VERSION=X.Y.Z` env in every job. `main` builds:
 `0.0.0-dev+<sha7>`. Dashboard `package.json` version is set at build time
 (`npm version --no-git-tag-version $VERSION`) and shown in the app footer;
 collectors expose it via `version` and `producer.dashboard`. Envelope
-`producer: {name: "tbdoctor"|"connectiondoctor", version, commit?, dashboard?}`.
+`producer: {name: "connectiondoctor", version, commit?, dashboard?}`. Consumers
+continue accepting `tbdoctor` in historical recordings.
 
 ## Release notes
 `gh release create vX.Y.Z --notes-from-tag`; the tag message is the changelog

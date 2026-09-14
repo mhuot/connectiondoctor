@@ -4,7 +4,7 @@
 The Windows binary has no MCP door. A coding agent helping with a Surface's dock
 gets pasted terminal output while the same agent on a Mac queries the hardware
 directly. It is the largest functional gap between the two platforms and one of
-the smallest to close: TBDoctor's `MCPServer.swift` is ~250 lines of stdio
+the smallest to close: ConnectionDoctor's macOS `MCPServer.swift` is ~250 lines of stdio
 JSON-RPC with no platform dependencies.
 
 ## What

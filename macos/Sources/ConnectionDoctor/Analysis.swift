@@ -165,7 +165,7 @@ enum Analysis {
             "windowHours": result.windowHours,
             "generatedAt": iso(result.generatedAt),
             "coverage": coverage,
-            // TBDoctor has no known-good baseline yet (align-cli-verbs adds
+            // ConnectionDoctor on macOS has no known-good baseline yet (align-cli-verbs adds
             // `baseline save`); say so rather than implying health.
             "baseline": ["state": "no-baseline"],
             // Link drops come from `log stream` kernel predicates.

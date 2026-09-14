@@ -1,8 +1,8 @@
 .build/
 .swiftpm/
-TBDoctor.app/
+ConnectionDoctor.app/
 *.tgz
 .DS_Store
 
-TBDoctor-*.dmg
-TBDoctor-*.zip
+ConnectionDoctor-*.dmg
+ConnectionDoctor-*.zip

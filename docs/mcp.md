@@ -12,8 +12,8 @@ platforms; the tool set, names, input schemas and result shapes are identical,
 so an agent's instructions written against one machine work against the other.
 
 ```sh
-claude mcp add connectiondoctor -- /path/to/TBDoctor.app/Contents/MacOS/TBDoctor mcp   # macOS
-claude mcp add connectiondoctor -- C:\path\to\ConnectionDoctor.exe mcp                  # Windows
+claude mcp add connectiondoctor -- /path/to/ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor mcp  # macOS
+claude mcp add connectiondoctor -- C:\path\to\ConnectionDoctor.exe mcp                              # Windows
 ```
 
 ## Principles

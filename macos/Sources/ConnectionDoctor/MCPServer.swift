@@ -36,7 +36,7 @@ enum MCPServer {
                 respond(id: id, result: [
                     "protocolVersion": negotiated,
                     "capabilities": ["tools": [:] as [String: Any]],
-                    "serverInfo": ["name": "tbdoctor", "version": version]
+                    "serverInfo": ["name": "connectiondoctor", "version": version]
                 ])
 
             case "tools/list":
@@ -164,7 +164,7 @@ enum MCPServer {
             let sample = Probes.sample()
             let layout = Diagram.layout(root: Topology.build(from: sample), style: style)
             if let data = ExcalidrawExport.document(
-                layout: layout, caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))"),
+                layout: layout, caption: "ConnectionDoctor — connections as of \(Diagnosis.stamp(sample.t))"),
                let json = String(data: data, encoding: .utf8) {
                 respond(id: id, result: ["content": [["type": "text", "text": json]]])
             } else {

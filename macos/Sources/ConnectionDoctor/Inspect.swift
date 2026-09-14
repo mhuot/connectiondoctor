@@ -17,7 +17,7 @@ enum Inspect {
         let path = arguments[index + 1]
 
         guard let text = try? String(contentsOfFile: path, encoding: .utf8) else {
-            FileHandle.standardError.write("TBDoctor: cannot read \(path)\n".data(using: .utf8)!)
+            FileHandle.standardError.write("ConnectionDoctor: cannot read \(path)\n".data(using: .utf8)!)
             exit(1)
         }
 
@@ -31,7 +31,7 @@ enum Inspect {
             }
         }
 
-        FileHandle.standardError.write("TBDoctor: no decodable sample in \(path)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("ConnectionDoctor: no decodable sample in \(path)\n".data(using: .utf8)!)
         exit(1)
     }
 

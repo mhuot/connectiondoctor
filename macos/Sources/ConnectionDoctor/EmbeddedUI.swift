@@ -1,6 +1,6 @@
 import Foundation
 
-/// The Connection Dashboard bundle compiled into TBDoctor, so a user needs one
+/// The Connection Dashboard bundle compiled into ConnectionDoctor, so a user needs one
 /// download and no Node. Staged by `scripts/build-ui.sh`; absent in a plain
 /// source build, in which case `--serve` says so instead of failing.
 ///

@@ -19,7 +19,7 @@ final class LogTail {
 
     private var streamProcess: Process?
     private var seen = Set<String>()
-    private let queue = DispatchQueue(label: "tbdoctor.logtail")
+    private let queue = DispatchQueue(label: "connectiondoctor.logtail")
     private let onEvent: ([KernelEvent]) -> Void
 
     init(onEvent: @escaping ([KernelEvent]) -> Void) {
@@ -63,7 +63,7 @@ final class LogTail {
             try process.run()
             streamProcess = process
         } catch {
-            NSLog("TBDoctor: could not start log stream: \(error)")
+            NSLog("ConnectionDoctor: could not start log stream: \(error)")
         }
     }
 
@@ -84,7 +84,7 @@ final class LogTail {
             process.waitUntilExit()
             if let text = String(data: data, encoding: .utf8) { ingest(ndjson: text) }
         } catch {
-            NSLog("TBDoctor: backfill failed: \(error)")
+            NSLog("ConnectionDoctor: backfill failed: \(error)")
         }
     }
 

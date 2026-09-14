@@ -42,7 +42,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        with: { name: dashboard-dist, path: macos/Sources/TBDoctor/ui }
+        with: { name: dashboard-dist, path: macos/Sources/ConnectionDoctor/ui }
       - name: Import Developer ID certificate
         id: cert
         if: inputs.release
@@ -63,10 +63,10 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN"
           security list-keychains -d user -s "$KEYCHAIN" login.keychain-db
           echo "have=true" >> "$GITHUB_OUTPUT"
-      - name: Test TBDoctor
+      - name: Test ConnectionDoctor
         working-directory: macos
         run: swift test
-      - name: Build TBDoctor.app
+      - name: Build ConnectionDoctor.app
         working-directory: macos
         env:
           SIGN_IDENTITY: ${{ steps.cert.outputs.have == 'true' && vars.DEVELOPER_ID_IDENTITY || '' }}
@@ -74,8 +74,8 @@ jobs:
       - name: Assert architecture matches docs/distribution.md
         working-directory: macos
         run: |
-          archs="$(lipo -archs TBDoctor.app/Contents/MacOS/TBDoctor)"
-          echo "TBDoctor architectures: $archs"
+          archs="$(lipo -archs ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor)"
+          echo "ConnectionDoctor architectures: $archs"
           [ "$archs" = "arm64" ] || { echo "expected arm64 only, got '$archs' — update docs/distribution.md and release-pipeline/design.md together" >&2; exit 1; }
       - name: Notarize and staple
         if: steps.cert.outputs.have == 'true'
@@ -89,21 +89,21 @@ jobs:
             echo "notarization skipped: secret AC_API_KEY_P8 not set" >> "$GITHUB_STEP_SUMMARY"; exit 0
           fi
           echo "$AC_API_KEY_P8" > "$RUNNER_TEMP/AuthKey.p8"
-          ditto -c -k --keepParent TBDoctor.app "$RUNNER_TEMP/notarize.zip"
+          ditto -c -k --keepParent ConnectionDoctor.app "$RUNNER_TEMP/notarize.zip"
           xcrun notarytool submit "$RUNNER_TEMP/notarize.zip" --key "$RUNNER_TEMP/AuthKey.p8" \
             --key-id "$AC_API_KEY_ID" --issuer "$AC_API_ISSUER_ID" --wait
-          xcrun stapler staple TBDoctor.app
+          xcrun stapler staple ConnectionDoctor.app
       - name: Package .dmg and .zip
         working-directory: macos
         env:
           SIGN_IDENTITY: ${{ steps.cert.outputs.have == 'true' && vars.DEVELOPER_ID_IDENTITY || '' }}
-        run: scripts/make-dmg.sh "TBDoctor-${VERSION}"
+        run: scripts/make-dmg.sh "ConnectionDoctor-${VERSION}"
       - uses: actions/upload-artifact@v4
         with:
           name: macos
           path: |
-            macos/TBDoctor-*.dmg
-            macos/TBDoctor-*.zip
+            macos/ConnectionDoctor-*.dmg
+            macos/ConnectionDoctor-*.zip
           if-no-files-found: error
 
   windows:

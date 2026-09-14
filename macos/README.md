@@ -1,4 +1,7 @@
-# TBDoctor
+# ConnectionDoctor for macOS
+
+Formerly TBDoctor, the macOS app now shares the ConnectionDoctor product,
+command, contract, and MCP identity used on Windows.
 
 Finds the root cause of Thunderbolt dock, USB peripheral and power faults on macOS —
 the "my dock keeps disconnecting" and "my devices randomly drop" class of problem.
@@ -17,7 +20,7 @@ that, so this does.
 ## Why a tool
 
 The failure is intermittent and hits while you are busy — mid-call, mid-build. By the
-time you look, it is over. So TBDoctor records continuously and reconstructs the fault
+time you look, it is over. So ConnectionDoctor records continuously and reconstructs the fault
 afterwards, rather than being a dashboard you have to already be watching.
 
 It also does the part that is genuinely hard: telling a **root** event from its
@@ -44,11 +47,30 @@ just an opinion, and these failure modes are easy to get confidently wrong.
 
 ```sh
 ./build_app.sh
-open TBDoctor.app
+open ConnectionDoctor.app
 ```
 
 Add it to Login Items (System Settings → General → Login Items) so it is recording
 before you need it.
+
+### Upgrading from TBDoctor
+
+The first run moves `~/Library/Application Support/TBDoctor` to
+`~/Library/Application Support/ConnectionDoctor` only when the new directory
+does not exist. `TBDOCTOR_DIR` remains supported, but `CONNECTIONDOCTOR_DIR`
+takes precedence. A `tbdoctor` command alias remains for one release and prints
+a deprecation notice.
+
+An MCP registration that names the removed app bundle must be replaced:
+
+```sh
+claude mcp remove tbdoctor
+claude mcp add connectiondoctor -- /Applications/ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --mcp
+```
+
+ConnectionDoctor attempts to remove the old `net.mhuot.tbdoctor` login item
+during migration. If the old bundle is already gone, remove any stale entry in
+System Settings → General → Login Items.
 
 ## Dashboard
 
@@ -57,7 +79,7 @@ same React UI ConnectionDoctor serves on Windows — is compiled into the binary
 Nothing to install alongside it, no Node, no second app:
 
 ```sh
-TBDoctor.app/Contents/MacOS/TBDoctor --serve     # then open http://localhost:8787
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --serve
 ```
 
 The page connects to the machine serving it, so the topology is on screen with
@@ -93,13 +115,13 @@ deficit window.
 ## Command line
 
 ```sh
-TBDoctor.app/Contents/MacOS/TBDoctor --probe     # current state, once
-TBDoctor.app/Contents/MacOS/TBDoctor --tree      # connection tree + where power enters
-TBDoctor.app/Contents/MacOS/TBDoctor --report    # analyse history, print findings
-TBDoctor.app/Contents/MacOS/TBDoctor --watch     # live one-line-per-sample table
-TBDoctor.app/Contents/MacOS/TBDoctor --inspect samples.jsonl   # draw a recorded tree
-TBDoctor.app/Contents/MacOS/TBDoctor --excalidraw out.excalidraw --style flow
-TBDoctor.app/Contents/MacOS/TBDoctor --serve      # dashboard + contract endpoints
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --probe
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --tree
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --report
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --watch
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --inspect samples.jsonl
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --excalidraw out.excalidraw --style flow
+ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --serve
 ```
 
 `--inspect` opens the connection tree for a *recorded* sample instead of live
@@ -199,11 +221,11 @@ invent per-device wattages.
 
 ## Use from a coding agent
 
-TBDoctor is an MCP server, so Claude Code, Claude Desktop, Copilot in VS Code and
+ConnectionDoctor is an MCP server, so Claude Code, Claude Desktop, Copilot in VS Code and
 Cursor can query the hardware directly instead of being handed pasted terminal output.
 
 ```sh
-claude mcp add tbdoctor -- /full/path/to/TBDoctor.app/Contents/MacOS/TBDoctor --mcp
+claude mcp add connectiondoctor -- /full/path/to/ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor --mcp
 ```
 
 Tools: `tb_probe` (current state), `tb_diagnose` (ranked findings with evidence),
@@ -224,8 +246,9 @@ resolution matters exactly when something is happening.
 | `IOUSBHostDevice` | Device tree with negotiated speeds |
 | `log stream` | Link and port kernel events |
 
-Data lives in `~/Library/Application Support/TBDoctor/` as JSONL, trimmed at 24MB.
-Override with `TBDOCTOR_DIR`.
+Data lives in `~/Library/Application Support/ConnectionDoctor/` as JSONL,
+trimmed at 24MB. Override with `CONNECTIONDOCTOR_DIR`; `TBDOCTOR_DIR` remains a
+compatibility fallback.
 
 ## Implementation notes
 
@@ -234,7 +257,7 @@ Things that were not obvious, recorded so they are not re-learned the hard way:
 - **Thunderbolt switches do not share one class name.** The host controllers here are
   `IOThunderboltSwitchType7`; the attached CalDigit dock is
   `IOThunderboltSwitchIntelJHL8440` — named after the *device's* controller silicon.
-  Matching an enumerated list of class names silently misses hardware, so TBDoctor
+  Matching an enumerated list of class names silently misses hardware, so ConnectionDoctor
   matches the substring `ThunderboltSwitch`. This bug made the dock invisible.
 
 - **`ioreg` renders `InstantAmperage` as an unsigned 64-bit wrap.** A 4.4A discharge
@@ -278,9 +301,9 @@ Manager spelunking, and photographing screens. The failure (a monitor's USB hub
 wedged after a host switch; video fine, hub dead) was eventually cured by
 power-cycling the monitor, but nothing on Windows could *say* that.
 
-What a Windows counterpart would read, mapped from what TBDoctor reads:
+What the Windows implementation reads, mapped from what ConnectionDoctor reads on macOS:
 
-| TBDoctor (macOS) | Windows equivalent |
+| ConnectionDoctor (macOS) | ConnectionDoctor (Windows) |
 |---|---|
 | `IOThunderboltSwitch*` registry entries | USB4 router devnodes via CfgMgr32 (`CM_Get_Parent` walks the topology); USB4 host router events |
 | `log stream` kernel predicates | ETW: `Microsoft-Windows-USB-USBHUB3`, `-USBXHCI`, `-USB-UCX`, `Kernel-Power` |
@@ -297,7 +320,7 @@ Ranked by what would have actually helped, from the live debugging session:
 2. **Baseline diff.** The dock moves between three hosts. "Here is the known-good
    topology from the last time this worked; here is what is missing right now"
    answers the host-switch question in one command. (The VID:PID checklist that
-   solved the Surface case was hand-built from TBDoctor's recording.)
+   solved the Surface case was hand-built from ConnectionDoctor's recording.)
 3. **Continuous recording + root-vs-fallout stitching.** Identical rationale to
    macOS: the fault hits while you are busy, and one hub reset produces a cascade
    of downstream errors that point at innocent devices.

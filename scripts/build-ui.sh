@@ -1,6 +1,6 @@
 #!/bin/bash
 # Builds the Connection Dashboard once and stages it into both collectors:
-#   macos/Sources/TBDoctor/ui        (TBDoctor, SwiftPM resource)
+#   macos/Sources/ConnectionDoctor/ui (ConnectionDoctor, SwiftPM resource)
 #   windows/src/ConnectionDoctor/ui  (ConnectionDoctor, EmbeddedResource)
 #
 # The staged output is git-ignored on purpose — build output does not belong in
@@ -18,7 +18,7 @@ WHICH="${1:-all}"
 
 if ! command -v npm >/dev/null 2>&1; then
   echo "npm is not on PATH. Node is required to build the dashboard bundle" >&2
-  echo "(but not to run TBDoctor or ConnectionDoctor)." >&2
+  echo "(but not to run ConnectionDoctor)." >&2
   exit 1
 fi
 
@@ -41,9 +41,9 @@ stage() {
 }
 
 case "$WHICH" in
-  macos)   stage "$ROOT/macos/Sources/TBDoctor/ui" ;;
+  macos)   stage "$ROOT/macos/Sources/ConnectionDoctor/ui" ;;
   windows) stage "$ROOT/windows/src/ConnectionDoctor/ui" ;;
-  all)     stage "$ROOT/macos/Sources/TBDoctor/ui"; stage "$ROOT/windows/src/ConnectionDoctor/ui" ;;
+  all)     stage "$ROOT/macos/Sources/ConnectionDoctor/ui"; stage "$ROOT/windows/src/ConnectionDoctor/ui" ;;
   *) echo "usage: scripts/build-ui.sh [macos|windows|all]" >&2; exit 1 ;;
 esac
 

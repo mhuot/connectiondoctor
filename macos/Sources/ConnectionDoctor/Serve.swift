@@ -25,7 +25,7 @@ enum Serve {
                 ? try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
                 : try NWListener(using: params)
         } catch {
-            FileHandle.standardError.write("TBDoctor: cannot listen on \(port): \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write("ConnectionDoctor: cannot listen on \(port): \(error)\n".data(using: .utf8)!)
             exit(1)
         }
 
@@ -37,9 +37,9 @@ enum Serve {
             if case .ready = state {
                 let address = "http://\(lan ? "0.0.0.0" : "127.0.0.1"):\(port)"
                 if EmbeddedUI.isPresent {
-                    print("TBDoctor serving the dashboard on \(address)")
+                    print("ConnectionDoctor serving the dashboard on \(address)")
                 } else {
-                    print("TBDoctor serving on \(address)  (GET /contract, GET /events)")
+                    print("ConnectionDoctor serving on \(address)  (GET /contract, GET /events)")
                     print("note: no dashboard bundle is embedded; run scripts/build-ui.sh and rebuild")
                 }
                 if lan { print("note: LAN binding is unauthenticated read-only telemetry — opt-in by design") }
@@ -88,7 +88,7 @@ enum Serve {
                     response = ("200 OK", asset.contentType, asset.bytes)
                 } else if method == "GET", path == "/", !EmbeddedUI.isPresent {
                     response = ("200 OK", "text/plain", Data("""
-                        TBDoctor contract endpoint. GET /contract or GET /events
+                        ConnectionDoctor contract endpoint. GET /contract or GET /events
                         No dashboard bundle is embedded in this build; run scripts/build-ui.sh and rebuild.
 
                         """.utf8))

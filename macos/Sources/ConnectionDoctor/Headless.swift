@@ -5,6 +5,13 @@ import Foundation
 /// you can paste into a support ticket.
 enum Headless {
 
+    static func printLegacyInvocationNoticeIfNeeded() {
+        guard URL(fileURLWithPath: CommandLine.arguments[0]).lastPathComponent.lowercased() == "tbdoctor"
+        else { return }
+        FileHandle.standardError.write(
+            "tbdoctor is deprecated; use connectiondoctor instead\n".data(using: .utf8)!)
+    }
+
     static func run(_ arguments: [String]) -> Bool {
         if arguments.contains("--mcp") { MCPServer.serve(); return true }
         if let i = arguments.firstIndex(of: "--serve") {
@@ -30,7 +37,7 @@ enum Headless {
 
     private static func usage() {
         print("""
-        TBDoctor — Thunderbolt, USB and power fault diagnosis
+        ConnectionDoctor — Thunderbolt, USB and power fault diagnosis
 
           (no flags)   launch the menu bar app
           --probe      print current state once and exit
@@ -45,7 +52,7 @@ enum Headless {
         Recorded data lives in \(Store.directory.path)
 
         To register with Claude Code:
-          claude mcp add tbdoctor -- \(CommandLine.arguments.first ?? "tbdoctor") --mcp
+          claude mcp add connectiondoctor -- \(CommandLine.arguments.first ?? "connectiondoctor") --mcp
         """)
     }
 
@@ -129,7 +136,7 @@ enum Headless {
                 print(text)
             }
         } catch {
-            FileHandle.standardError.write("TBDoctor: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write("ConnectionDoctor: \(error)\n".data(using: .utf8)!)
             exit(1)
         }
     }
@@ -147,15 +154,15 @@ enum Headless {
         let layout = Diagram.layout(root: Topology.build(from: sample, mode: mode), style: style)
         guard let data = ExcalidrawExport.document(
             layout: layout,
-            caption: "TBDoctor — connections as of \(Diagnosis.stamp(sample.t))") else {
-            FileHandle.standardError.write("TBDoctor: could not build document\n".data(using: .utf8)!)
+            caption: "ConnectionDoctor — connections as of \(Diagnosis.stamp(sample.t))") else {
+            FileHandle.standardError.write("ConnectionDoctor: could not build document\n".data(using: .utf8)!)
             exit(1)
         }
         do {
             try data.write(to: URL(fileURLWithPath: path))
             print("Wrote \(path) — \(layout.nodes.count) nodes, \(layout.edges.count) edges, style \(style.label)")
         } catch {
-            FileHandle.standardError.write("TBDoctor: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write("ConnectionDoctor: \(error)\n".data(using: .utf8)!)
             exit(1)
         }
     }
@@ -172,7 +179,7 @@ enum Headless {
         // on a machine that has never run the collector.
         samples.append(Probes.sample())
 
-        print("TBDoctor report")
+        print("ConnectionDoctor report")
         print("  \(samples.count) samples, \(events.count) kernel events on record")
         if let first = samples.first, let last = samples.last {
             print("  window: \(Diagnosis.stamp(first.t)) → \(Diagnosis.stamp(last.t))")

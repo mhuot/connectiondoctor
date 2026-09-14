@@ -23,8 +23,8 @@ export function App() {
   const [url, setUrl] = useState('');
   const [selfChecked, setSelfChecked] = useState(false);
 
-  // When a collector serves this bundle itself — ConnectionDoctor.exe on
-  // Windows, TBDoctor on macOS — the machine you are sitting at is already
+  // When ConnectionDoctor serves this bundle itself, the machine you are
+  // sitting at is already
   // behind this origin. Adopting it means opening the URL is the whole setup.
   useEffect(() => {
     let cancelled = false;

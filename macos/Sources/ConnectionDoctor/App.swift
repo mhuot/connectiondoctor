@@ -1,11 +1,12 @@
 import SwiftUI
 
 @main
-struct TBDoctorApp: App {
+struct ConnectionDoctorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @StateObject private var collector = Collector.shared
 
     init() {
+        Headless.printLegacyInvocationNoticeIfNeeded()
         let arguments = Array(CommandLine.arguments.dropFirst())
         // --inspect needs a window, so it is handled by the delegate rather than
         // exiting here like the other terminal modes.
@@ -43,7 +44,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Launching the app again while it is already running opens the timeline
     /// instead of doing nothing. This is the escape hatch when the menu bar icon
-    /// cannot be found — `open TBDoctor.app` always gets you a window.
+    /// cannot be found — `open ConnectionDoctor.app` always gets you a window.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
         MainActor.assumeIsolated { TimelineWindow.shared.show() }
         return true

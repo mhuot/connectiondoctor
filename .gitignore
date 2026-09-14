@@ -2,8 +2,8 @@
 node_modules/
 dist/
 # Dashboard bundle staged into the collectors by scripts/build-ui.{sh,ps1}
-macos/Sources/TBDoctor/ui/*
-!macos/Sources/TBDoctor/ui/.gitkeep
+macos/Sources/ConnectionDoctor/ui/*
+!macos/Sources/ConnectionDoctor/ui/.gitkeep
 windows/src/ConnectionDoctor/ui/
 # Agent worktrees are local scratch, never content
 .claude/worktrees/

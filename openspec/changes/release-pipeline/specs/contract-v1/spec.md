@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Producer identity in the envelope
-The v1 envelope MAY carry `producer: {name: "tbdoctor" | "connectiondoctor", version: string, commit?: string, dashboard?: string}`; consumers SHALL tolerate its absence.
+The v1 envelope MAY carry `producer: {name: "connectiondoctor", version: string, commit?: string, dashboard?: string}`; consumers SHALL tolerate its absence and SHALL continue accepting `tbdoctor` in historical recordings.
 
 #### Scenario: Fleet of mixed versions
 - **WHEN** hosts running different releases are loaded in the dashboard

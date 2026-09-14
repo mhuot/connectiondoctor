@@ -4,15 +4,16 @@
 > and implemented by `align-cli-verbs`. Until that change lands, each binary's
 > `help` output is the truth; this page is what both are converging on.
 
-One verb set, two binaries: `tbdoctor` (macOS, `TBDoctor.app/Contents/MacOS/TBDoctor`)
-and `connectiondoctor` (Windows, `ConnectionDoctor.exe`). Every verb behaves
+One product and command on both platforms: `connectiondoctor`
+(`ConnectionDoctor.app/Contents/MacOS/ConnectionDoctor` on macOS and
+`ConnectionDoctor.exe` on Windows). Every verb behaves
 the same on both, prints the same shape, and exits with the same codes. Where a
 platform genuinely cannot do something it says so on stderr and exits 1; it
 does not silently omit the verb.
 
 ## Conventions
 
-- **Verbs, not flags.** `tbdoctor probe`, not `tbdoctor --probe`. macOS keeps
+- **Verbs, not flags.** `connectiondoctor probe`, not `connectiondoctor --probe`. macOS keeps
   the `--verb` forms as deprecated aliases for one release, printing a one-line
   notice on stderr.
 - **`--json`** on any verb that reports state emits one of the Contract v1
@@ -41,9 +42,10 @@ does not silently omit the verb.
   "not installed" after an uninstall would otherwise name both the goal and
   the failure to reach it. The codes are a set, not a scale — do not compare
   them with `<` or `>`.
-- **Data directory:** `~/Library/Application Support/TBDoctor` (macOS),
+- **Data directory:** `~/Library/Application Support/ConnectionDoctor` (macOS),
   `%LOCALAPPDATA%\ConnectionDoctor` (Windows). Override with
-  `CONNECTIONDOCTOR_DIR`; macOS also honours the older `TBDOCTOR_DIR`.
+  `CONNECTIONDOCTOR_DIR`; macOS also honors the older `TBDOCTOR_DIR` and
+  migrates the old default directory when the new directory is absent.
 - **Default port** 8787, loopback. `--bind lan` is opt-in and unauthenticated.
 
 ## Verbs

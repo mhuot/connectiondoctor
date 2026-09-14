@@ -29,7 +29,7 @@ Each rule in the proposal becomes one sentence in `schema-v1.md` with a
 ## Excalidraw via the shared layout
 `dashboard/src/domain/excalidraw.ts` = port of `ExcalidrawExport.swift`
 (deterministic seeds, palette remap, free-floating text — the design notes in
-the TBDoctor README are the spec), over the TS layout engine that is already
+the ConnectionDoctor macOS README is the spec), over the TS layout engine that is already
 invariant-tested. It is a pure function `toExcalidraw(envelope, style, full)`.
 
 Three callers, one implementation:

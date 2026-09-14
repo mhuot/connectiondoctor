@@ -114,7 +114,7 @@ enum ExcalidrawExport {
         let document: [String: Any] = [
             "type": "excalidraw",
             "version": 2,
-            "source": "TBDoctor",
+            "source": "ConnectionDoctor",
             "elements": elements,
             "appState": ["gridSize": NSNull(), "viewBackgroundColor": "#ffffff"],
             "files": [String: Any]()
